@@ -21,6 +21,7 @@ import {
   Search,
   ShieldAlert,
   ShieldCheck,
+  Slash,
   Sparkles,
   Square,
   Trash2,
@@ -32,7 +33,7 @@ import {Badge} from "@astryxdesign/core/Badge";
 import {ProgressBar} from "@astryxdesign/core/ProgressBar";
 import {Spinner} from "@astryxdesign/core/Spinner";
 import {apiRequest, authHeaders, cellHref} from "./api.js";
-import {AgentStreamArtifacts, AgentStreamStyles, applyAgentEvent, emptyAgentStream, restoreAutonomousTurn} from "./AgentStreamArtifacts.jsx";
+import {AgentStreamArtifacts, AgentStreamStyles, SkillRunReceipt, applyAgentEvent, emptyAgentStream, restoreAutonomousTurn} from "./AgentStreamArtifacts.jsx";
 
 export async function consumeAgentStream(response, onEvent, label = "自主深度 Agent") {
   if (!response.ok) {
@@ -91,6 +92,52 @@ function SaveReplyMemory({question, content, cabinet, onOpenMemory}) {
   </button>;
 }
 
+function MemorySuggestion({draft}) {
+  const [status, setStatus] = useState("ready");
+  const [error, setError] = useState("");
+
+  async function save() {
+    setStatus("saving");
+    setError("");
+    try {
+      await apiRequest("/api/memory", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify(draft),
+      });
+      setStatus("saved");
+    } catch (e) {
+      setError(e.message);
+      setStatus("ready");
+    }
+  }
+
+  return <div className="duty-memory-suggestion">
+    <div><small>检测到新矿井规则/经验</small><strong>{draft.title}</strong><p>{draft.content}</p></div>
+    <div>{status === "saved" ? <span className="duty-memory-saved" role="status"><BookmarkCheck size={14} /> 已入库</span>
+      : <button type="button" className="chat-artifact-btn" onClick={save} disabled={status === "saving"}>
+        <BookmarkPlus size={14} /> {status === "saving" ? "正在入库…" : "一键写入长期记忆"}
+      </button>}
+      {error && <p className="chat-error-box" role="alert">{error}</p>}
+    </div>
+  </div>;
+}
+
+function SkillTurn({turn}) {
+  return <div className="chat-turn">
+    <div className="chat-user-row"><div className="chat-user-bubble">{turn.question}</div></div>
+    <div className="chat-agent-row">
+      <div className="chat-agent-avatar" aria-hidden="true"><Wrench size={14} /></div>
+      <div className="chat-agent-body">
+        {turn.running && <div className="duty-progress" role="status"><Spinner size="sm" /> 正在执行技能</div>}
+        {turn.error && <div className="chat-error-box" role="alert">{turn.error}</div>}
+        {turn.stopped && <small className="muted">已停止接收</small>}
+        <SkillRunReceipt result={turn.result} />
+      </div>
+    </div>
+  </div>;
+}
+
 function AutonomousTurn({turn, onTextProgress, onOpenMemory, onSyncCanvas, onDraftAction, onDeepResearch}) {
   const {stream} = turn;
   const {canvasHint, recommendedAction, deepResearchGoal} = stream;
@@ -134,6 +181,7 @@ function AutonomousTurn({turn, onTextProgress, onOpenMemory, onSyncCanvas, onDra
           <SaveReplyMemory question={turn.question} content={stream.content} onOpenMemory={onOpenMemory} />
         </div>}
         {draftError && <div className="chat-error-box" role="alert">{draftError}</div>}
+        {stream.memorySuggestions.map(({key, draft}) => <MemorySuggestion key={key} draft={draft} />)}
       </div>
     </div>
   </div>;
@@ -1075,6 +1123,14 @@ export function AgentCopilotPane({
   const autonomous = agentKind === "autonomous";
   const mode = autonomous ? autonomousMode : auditMode;
   const [input, setInput] = useState("");
+  const [skillMenu, setSkillMenu] = useState(false);
+  const [skills, setSkills] = useState([]);
+  const [skillsLoading, setSkillsLoading] = useState(false);
+  const [skillsError, setSkillsError] = useState("");
+  const [skillCommandError, setSkillCommandError] = useState("");
+  const slash = input.trimStart().match(/^\/([^\s]*)/);
+  const matchingSkills = skills.filter(skill => (skill.id + " " + (skill.title ?? ""))
+    .toLowerCase().includes((slash?.[1] ?? "").toLowerCase()));
   const [turns, setTurns] = useState([]);
   const [loading, setLoading] = useState(false);
   const [pendingPrompt, setPendingPrompt] = useState("");
@@ -1139,6 +1195,8 @@ export function AgentCopilotPane({
       setSessionId(detail.session_id);
       setInput("");
       setShowMemory(false);
+      setSkillMenu(false);
+      setSkillCommandError("");
       onShowChat();
       const history = (detail.turns || []).map(restoreAutonomousTurn);
       setTurns(history);
@@ -1398,9 +1456,62 @@ export function AgentCopilotPane({
     }
   }
 
+  useEffect(() => {
+    if (!skillMenu) return undefined;
+    const ctrl = new AbortController();
+    setSkillsError("");
+    setSkillsLoading(true);
+    apiRequest("/api/skills", {signal: ctrl.signal})
+      .then(data => { if (!ctrl.signal.aborted) setSkills(data.skills); })
+      .catch(error => { if (!ctrl.signal.aborted) setSkillsError(error.message); })
+      .finally(() => { if (!ctrl.signal.aborted) setSkillsLoading(false); });
+    return () => ctrl.abort();
+  }, [skillMenu]);
+
+  async function runSkill(command, id, args) {
+    const target = args.match(/^(\d{1,16})(?:\s+(\d{4}-\d{2}-\d{2}[ T]\d{2}:00(?::00)?))?$/);
+    if (args && !target) {
+      setSkillCommandError("请输入 /技能ID，或附上柜号和整点，例如 /tap_change_precheck 1006 2026-11-13 17:00。");
+      return;
+    }
+    setSkillCommandError("");
+    historyRequest.current += 1;
+    abortRef.current?.abort();
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
+    const turnId = Date.now();
+    const updateTurn = update => setTurns(previous => previous.map(turn => turn.id === turnId ? {...turn, ...update} : turn));
+    setInput("");
+    setSkillMenu(false);
+    setShowMemory(false);
+    setLoading(true);
+    setTurns(previous => [...previous, {id: turnId, question: command, skillRun: true, running: true}]);
+    try {
+      const result = await apiRequest("/api/skills/" + encodeURIComponent(id) + "/run", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({target_cabinet: target?.[1], at_time: target?.[2]}),
+        signal: ctrl.signal,
+      });
+      if (!ctrl.signal.aborted) updateTurn({result, running: false});
+    } catch (error) {
+      if (!ctrl.signal.aborted) updateTurn({error: error.message, running: false});
+    } finally {
+      if (!ctrl.signal.aborted) setLoading(false);
+    }
+  }
+
   async function sendQuestion(text, targetMode = mode) {
     const clean = (text || "").trim();
     if (!clean || loading) return;
+    const command = clean.match(/^\/([^\s]*)(?:\s+([\s\S]*))?$/);
+    if (command) {
+      if (command[1]) await runSkill(clean, command[1], command[2] ?? "");
+      else setSkillMenu(true);
+      return;
+    }
+    setSkillMenu(false);
+    setSkillCommandError("");
     historyRequest.current += 1;
     abortRef.current?.abort();
     const ctrl = new AbortController();
@@ -1529,6 +1640,7 @@ export function AgentCopilotPane({
     setLoading(false);
     setPendingPrompt("");
     setLiveTrace(null);
+    setTurns(prev => prev.map(turn => turn.skillRun && turn.running ? {...turn, running: false, stopped: true} : turn));
     if (agentKind === "autonomous") {
       setTurns(prev => prev.map(turn => turn.stream?.status === "running"
         ? {...turn, stream: {...turn.stream, status: "stopped"}}
@@ -1543,6 +1655,8 @@ export function AgentCopilotPane({
     stopWaiting();
     historyRequest.current += 1;
     setShowMemory(false);
+    setSkillMenu(false);
+    setSkillCommandError("");
     setSessionId("sess-" + Date.now().toString(36));
     setInput("");
     setTurns([]);
@@ -1565,6 +1679,8 @@ export function AgentCopilotPane({
 
   function usePrompt(text) {
     setInput(text);
+    setSkillMenu(false);
+    setSkillCommandError("");
     inputRef.current?.focus();
   }
 
@@ -1579,8 +1695,17 @@ export function AgentCopilotPane({
         rows={2}
         maxLength={600}
         value={input}
-        onChange={e => setInput(e.target.value)}
+        onChange={e => {
+          const next = e.target.value;
+          setInput(next);
+          setSkillCommandError("");
+          setSkillMenu(/^\/[^\s]*$/.test(next.trimStart()));
+        }}
         onKeyDown={e => {
+          if (e.key === "Escape" && skillMenu) {
+            e.stopPropagation();
+            setSkillMenu(false);
+          }
           if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
             e.preventDefault();
             sendQuestion(input);
@@ -1589,6 +1714,16 @@ export function AgentCopilotPane({
         aria-label="值班问题"
         placeholder="输入柜号、时间或你想核对的运行问题"
       />
+      {skillMenu && <div className="duty-skill-picker" id="duty-skill-picker" aria-label="已安装技能">
+        {skillsLoading && <small role="status">正在读取技能…</small>}
+        {skillsError && <small className="chat-error-box" role="alert">{skillsError}</small>}
+        {!skillsError && !skillsLoading && !matchingSkills.length && <small>没有匹配的技能</small>}
+        {!skillsError && !skillsLoading && matchingSkills.map(skill => <button type="button" key={skill.id} onClick={() => usePrompt("/" + skill.id + " ")}>
+          <strong>{skill.title ?? skill.id}</strong><code>/{skill.id}</code>
+        </button>)}
+      </div>}
+      {slash && <small className="muted">按 Enter 执行，可在技能 ID 后填柜号和整点。</small>}
+      {skillCommandError && <small className="chat-error-box" role="alert">{skillCommandError}</small>}
       <div className="copilot-composer-foot">
         <div className="duty-composer-tools">
           <details className="duty-cabinet-picker">
@@ -1608,6 +1743,8 @@ export function AgentCopilotPane({
               ))}
             </div>
           </details>
+          <button type="button" className="duty-composer-option" aria-expanded={skillMenu} aria-controls="duty-skill-picker"
+            disabled={loading} onClick={() => setSkillMenu(open => !open)}><Slash size={14} /> 技能</button>
           <div className="duty-engine-select">
             <select value={mode} onChange={e => (autonomous ? setAutonomousMode : setAuditMode)(e.target.value)}
               aria-label="问答方式" disabled={loading}>
@@ -1719,7 +1856,7 @@ export function AgentCopilotPane({
           </div>
         ) : (
           <div className="duty-thread-column">
-            {turns.map((t, index) => t.stream ? (
+            {turns.map((t, index) => t.skillRun ? <SkillTurn key={t.id} turn={t} /> : t.stream ? (
               <AutonomousTurn key={t.id} turn={t} onTextProgress={followTypedAnswer} onOpenMemory={onOpenMemory}
                 onSyncCanvas={onSyncCanvas} onDraftAction={onDraftAction} onDeepResearch={onDeepResearch} />
             ) : (
@@ -1736,7 +1873,7 @@ export function AgentCopilotPane({
                 canCompareAdjacent={!loading && index === turns.length - 1}
               />
             ))}
-            {loading && agentKind === "audit" && (
+            {loading && (pendingPrompt || liveTrace) && agentKind === "audit" && (
               <div className="chat-turn">
                 {pendingPrompt && <div className="chat-user-row"><div className="chat-user-bubble">{pendingPrompt}</div></div>}
                 <div className="duty-progress" role="status"><Spinner size="sm" /> 正在查证{elapsed > 0 ? ` · ${elapsed} 秒` : ""}</div>

@@ -9,6 +9,7 @@ import {
   FileCheck2,
   KeyRound,
   Lock,
+  MessageSquare,
   Network,
   RefreshCw,
   Scale,
@@ -26,6 +27,7 @@ import {Spinner} from "@astryxdesign/core/Spinner";
 import {apiRequest, cellHref, setAuthToken} from "./api.js";
 import {DailyScheduleChart} from "./DailyScheduleChart.jsx";
 import {EvidenceDownloadLink} from "./IncidentTicketPanel.jsx";
+import {SubagentDebatePanel} from "./SubagentDebatePanel.jsx";
 
 const MA_PRESETS = [
   {
@@ -300,7 +302,7 @@ function N1TransferStudy({decision, messages}) {
   );
 }
 
-export function GovernanceMultiAgentPanel() {
+export function GovernanceMultiAgentPanel({hasModel}) {
   const [subTab, setSubTab] = useState("multi_agent");
 
   // Multi-Agent state
@@ -642,6 +644,10 @@ export function GovernanceMultiAgentPanel() {
           <ShieldCheck size={13} />
           <span>② 安全围栏与证据审计</span>
         </button>
+        <button type="button" className={"apple-filter-pill" + (subTab === "debate" ? " is-active" : "")}
+          aria-pressed={subTab === "debate"} onClick={() => setSubTab("debate")}>
+          <MessageSquare size={13} /><span>子智能体辩论</span>
+        </button>
       </div>
       <div className="pf-meta-badges">
         <a href="/metrics" target="_blank" rel="noreferrer" className="agent-mini-pill is-blue pf-docs-link">
@@ -654,6 +660,8 @@ export function GovernanceMultiAgentPanel() {
         </a>
       </div>
     </div>
+
+    {subTab === "debate" && <SubagentDebatePanel hasModel={hasModel} />}
 
     {/* ── SUB-VIEW 1: 5-Role Multi-Agent Specialist Consultation ── */}
     {subTab === "multi_agent" && <>

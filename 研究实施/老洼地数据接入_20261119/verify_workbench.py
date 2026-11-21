@@ -364,8 +364,70 @@ const base = process.argv[1];
     const sessionTitle = "潮流排查浏览器历史";
     let saved;
     let draft;
+    const memories = [];
+    const skillCalls = [];
+    const clients = [];
+    const protocols = [];
+    const skills = [{id: "tap_change_precheck", title: "调压预检", default_cabinet: "1006", steps: ["1. 核对母线"]}];
+    const suggestion = {
+      category: "semantic", title: "班内电压核查规则", content: "按本班复核口径核对 1006 柜",
+      scope_cabinet: "1006", tags: ["演练"],
+    };
     const list = () => ({sessions: saved ? [{session_id: saved.session_id, title: sessionTitle}] : []});
     const fulfill = payload => ({json: payload});
+    const sse = frames => ({
+      contentType: "text/event-stream",
+      body: frames.map(frame => "event: " + frame.type + "\ndata: " + JSON.stringify(frame) + "\n\n").join(""),
+    });
+    await page.route("**/api/memory", route => {
+      memories.push(route.request().postDataJSON());
+      return route.fulfill(fulfill({memory: {...memories.at(-1), id: "MEM-TEST"}}));
+    });
+    await page.route("**/api/skills", route => {
+      if (route.request().method() === "POST") {
+        const {skill_id, title} = route.request().postDataJSON();
+        const skill = {id: skill_id, title};
+        skills.push(skill);
+        return route.fulfill(fulfill({skill}));
+      }
+      return route.fulfill(fulfill({skills}));
+    });
+    await page.route("**/api/skills/*/run", route => {
+      skillCalls.push(route.request().postDataJSON());
+      return route.fulfill(fulfill({title: "调压预检结果", target_cabinet: "1006",
+        checks: [{step: "原表回查", status: "ok", detail: "读数可追溯"}], evidence_cells: ["1113.xls / New Sheet1!D19"]}));
+    });
+    await page.route("**/api/multi-agent/consult", route => route.fulfill({status: 503, json: {error: "测试跳过原会诊"}}));
+    await page.route("**/api/subagents/debate/stream", route => {
+      assert.equal(route.request().postDataJSON().mode, "local");
+      const agents = ["归档取证", "交流潮流", "规程复核"];
+      return route.fulfill(sse([
+        ...agents.map((title, agent_id) => ({type: "subagent_start", agent_id: String(agent_id), title})),
+        ...agents.map((title, agent_id) => ({type: "subagent_done", agent_id: String(agent_id), stance: title + "已核查"})),
+        {type: "debate_rebuttal", from_agent: "规程复核", to_agent: "交流潮流", point: "先核对台账"},
+        {type: "arbitration_done", verdict: "条件建议待人工复核"},
+        {type: "done", result: {}},
+      ]));
+    });
+    await page.route("**/api/mcp/clients", route => {
+      if (route.request().method() === "POST") {
+        clients.push({...route.request().postDataJSON(), client_id: "mcp-browser"});
+        return route.fulfill(fulfill({client: clients.at(-1)}));
+      }
+      return route.fulfill(fulfill({clients}));
+    });
+    const payload = {function_code: 3, registers: [{cabinet: "1006", metric: "Uab", raw_value: 10.84}]};
+    await page.route("**/api/protocols/adapters", route => route.fulfill(fulfill({
+      adapters: [{protocol: "modbus_tcp", name: "Modbus TCP", sample_payload: payload}],
+    })));
+    await page.route("**/api/protocols/ingest-frame", route => {
+      protocols.push(route.request().postDataJSON());
+      return route.fulfill(fulfill({status: "ok", upload_id: "protocol-test", row_count: 1}));
+    });
+    await page.route("**/api/eval/observability", route => route.fulfill(fulfill({
+      worker_pid: 987, ttft_ms_avg: 112.3, ttft_ms_p95: 215.7, total_tokens: 540,
+      sandbox_success_rate_pct: 100, verification_rate_pct: 75, counts: {debate_runs: 1},
+    })));
     await page.route("**/api/sessions", route => route.fulfill(fulfill(list())));
     await page.route("**/api/sessions/*", route => route.fulfill(fulfill(saved)));
     await page.route("**/api/dates", route => route.fulfill(fulfill({dates: ["2026-11-13"], model: "deepseek-v4-pro"})));
@@ -386,12 +448,10 @@ const base = process.argv[1];
         {type: "artifact", artifact: chart},
         {type: "artifact", data: {artifact: streamedTable}},
         {type: "code_run", ...run},
+        {type: "memory_suggestion", suggestions: [suggestion]},
         {type: "done", result},
       ];
-      return route.fulfill({
-        contentType: "text/event-stream",
-        body: frames.map(frame => "event: " + frame.type + "\ndata: " + JSON.stringify(frame) + "\n\n").join(""),
-      });
+      return route.fulfill(sse(frames));
     });
 
     await page.goto(base);
@@ -415,6 +475,11 @@ const base = process.argv[1];
     assert.equal(await page.getByText("非沙盒潮流曲线", {exact: true}).count(), 1);
     assert.equal(await page.getByRole("region", {name: "流式中间表"}).count(), 1);
     assert.equal(await page.getByRole("region", {name: "沙盒样本"}).count(), 1);
+    await page.getByText(suggestion.title, {exact: true}).waitFor();
+    assert.equal(memories.length, 0);
+    await button("一键写入长期记忆").click();
+    await page.getByText("已入库", {exact: true}).waitFor();
+    assert.deepEqual(memories, [suggestion]);
     await button("新对话").click();
     await ask("local");
     assert.deepEqual(modes, ["deepseek", "local"]);
@@ -460,6 +525,48 @@ const base = process.argv[1];
     await page.waitForFunction(() => document.querySelector(".duty-source-mode").textContent === "实时演练");
     await button("值班问答").click();
     assert.equal(await page.locator(".duty-source-mode").textContent(), "历史回放");
+
+    await button("技能").click();
+    const skillPicker = page.locator("#duty-skill-picker");
+    await skillPicker.getByRole("button", {name: /调压预检/}).waitFor();
+    await page.getByLabel("值班问题").fill("/");
+    await skillPicker.getByRole("button", {name: /调压预检/}).click();
+    await page.getByLabel("值班问题").fill("/tap_change_precheck 1006 2026-11-13 17:00");
+    await page.getByLabel("值班问题").press("Enter");
+    await page.getByLabel("技能运行回执").getByText("读数可追溯").waitFor();
+    assert.deepEqual(skillCalls, [{target_cabinet: "1006", at_time: "2026-11-13 17:00"}]);
+
+    const researchNav = page.locator(".duty-research");
+    if (await researchNav.getAttribute("open") === null) await researchNav.getByText("研究工具", {exact: true}).click();
+    await button("多智体与治理").click();
+    await button("子智能体辩论").click();
+    await page.getByLabel("推理方式").selectOption("local");
+    await button("发起辩论").click();
+    await page.getByText("条件建议待人工复核", {exact: true}).waitFor();
+    assert.equal(await page.getByText("已交付", {exact: true}).count(), 3);
+    await page.getByText("先核对台账", {exact: true}).waitFor();
+
+    await button("离线评测").click();
+    await button("技能与协议").click();
+    await page.getByText("112.3 ms", {exact: true}).waitFor();
+    await page.getByText("新增技能", {exact: true}).click();
+    await page.getByLabel("技能 ID").fill("shift_voltage_check");
+    await page.getByLabel("技能标题").fill("交接班核对");
+    await page.getByLabel("技能 Markdown").fill("1. 核对归档读数。");
+    await button("安装技能").click();
+    await page.getByText("技能已安装", {exact: true}).waitFor();
+    await page.getByText("交接班核对", {exact: true}).waitFor();
+
+    await page.getByText("注册客户端", {exact: true}).click();
+    await page.getByLabel("客户端名称").fill("只读回放");
+    await page.getByLabel("服务端点").fill("https://mcp.example.test/rpc");
+    await button("注册只读客户端").click();
+    await page.getByText("客户端已注册", {exact: true}).waitFor();
+    assert.equal(clients[0].read_only, true);
+    await button("填入示例帧").click();
+    await button("解析演练帧").click();
+    await page.getByText("遥测帧解析回执", {exact: true}).waitFor();
+    assert.deepEqual(protocols, [{protocol: "modbus_tcp", payload}]);
     assert.deepEqual(errors, []);
   } finally {
     await browser.close();
@@ -724,6 +831,174 @@ def verify_live_and_action_endpoints(workbench: Workbench) -> dict:
     return coverage
 
 
+def verify_advanced_agent_endpoints(workbench: Workbench) -> dict:
+    debate = "/api/subagents/debate/stream"
+    skills = "/api/skills"
+    skill_run = skills + "/shift_voltage_check/run"
+    mcp = "/api/mcp/clients"
+    adapters = "/api/protocols/adapters"
+    ingest = "/api/protocols/ingest-frame"
+    observability = "/api/eval/observability"
+    question = "2026年11月13日17:00，核对 1006 柜线电压、2号主变分接头和现场缺证。"
+    playbook = {
+        "skill_id": "shift_voltage_check",
+        "title": "交班电压核查",
+        "body_markdown": "1. 核对本班母线电压。\n2. 登记待补资料。",
+    }
+    registry_entry = {
+        "name": "SCADA 演练只读索引",
+        "endpoint": "https://scada-readonly.example.test/mcp",
+        "transport": "http",
+        "read_only": True,
+    }
+    frame = {
+        "protocol": "modbus_tcp",
+        "payload": {
+            "function_code": 3, "timestamp": "2026-11-19 10:00:00",
+            "registers": [{"cabinet": "1006", "metric": "Uab", "raw_value": 1084, "scale": 0.01}],
+        },
+    }
+
+    def headers(role):
+        return {"Authorization": "Bearer " + issue_token(f"advanced-{role}", role)["access_token"]}
+
+    viewer, dispatcher, engineer = (headers(role) for role in ("viewer", "dispatcher", "engineer"))
+    methods = [
+        ("GET", skills, viewer, None), ("POST", skills, engineer, playbook), ("POST", skill_run, dispatcher, {}),
+        ("GET", mcp, viewer, None), ("POST", mcp, engineer, registry_entry),
+        ("GET", adapters, viewer, None), ("POST", ingest, dispatcher, frame),
+        ("GET", observability, viewer, None), ("POST", debate, dispatcher, {"question": question}),
+    ]
+    app = create_app(workbench, require_auth=True)
+    with TestClient(app) as client:
+        paths = client.get("/openapi.json").json()["paths"]
+        for method, path, auth, body in methods:
+            route = path if path != skill_run else skills + "/{skill_id}/run"
+            assert method.lower() in paths[route]
+            assert client.request(method, path, json=body).status_code == 401
+            if method == "POST":
+                assert client.request(method, path, headers=viewer, json=body).status_code == 403
+        assert client.post(skills, headers=dispatcher, json=playbook).status_code == 403
+        assert client.post(mcp, headers=dispatcher, json=registry_entry).status_code == 403
+        with patch.dict(sys.modules, {
+            "laowadi.subagent_debate": None, "laowadi.skills_engine": None, "laowadi.protocol_adapter": None,
+        }):
+            for method, path, auth, body in methods:
+                response = client.request(method, path, headers=auth, json=body)
+                assert response.status_code == 503, (path, response.text)
+
+        initial = client.get(observability, headers=viewer)
+        assert initial.status_code == 200, initial.text
+        before = initial.json()
+        assert before["sandbox_success_rate_pct"] is None and before["verification_rate_pct"] is None
+
+        model = object()
+        captured = []
+
+        def stub_debate(archive, task, *, client, memory_db_path, on_event):
+            assert task == question and ("S35", "1006") in archive.devices
+            assert memory_db_path.parent == workbench.sessions_db.parent
+            captured.append(client)
+            on_event({"type": "done", "result": {"status": "ok"}})
+
+        with (patch.dict(sys.modules, {"laowadi.subagent_debate": SimpleNamespace(run_parallel_subagent_debate=stub_debate)}),
+              patch("laowadi.api.ChatClient.from_env", return_value=model)):
+            for mode in ("auto", "local", "deepseek"):
+                response = client.post(debate, headers=dispatcher, json={"question": question, "mode": mode})
+                assert response.status_code == 200 and decode_named_events(response.text)[-1]["type"] == "done"
+        assert captured == [model if workbench.model else None, None, model]
+        assert client.post(debate, headers=dispatcher, json={"question": " "}).status_code == 400
+
+        response = client.post(debate, headers=dispatcher, json={"question": question, "mode": "local"})
+        assert response.status_code == 200 and response.headers["content-type"].startswith("text/event-stream")
+        events = decode_named_events(response.text)
+        starts = [event["agent_id"] for event in events if event["type"] == "subagent_start"]
+        ends = [event["agent_id"] for event in events if event["type"] == "subagent_done"]
+        assert len(starts) == 3 and len(set(starts)) == 3 and set(starts) == set(ends), events
+        assert all(event["type"] == "subagent_start" for event in events[:3])
+        assert any(event["type"] == "debate_rebuttal" and event["point"] for event in events)
+        assert events[-2]["type"] == "arbitration_done" and events[-2]["verdict"]
+        assert events[-1]["type"] == "done" and events[-1]["result"]["arbitration"]["verdict"]
+
+        memory = "/api/memory"
+        snap = client.get(memory, headers=viewer).json()
+        response = client.post("/api/agent/stream", headers=dispatcher, json={
+            "question": "以后老洼地 1006 柜内部考核电压红线按 10.62 kV 执行。",
+            "mode": "local", "sessionId": "advanced-memory-suggestion",
+        })
+        events = decode_named_events(response.text)
+        assert response.status_code == 200 and events[-1]["type"] == "done", events
+        candidate = next(event["suggestions"][0] for event in events if event["type"] == "memory_suggestion")
+        assert candidate["metric_threshold"]["value"] == 10.62
+        assert client.get(memory, headers=viewer).json() == snap, "Suggestion unexpectedly wrote to memory"
+        confirmed = client.post(memory, headers=dispatcher, json={k: v for k, v in candidate.items() if k != "reason"})
+        assert confirmed.status_code == 201 and confirmed.json()["memory"]["title"] == candidate["title"]
+
+        installed = client.get(skills, headers=viewer).json()["skills"]
+        assert {"main_fan_switchover", "storm_lightning_patrol", "tap_change_precheck"} <= {item["id"] for item in installed}
+        created = client.post(skills, headers=engineer, json=playbook)
+        assert created.status_code == 201, created.text
+        assert created.json()["skill"]["title"] == playbook["title"]
+        assert client.post(skills, headers=engineer, json=playbook).status_code == 409
+        assert client.post(skills + "/not-installed/run", headers=dispatcher).status_code == 404
+        assert client.post(skill_run, headers=dispatcher, json={"at_time": "2026-11-13 17:13"}).status_code == 400
+        run = client.post(skill_run, headers=dispatcher, json={"target_cabinet": "1006", "at_time": "2026-11-13T17:00"})
+        assert run.status_code == 200 and run.json()["status"] == "ok", run.text
+        assert run.json()["at_time"] == "2026-11-13 17:00:00" and run.json()["evidence_cells"]
+        assert client.post(skills + "/tap_change_precheck/run", headers=dispatcher).status_code == 200
+
+        baseline_clients = client.get(mcp, headers=viewer).json()["clients"]
+        assert any(row["builtin"] and row["tools_count"] == 15 for row in baseline_clients)
+        response = client.post(mcp, headers=engineer, json={**registry_entry, "read_only": False})
+        assert response.status_code == 400
+        response = client.post(mcp, headers=engineer, json={**registry_entry, "endpoint": "http://scada-readonly.example.test/mcp"})
+        assert response.status_code == 400
+        registered = client.post(mcp, headers=engineer, json=registry_entry)
+        assert registered.status_code == 201, registered.text
+        remote = registered.json()["client"]
+        assert remote["read_only"] and remote["status"] == "registered_readonly" and remote["tools_count"] == 0
+        assert remote in client.get(mcp, headers=viewer).json()["clients"]
+
+        sources = client.get(adapters, headers=viewer).json()["adapters"]
+        assert {source["protocol"] for source in sources} == {"modbus_tcp", "opc_ua", "mqtt_scada"}
+        uploads_before = client.get("/api/live/uploads", headers=viewer).json()["uploads"]
+        for protocol, invalid in (
+            ("modbus_tcp", {**frame["payload"], "function_code": 6}),
+            ("opc_ua", {"operation": "write", "nodes": [{"node_id": "ns=2;s=S35.1006.Uab", "value": 10.8}]}),
+            ("mqtt_scada", {"topic": "mine/s35/control", "measurements": [{"cabinet": "1006", "Uab": 10.8}]}),
+        ):
+            assert client.post(ingest, headers=dispatcher, json={"protocol": protocol, "payload": invalid}).status_code == 400
+        missing_value = client.post(ingest, headers=dispatcher, json={
+            "protocol": "opc_ua", "payload": {"nodes": [{"node_id": "ns=2;s=S35.1006.Uab"}]},
+        })
+        assert missing_value.status_code == 400
+        assert client.get("/api/live/uploads", headers=viewer).json()["uploads"] == uploads_before
+
+        upload_ids = set()
+        for spec in sources:
+            request = {"protocol": spec["protocol"], "payload": spec["sample_payload"]}
+            response = client.post(ingest, headers=dispatcher, json=request)
+            assert response.status_code == 200, response.text
+            assert response.json()["status"] == "ok" and response.json()["read_only_enforced"]
+            upload_ids.add(response.json()["upload_id"])
+        uploads = client.get("/api/live/uploads", headers=viewer).json()["uploads"]
+        assert upload_ids <= {row["upload_id"] for row in uploads} and len(upload_ids) == 3
+
+        assert client.post("/api/sandbox/run", headers=engineer, json={"code": "print(21 * 2)"}).json()["status"] == "ok"
+        assert client.post("/api/sandbox/run", headers=engineer, json={"code": "print(1 / 0)"}).json()["status"] != "ok"
+        after = client.get(observability, headers=viewer).json()
+        assert {"llmops", "ttft_ms_avg", "total_tokens", "verification_rate_pct", "sandbox_success_rate_pct"} <= after.keys()
+        assert after["sandbox_success_rate_pct"] == 50.0 and 0 <= after["verification_rate_pct"] <= 100
+        assert after["ecosystem"]["skills_count"] == before["ecosystem"]["skills_count"] + 1
+        assert after["live_ingestion"]["uploads_count"] == before["live_ingestion"]["uploads_count"] + 3
+        for key, expected in {
+            "debate_runs": 4, "memory_suggestions": 1, "memory_writes": 1,
+            "skill_installs": 1, "skill_runs": 2, "mcp_registrations": 1, "protocol_frames": 3,
+        }.items():
+            assert after["counts"][key] == expected, after["counts"]
+    return {"routes": len(methods), "subagents": len(starts), "sandbox_uploads": len(upload_ids), "mode_dispatch": 3}
+
+
 def main():
     db_before = sha256(DB)
     ev_before = sha256(EVENT_DB)
@@ -764,6 +1039,7 @@ def main():
             autonomous_browser = verify_autonomous_browser(base)
             research_endpoints = verify_memory_and_research_endpoints(server.app)
             live_action_endpoints = verify_live_and_action_endpoints(server.app)
+            advanced_endpoints = verify_advanced_agent_endpoints(server.app)
 
             # 2. /api/dates
             dates = fetch_json(base, "/api/dates")
@@ -1050,6 +1326,7 @@ def main():
                 "autonomous_browser": autonomous_browser,
                 "research_endpoints": research_endpoints,
                 "live_action_endpoints": live_action_endpoints,
+                "advanced_endpoints": advanced_endpoints,
                 "cabinets_cards": len(health["cabinets_cards"]),
                 "diagrams_verified": len(diagrams),
                 "review_feedback_loop_verified": True,

@@ -43,6 +43,7 @@ const IncidentTicketPanel = lazy(() => import("./IncidentTicketPanel.jsx").then(
 const LiveStreamConsole = lazy(() => import("./LiveStreamConsole.jsx").then(module => ({default: module.LiveStreamConsole})));
 const PowerFlowPanel = lazy(() => import("./PowerFlowPanel.jsx").then(module => ({default: module.PowerFlowPanel})));
 const ReplayView = lazy(() => import("./ReplayView.jsx").then(module => ({default: module.ReplayView})));
+const SkillsProtocolsView = lazy(() => import("./SkillsProtocolsView.jsx").then(module => ({default: module.SkillsProtocolsView})));
 const SupplementEvalView = lazy(() => import("./SupplementEvalView.jsx").then(module => ({default: module.SupplementEvalView})));
 
 const DUTY_TABS = [
@@ -75,6 +76,7 @@ function App() {
   const [sidebarOpen, setSidebarOpen] = useState(() => !window.matchMedia("(max-width: 760px)").matches);
   const [unreadBadge, setUnreadBadge] = useState(0);
   const [cabinetSubTab, setCabinetSubTab] = useState("profile");
+  const [evalSubTab, setEvalSubTab] = useState("results");
   const [catalog, setCatalog] = useState(null);
   const [dayFilter, setDayFilter] = useState("");
   const [health, setHealth] = useState(null);
@@ -376,9 +378,18 @@ function App() {
           )}
 
           {canvasTab === "powerflow" && <PowerFlowPanel onAskDiagnose={askAgent} />}
-          {canvasTab === "governance" && <GovernanceMultiAgentPanel />}
+          {canvasTab === "governance" && <GovernanceMultiAgentPanel hasModel={Boolean(catalog?.model)} />}
           {canvasTab === "graph" && <SupplementEvalView section="graph" />}
-          {canvasTab === "eval" && <SupplementEvalView section="eval" />}
+          {canvasTab === "eval" && <div className="view-stack">
+            <div className="canvas-subbar">
+              <div className="apple-sld-filters" role="group" aria-label="离线评测子视图">
+                {[["results", "基准评测"], ["extensions", "技能与协议"]].map(([id, label]) =>
+                  <button key={id} type="button" className={"apple-filter-pill" + (evalSubTab === id ? " is-active" : "")}
+                    aria-pressed={evalSubTab === id} onClick={() => setEvalSubTab(id)}>{label}</button>)}
+              </div>
+            </div>
+            {evalSubTab === "results" ? <SupplementEvalView section="eval" /> : <SkillsProtocolsView />}
+          </div>}
         </Suspense>}
       </main>}
 

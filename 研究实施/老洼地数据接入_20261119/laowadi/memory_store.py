@@ -378,6 +378,82 @@ def extract_custom_voltage_thresholds(memories: list[dict[str, Any]]) -> list[di
     return found
 
 
+_MEMORY_INTENT_RE = re.compile(
+    r"(记住|以后|今后|长期|内部考核|红线|按\s*\d+(?:\.\d+)?\s*kV|现场已(?:核实|确认)|别再|不要再|SOP|每次.{0,12}(?:必须|前先|核查))"
+)
+_CAB_EXTRACT_RE = re.compile(r"(?<!\d)(30[036]|31[12]|10(?:0[5-9]|1[0-9]|2[0-9])|110[1-9]|120[1-7])(?!\d)")
+
+
+def detect_memory_candidates(
+    question: str,
+    answer_markdown: str = "",
+    *,
+    cabinets: list[str] | None = None,
+    existing_memories: list[dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
+    """Auto-Memory Distillation: sniff operator corrections, custom thresholds, or SOP rules from chat."""
+    q = str(question or "").strip()
+    if not q or not _MEMORY_INTENT_RE.search(q):
+        return []
+
+    existing_titles = {str(m.get("title", "")).strip().lower() for m in (existing_memories or [])}
+    existing_contents = {str(m.get("content", "")).strip().lower() for m in (existing_memories or [])}
+    found_cabs = list(dict.fromkeys([*(cabinets or []), *_CAB_EXTRACT_RE.findall(q)]))
+    scope_cab = found_cabs[0] if found_cabs else None
+
+    suggestions: list[dict[str, Any]] = []
+
+    # 1. Custom voltage / metric threshold rule -> semantic
+    vm = _VOLTAGE_THRESHOLD_RE.search(q)
+    if vm:
+        val = float(vm.group(1))
+        if 8.5 <= val <= 40.0:
+            title = f"{scope_cab + ' 柜' if scope_cab else '10 kV 母线'}内部考核电压红线 {val:.2f} kV"
+            if title.lower() not in existing_titles:
+                suggestions.append({
+                    "category": "semantic",
+                    "title": title,
+                    "content": q[:500],
+                    "scope_cabinet": scope_cab,
+                    "metric_threshold": {"metric": "Uab", "operator": ">", "value": val, "unit": "kV"},
+                    "tags": list(dict.fromkeys(["定制红线", "电压考核", *([scope_cab] if scope_cab else [])])),
+                    "reason": f"检测到新的内部电压考核红线（{val:.2f} kV），入库后将在后续对话、深度排查与实时演练流中自动生效。",
+                })
+
+    # 2. Procedural SOP / check rule -> procedural
+    if not suggestions and any(k in q for k in ("SOP", "每次", "操作前", "倒闸前", "规范", "流程", "必须先")):
+        title = f"矿井值班 SOP：{q[:28]}"
+        if title.lower() not in existing_titles and q.lower() not in existing_contents:
+            suggestions.append({
+                "category": "procedural",
+                "title": title,
+                "content": q[:500],
+                "scope_cabinet": scope_cab,
+                "metric_threshold": None,
+                "tags": list(dict.fromkeys(["SOP", "值班规范", *([scope_cab] if scope_cab else [])])),
+                "reason": "检测到可复用的值班核查规范/SOP，建议沉淀为持久程序记忆。",
+            })
+
+    # 3. Equipment quirk / field-confirmed fact -> semantic or episodic
+    if not suggestions:
+        is_confirmed = any(k in q for k in ("现场已核实", "现场已确认", "别再", "不要再", "记住", "以后"))
+        cat = "semantic" if is_confirmed else "episodic"
+        prefix = f"{scope_cab} 柜现场确认规则" if scope_cab else "矿井运维长期经验"
+        title = f"{prefix}：{q[:24]}"
+        if title.lower() not in existing_titles and q.lower() not in existing_contents:
+            suggestions.append({
+                "category": cat,
+                "title": title,
+                "content": q[:500],
+                "scope_cabinet": scope_cab,
+                "metric_threshold": None,
+                "tags": list(dict.fromkeys(["自动提炼", *([scope_cab] if scope_cab else [])])),
+                "reason": "检测到操作员现场确认信息或运维偏好，确认入库后 Agent 将跨会话持续遵守。",
+            })
+
+    return suggestions[:2]
+
+
 def format_memories_for_prompt(memories: list[dict[str, Any]]) -> str:
     if not memories:
         return ""

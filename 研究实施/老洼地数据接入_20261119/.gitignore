@@ -19,3 +19,8 @@ local/*.sqlite3-shm
 !local/laowadi_events.sqlite3
 
 __pycache__/
+
+# Operator-installed playbooks and local read-only MCP registry
+local/agent_skills/
+local/agent_skills.lock
+local/laowadi_mcp_clients.json*

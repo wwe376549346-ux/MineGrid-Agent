@@ -17,6 +17,7 @@ Enterprise Capabilities:
 from __future__ import annotations
 
 import asyncio
+from collections import Counter
 from contextlib import contextmanager, suppress
 import csv
 from email import policy
@@ -32,6 +33,7 @@ from mimetypes import guess_type
 import os
 from pathlib import Path
 import sqlite3
+from threading import Lock
 import time
 from typing import Annotated, Literal
 from urllib.parse import quote, unquote, urlsplit
@@ -76,6 +78,7 @@ from laowadi.schemas import (
     LIVE_CSV_MAX_BYTES,
     LiveStreamRequest,
     LiveUploadRequest,
+    MCPClientRegisterRequest,
     MemoryCategory,
     MemoryCreateRequest,
     MemoryPatchRequest,
@@ -84,6 +87,7 @@ from laowadi.schemas import (
     PowerFlowRequest,
     ProactiveReconcileRequest,
     ProactiveScanRequest,
+    ProtocolFrameRequest,
     ReadyzResponse,
     ReviewCreateRequest,
     ReviewDeleteRequest,
@@ -91,7 +95,11 @@ from laowadi.schemas import (
     SecurityPromptTestRequest,
     SensitivityVoiQuery,
     SessionIdRequest,
+    SkillCreateRequest,
+    SkillIdentifier,
+    SkillRunRequest,
     StorageMigrateRequest,
+    SubagentDebateRequest,
     SupplementRequest,
     TicketCreateRequest,
     TicketTransitionRequest,
@@ -109,7 +117,7 @@ from laowadi.security import (
     verify_token,
 )
 from laowadi.sessions import load_session, save_chat_turn
-from laowadi.storage import METRICS, REPORT_STATION
+from laowadi.storage import METRICS, REPORT_STATION, ROOT
 from laowadi.task_queue import TERMINAL_STATUSES
 from laowadi.workbench import BUILD, RequestError, Workbench
 
@@ -122,6 +130,8 @@ COMPUTE_RATE_LIMITED_PATHS = {
     "/api/diagnose",
     "/api/diagnose/stream",
     "/api/agent/stream",
+    "/api/subagents/debate/stream",
+    "/api/protocols/ingest-frame",
     "/api/deep-research/stream",
     "/api/live/stream",
     "/api/live/upload-report",
@@ -140,11 +150,15 @@ AUDITED_PATHS = {
     "/api/diagnose",
     "/api/diagnose/stream",
     "/api/agent/stream",
+    "/api/subagents/debate/stream",
+    "/api/protocols/ingest-frame",
     "/api/deep-research/stream",
     "/api/live/stream",
     "/api/live/upload-report",
     "/api/actions/tickets/draft",
     "/api/memory",
+    "/api/skills",
+    "/api/mcp/clients",
     "/api/sandbox/run",
     "/api/diagnose/reset",
     "/api/powerflow",
@@ -162,8 +176,9 @@ AUDITED_PATHS = {
 
 AUTONOMOUS_EVENT_TYPES = {
     "plan_update", "reasoning_delta", "tool_start", "tool_end", "code_run",
-    "artifact", "content_delta", "verification_badge", "done", "error",
+    "artifact", "content_delta", "verification_badge", "memory_suggestion", "done", "error",
 }
+DEBATE_EVENT_TYPES = {"subagent_start", "subagent_done", "debate_rebuttal", "arbitration_done", "done", "error"}
 RESEARCH_EVENT_TYPES = {
     "plan_update", "stage_update", "finding", "reasoning_delta", "section_ready", "done", "error",
 }
@@ -241,8 +256,8 @@ def _validate_csv_measurements(text: str):
 
 
 @contextmanager
-def _action_write_lock(db_path: Path):
-    # Serialize the runner's checklist validation and terminal writes across API workers.
+def _runtime_write_lock(db_path: Path):
+    # Serialize read-modify-write operations across API workers.
     db_path.parent.mkdir(parents=True, exist_ok=True)
     with db_path.with_suffix(db_path.suffix + ".lock").open("ab") as handle:
         fcntl.flock(handle, fcntl.LOCK_EX)
@@ -396,6 +411,19 @@ def create_app(
     live_db_path = runtime_dir / "laowadi_live.sqlite3"
     actions_db_path = runtime_dir / "laowadi_actions.sqlite3"
     action_webhook_url = os.environ.get("LAOWADI_ACTION_WEBHOOK_URL", "").strip()
+    builtin_skills_dir = ROOT / "skills"
+    skills_dir = runtime_dir / "agent_skills"
+    mcp_registry_path = runtime_dir / "laowadi_mcp_clients.json"
+    advanced_counts = Counter(dict.fromkeys((
+        "autonomous_turns", "memory_suggestions", "memory_writes", "debate_runs",
+        "skill_installs", "skill_runs", "mcp_registrations", "protocol_frames",
+        "sandbox_runs", "sandbox_successes", "verification_samples", "verified_turns",
+    ), 0))
+    advanced_lock = Lock()
+
+    def record_advanced(**counts: int):
+        with advanced_lock:
+            advanced_counts.update(counts)
 
     app = FastAPI(
         title="老洼地煤矿配电网健康监测与诊断智能体企业级 API",
@@ -455,7 +483,7 @@ def create_app(
                         client=client_host,
                         action=action or "",
                     )
-            if (action or path in AUDITED_PATHS or path.startswith(("/api/memory/", "/api/actions/tickets/"))
+            if (action or path in AUDITED_PATHS or path.startswith(("/api/memory/", "/api/actions/tickets/", "/api/skills/"))
                     or path.startswith("/api/deep-research/reports/") or resp.status_code in (401, 403, 429)):
                 workbench.audit_ledger.record(
                     trace_id=trace_id,
@@ -506,16 +534,21 @@ def create_app(
 
         # 2. RBAC & HMAC-SHA256 Bearer Authentication
         req_role = required_role_for(method, path)
+        is_skill_run = method == "POST" and path.startswith("/api/skills/") and path.endswith("/run")
         if method == "POST":
             req_role = {
                 "/api/agent/stream": "dispatcher",
+                "/api/subagents/debate/stream": "dispatcher",
+                "/api/skills": "engineer",
+                "/api/mcp/clients": "engineer",
+                "/api/protocols/ingest-frame": "dispatcher",
                 "/api/deep-research/stream": "dispatcher",
                 "/api/live/stream": "dispatcher",
                 "/api/live/upload-report": "dispatcher",
                 "/api/memory": "dispatcher",
                 "/api/sandbox/run": "engineer",
             }.get(path, req_role)
-            if path.startswith("/api/actions/tickets/"):
+            if is_skill_run or path.startswith("/api/actions/tickets/"):
                 req_role = "dispatcher"
         elif method in {"PATCH", "DELETE"} and path.startswith("/api/memory/"):
             req_role = "dispatcher"
@@ -586,9 +619,9 @@ def create_app(
             )
 
         # 3. Cross-Process Shared Sliding-Window Rate Limiter (consistent across all Uvicorn worker PIDs!)
-        if path in COMPUTE_RATE_LIMITED_PATHS and (
+        if is_skill_run or (path in COMPUTE_RATE_LIMITED_PATHS and (
             method == "POST" or (method == "GET" and path in READ_ONLY_COMPUTE_PATHS)
-        ):
+        )):
             allowed, _remaining, retry_after = workbench.task_broker.check_shared_rate_limit(
                 f"{client_host}:{actor}",
                 max_requests=max_rpm,
@@ -1150,6 +1183,8 @@ def create_app(
                     tools.append(payload)
                 elif kind == "plan_update":
                     plan = payload.get("steps", payload.get("plan", payload.get("items", payload.get("todos", plan))))
+                elif kind == "memory_suggestion":
+                    record_advanced(memory_suggestions=len(payload.get("suggestions") or [payload]))
                 elif kind == "verification_badge":
                     badge = payload.get("verification", payload.get("badge", payload))
                 elif kind in ("content_delta", "reasoning_delta"):
@@ -1200,6 +1235,14 @@ def create_app(
                         archive_snapshot_sha256=session.archive_snapshot_sha256,
                         path=workbench.sessions_db, preserve_memory=True,
                     )
+                    final_badge = result.get("verification_badge") or {}
+                    trusted = final_badge.get("business_trusted", final_badge.get("trusted"))
+                    record_advanced(
+                        autonomous_turns=1, sandbox_runs=len(runs),
+                        sandbox_successes=sum(run.get("status") in ("ok", "completed", "success") for run in runs),
+                        verification_samples=int(bool(final_badge)),
+                        verified_turns=int(trusted is True or (trusted is None and final_badge.get("status") in ("verified", "passed"))),
+                    )
                     finished = True
                     event = {**event, "session_id": session_id, "result": result}
                     if "data" in event:
@@ -1234,7 +1277,133 @@ def create_app(
             "code_sandbox", "run_python_analysis", "Python 分析沙盒暂未就绪。",
         )
         with workbench.archive() as archive:
-            return run_python(archive, req.code, timeout_s=req.timeout_s)
+            result = run_python(archive, req.code, timeout_s=req.timeout_s)
+        record_advanced(sandbox_runs=1, sandbox_successes=int(result.get("status") == "ok"))
+        return result
+
+    @app.post(
+        "/api/subagents/debate/stream", tags=["Advanced Agent"], response_class=StreamingResponse,
+        responses={200: {"content": {"text/event-stream": {}}}, 503: {"description": "辩论模块暂未就绪"}},
+    )
+    async def api_subagent_debate(req: SubagentDebateRequest):
+        debate = _load_optional_runner("subagent_debate", "run_parallel_subagent_debate", "子智能体辩论模块暂未就绪。")
+        security = inspect_prompt_security(req.question)
+        if not security["allowed"]:
+            raise RequestError(400, security["message"])
+        client = _stream_model_client(req.mode, workbench.model)
+
+        def run(emit):
+            def on_event(event):
+                if event["type"] == "done":
+                    record_advanced(debate_runs=1)
+                emit(event)
+
+            with workbench.archive() as archive:
+                debate(archive, req.question, client=client, memory_db_path=memory_db_path, on_event=on_event)
+
+        return _callback_sse_response(run, DEBATE_EVENT_TYPES, api_logger, "子智能体辩论中断。")
+
+    def skill_runner(name: str):
+        return _load_optional_runner("skills_engine", name, "技能与 MCP Client 模块暂未就绪。")
+
+    def builtin_skills(list_skills):
+        return list_skills(skills_dir=builtin_skills_dir) if builtin_skills_dir.is_dir() else []
+
+    @app.get("/api/skills", tags=["Advanced Agent"])
+    def api_list_skills():
+        list_skills = skill_runner("list_skills")
+        with _runtime_write_lock(skills_dir):
+            return {"skills": [*builtin_skills(list_skills), *list_skills(skills_dir=skills_dir)]}
+
+    @app.post("/api/skills", tags=["Advanced Agent"], status_code=201)
+    def api_install_skill(req: SkillCreateRequest):
+        create_skill = skill_runner("create_skill")
+        with _runtime_write_lock(skills_dir):
+            filename = f"{req.skill_id}.md"
+            if (builtin_skills_dir / filename).exists() or (skills_dir / filename).exists():
+                raise RequestError(409, "该技能 ID 已安装。")
+            skill = create_skill(**req.model_dump(), skills_dir=skills_dir)
+        record_advanced(skill_installs=1)
+        return {"skill": skill}
+
+    @app.post("/api/skills/{skill_id}/run", tags=["Advanced Agent"])
+    def api_run_skill(skill_id: SkillIdentifier, req: SkillRunRequest | None = None):
+        execute = skill_runner("run_skill")
+        with _runtime_write_lock(skills_dir):
+            filename = f"{skill_id}.md"
+            directory = builtin_skills_dir if (builtin_skills_dir / filename).is_file() else skills_dir
+            if not (directory / filename).is_file():
+                raise RequestError(404, "未找到指定的技能。")
+        options = req or SkillRunRequest()
+        with workbench.archive() as archive:
+            if options.target_cabinet and (REPORT_STATION, options.target_cabinet) not in archive.devices:
+                raise RequestError(404, "归档中未找到目标柜。")
+            result = execute(archive, skill_id, **options.model_dump(), skills_dir=directory)
+        record_advanced(skill_runs=1)
+        return result
+
+    def protocol_runner(name: str):
+        return _load_optional_runner("protocol_adapter", name, "协议接入模块暂未就绪。")
+
+    @app.get("/api/mcp/clients", tags=["Advanced Agent"])
+    def api_list_mcp_clients():
+        list_clients = skill_runner("list_mcp_clients")
+        with _runtime_write_lock(mcp_registry_path), workbench.archive() as archive:
+            return {"clients": list_clients(archive=archive, registry_path=mcp_registry_path)}
+
+    @app.post("/api/mcp/clients", tags=["Advanced Agent"], status_code=201)
+    def api_register_mcp_client(req: MCPClientRegisterRequest):
+        register_client = skill_runner("register_mcp_client")
+        with _runtime_write_lock(mcp_registry_path):
+            client = register_client(**req.model_dump(exclude={"read_only"}), registry_path=mcp_registry_path)
+        record_advanced(mcp_registrations=1)
+        return {"client": client}
+
+    @app.get("/api/protocols/adapters", tags=["Advanced Agent"])
+    def api_protocol_adapters():
+        return {"adapters": protocol_runner("list_protocol_adapters")()}
+
+    @app.post("/api/protocols/ingest-frame", tags=["Advanced Agent"])
+    def api_protocol_ingest_frame(req: ProtocolFrameRequest):
+        ingest_frame = protocol_runner("ingest_protocol_frame")
+        protocol = "mqtt_scada" if req.protocol == "mqtt" else req.protocol
+        try:
+            result = ingest_frame(protocol, req.payload, voltage_limit_kv=req.voltage_limit_kv, live_db_path=live_db_path)
+        except (KeyError, TypeError, AttributeError, OverflowError) as exc:
+            raise RequestError(400, "遥测帧的字段缺失或数值无效。") from exc
+        record_advanced(protocol_frames=1)
+        return result
+
+    @app.get("/api/eval/observability", tags=["Advanced Agent"])
+    def api_eval_observability():
+        summarize = protocol_runner("get_agent_observability_summary")
+        unavailable = "Agent 可观测评测暂未就绪。"
+        module = _load_optional_module("llmops", unavailable)
+        summary = _module_runner(getattr(module, "GLOBAL_LLMOPS", None), "summary", unavailable)()
+        list_skills = skill_runner("list_skills")
+        with _runtime_write_lock(skills_dir), _runtime_write_lock(mcp_registry_path):
+            operational = summarize(
+                memory_db_path=memory_db_path, actions_db_path=actions_db_path, live_db_path=live_db_path,
+                skills_dir=skills_dir, mcp_registry_path=mcp_registry_path,
+            )
+            operational["ecosystem"]["skills_count"] += len(builtin_skills(list_skills))
+
+        with advanced_lock:
+            counts = dict(advanced_counts)
+
+        def percent(successes, samples):
+            return round(100 * counts[successes] / counts[samples], 2) if counts[samples] else None
+
+        return {
+            **operational, "llmops": summary,
+            "scope": "api_worker", "worker_pid": os.getpid(),
+            "ttft_ms_avg": summary["ttft_ms_avg"] if summary["ttft_ms_avg"] > 0 else None,
+            "ttft_ms_p95": summary["ttft_ms_p95"] if summary["ttft_ms_p95"] > 0 else None,
+            "total_tokens": summary["total_tokens"],
+            "sandbox_success_rate_pct": percent("sandbox_successes", "sandbox_runs"),
+            "verification_rate_pct": percent("verified_turns", "verification_samples"),
+            "counts": {**counts, "model_calls": summary["llm_calls_total"]},
+        }
 
     def memory_runner(name: str):
         return _load_optional_runner("memory_store", name, "长期记忆模块暂未就绪。")
@@ -1248,6 +1417,7 @@ def create_app(
     def api_create_memory(req: MemoryCreateRequest, request: Request):
         create_memory = memory_runner("create_memory")
         memory = create_memory(**req.model_dump(), source=request.state.actor, db_path=memory_db_path)
+        record_advanced(memory_writes=1)
         return {"memory": memory}
 
     @app.patch("/api/memory/{memory_id}", tags=["Operational Memory"])
@@ -1413,7 +1583,7 @@ def create_app(
         module = _load_optional_module("action_tickets", actions_unavailable)
         transition = _module_runner(module, name, actions_unavailable)
         conflict = _module_runner(module, "ChecklistIncompleteError", actions_unavailable)
-        with _action_write_lock(actions_db_path):
+        with _runtime_write_lock(actions_db_path):
             try:
                 if name in {"approve_action_ticket", "dispatch_action_webhook"}:
                     get_ticket = _module_runner(module, "get_action_ticket", actions_unavailable)

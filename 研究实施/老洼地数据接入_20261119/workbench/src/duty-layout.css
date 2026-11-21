@@ -551,3 +551,45 @@
 .duty-reply-more > summary { list-style: none; }
 .duty-reply-menu { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 7px; }
 .duty-chat .agent-trace-card { margin-top: 8px; }
+
+.duty-memory-suggestion {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px 14px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--duty-line);
+  border-radius: 10px;
+  background: var(--duty-paper);
+}
+.duty-memory-suggestion small { color: var(--duty-muted); font-size: 11px; }
+.duty-memory-suggestion strong { display: block; font-size: 13px; }
+.duty-memory-suggestion p { margin: 4px 0 0; font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.duty-memory-saved { display: inline-flex; align-items: center; gap: 5px; color: var(--success); font-size: 12px; }
+.duty-skill-picker {
+  display: grid;
+  gap: 3px;
+  padding: 5px;
+  margin: 4px 0;
+  max-height: 180px;
+  overflow: auto;
+  border: 1px solid var(--duty-line);
+  border-radius: 8px;
+}
+.duty-skill-picker button {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: baseline;
+  padding: 5px 8px;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  text-align: start;
+  color: var(--duty-ink);
+  cursor: pointer;
+}
+.duty-skill-picker button:hover, .duty-skill-picker button:focus-visible { background: var(--duty-hover); }
+.duty-skill-picker code { color: var(--duty-muted); font-size: 11px; overflow-wrap: anywhere; }
+.duty-composer-tools button.duty-composer-option { background: transparent; }

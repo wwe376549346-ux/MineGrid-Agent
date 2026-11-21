@@ -51,20 +51,31 @@ jobs:
           pip install -e .
 
       - name: Gate 1 — Live telemetry & action tickets
-        run: python -B verify_live_and_actions.py
+        run: |
+          set -o pipefail
+          python -B verify_live_and_actions.py 2>&1 | tee /tmp/g1.log || { echo "### Gate 1 Failed" >> "$GITHUB_STEP_SUMMARY"; echo '```' >> "$GITHUB_STEP_SUMMARY"; tail -n 40 /tmp/g1.log >> "$GITHUB_STEP_SUMMARY"; echo '```' >> "$GITHUB_STEP_SUMMARY"; exit 1; }
 
       - name: Gate 2 — Operational memory & deep research
-        run: python -B verify_memory_and_deep_research.py
+        run: |
+          set -o pipefail
+          python -B verify_memory_and_deep_research.py 2>&1 | tee /tmp/g2.log || { echo "### Gate 2 Failed" >> "$GITHUB_STEP_SUMMARY"; echo '```' >> "$GITHUB_STEP_SUMMARY"; tail -n 40 /tmp/g2.log >> "$GITHUB_STEP_SUMMARY"; echo '```' >> "$GITHUB_STEP_SUMMARY"; exit 1; }
 
       - name: Gate 3 — Read-only sandbox & autonomous agent
-        run: python -B verify_autonomous_sandbox.py
+        run: |
+          set -o pipefail
+          python -B verify_autonomous_sandbox.py 2>&1 | tee /tmp/g3.log || { echo "### Gate 3 Failed" >> "$GITHUB_STEP_SUMMARY"; echo '```' >> "$GITHUB_STEP_SUMMARY"; tail -n 40 /tmp/g3.log >> "$GITHUB_STEP_SUMMARY"; echo '```' >> "$GITHUB_STEP_SUMMARY"; exit 1; }
 
-      - name: Gate 4 — P0 correctness & claim grounding
+      - name: Gate 4 — Advanced v3 (Auto-Memory, Debate, Skills, Protocols)
+        run: |
+          set -o pipefail
+          python -B verify_advanced_agent_v3.py 2>&1 | tee /tmp/g4v3.log || { echo "### Gate 4v3 Failed" >> "$GITHUB_STEP_SUMMARY"; echo '```' >> "$GITHUB_STEP_SUMMARY"; tail -n 40 /tmp/g4v3.log >> "$GITHUB_STEP_SUMMARY"; echo '```' >> "$GITHUB_STEP_SUMMARY"; exit 1; }
+
+      - name: Gate 5 — P0 correctness & claim grounding
         run: |
           python -B verify_p0_correctness.py
           python -B verify_diagnostic_claims.py
 
-      - name: Gate 5 — Core diagnosis & task alignment
+      - name: Gate 6 — Core diagnosis & task alignment
         run: |
           python -B verify_diagnose.py
           python -B verify_task_alignment.py

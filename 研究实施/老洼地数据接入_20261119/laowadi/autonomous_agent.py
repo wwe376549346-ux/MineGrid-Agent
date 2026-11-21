@@ -17,7 +17,11 @@ from laowadi.context import DiagnosisSession, compress_tool_result, extract_quer
 from laowadi.diag_tools import AUTONOMOUS_TOOL_SCHEMAS, DiagnosticToolbox
 from laowadi.llm import ChatClient, LLMError
 from laowadi.local_router import _infer_ui_artifact_hint, _summarize_tool_result
-from laowadi.memory_store import format_memories_for_prompt, retrieve_relevant_memories
+from laowadi.memory_store import (
+    detect_memory_candidates,
+    format_memories_for_prompt,
+    retrieve_relevant_memories,
+)
 from laowadi.security import inspect_prompt_security
 from laowadi.verifier import _lookup_cell_db_record
 
@@ -765,6 +769,14 @@ def run_autonomous_agent(
         hint = _infer_ui_artifact_hint(effective_question, anchors, local_out["tool_trace"])
         rec_action = _infer_recommended_action(effective_question, anchors, answer_md)
         dr_goal = _infer_deep_research_goal(effective_question, anchors)
+        mem_suggestions = detect_memory_candidates(
+            question,
+            answer_md,
+            cabinets=anchors.get("cabinets"),
+            existing_memories=applied_memories,
+        )
+        if mem_suggestions:
+            emit("memory_suggestion", suggestions=mem_suggestions)
         if session is not None and hasattr(session, "record_autonomous_turn"):
             session.record_autonomous_turn(
                 question,
@@ -779,6 +791,7 @@ def run_autonomous_agent(
             "plan": local_out["plan"],
             "artifacts": local_out["artifacts"],
             "applied_memories": applied_memories,
+            "memory_suggestions": mem_suggestions,
             "recommended_action": rec_action,
             "deep_research_goal": dr_goal,
             "tool_trace": [
@@ -967,6 +980,14 @@ def run_autonomous_agent(
     hint = _infer_ui_artifact_hint(effective_question, anchors, tool_trace)
     rec_action = _infer_recommended_action(effective_question, anchors, final_answer)
     dr_goal = _infer_deep_research_goal(effective_question, anchors)
+    mem_suggestions = detect_memory_candidates(
+        question,
+        final_answer,
+        cabinets=anchors.get("cabinets"),
+        existing_memories=applied_memories,
+    )
+    if mem_suggestions:
+        emit("memory_suggestion", suggestions=mem_suggestions)
     if session is not None and hasattr(session, "record_autonomous_turn"):
         session.record_autonomous_turn(
             question,
@@ -981,6 +1002,7 @@ def run_autonomous_agent(
         "plan": plan_steps,
         "artifacts": artifacts,
         "applied_memories": applied_memories,
+        "memory_suggestions": mem_suggestions,
         "recommended_action": rec_action,
         "deep_research_goal": dr_goal,
         "tool_trace": [

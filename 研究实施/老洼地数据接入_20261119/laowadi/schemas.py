@@ -6,8 +6,9 @@ from datetime import date, datetime
 import json
 import math
 from typing import Annotated, Any, Literal
+from urllib.parse import urlsplit
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, ValidationInfo, field_validator
 
 
 class HealthzResponse(BaseModel):
@@ -60,6 +61,102 @@ class AgentStreamRequest(BaseModel):
     mode: Literal["auto", "local", "deepseek"] = "auto"
     sessionId: str | None = Field(default=None, max_length=64)
     maxSteps: int = Field(default=8, ge=1, le=12)
+
+
+AgentExecutionMode = Literal["auto", "local", "deepseek"]
+
+
+class SubagentDebateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    question: str = Field(min_length=1, max_length=600, pattern=r"\S")
+    mode: AgentExecutionMode = "auto"
+
+
+SkillIdentifier = Annotated[str, Field(pattern=r"^[a-z0-9][a-z0-9_-]{1,47}$")]
+SkillCabinet = Annotated[str, Field(pattern=r"^[0-9]{1,16}$")]
+
+
+class SkillCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    skill_id: SkillIdentifier = Field(validation_alias=AliasChoices("skill_id", "id"))
+    title: str = Field(min_length=1, max_length=120)
+    body_markdown: str = Field(min_length=1, max_length=8000, validation_alias=AliasChoices("body_markdown", "markdown"))
+    triggers: list[Annotated[str, Field(min_length=1, max_length=32)]] = Field(default_factory=list, max_length=12)
+    default_cabinet: SkillCabinet = "1006"
+    action_kind: Literal["switching_order", "defect_notice", "field_verification"] = "field_verification"
+
+
+class SkillRunRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    target_cabinet: SkillCabinet | None = None
+    at_time: str | None = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}[T ]\d{2}:00(?::00)?$")
+
+    @field_validator("at_time")
+    @classmethod
+    def normalize_skill_time(cls, value: str | None) -> str | None:
+        return datetime.fromisoformat(value).isoformat(sep=" ") if value else None
+
+
+class MCPClientRegisterRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    name: str = Field(min_length=1, max_length=80)
+    transport: Literal["http", "stdio"] = "http"
+    endpoint: str = Field(min_length=1, max_length=240)
+    description: str = Field(default="", max_length=240)
+    read_only: Literal[True] = True
+
+    @field_validator("endpoint")
+    @classmethod
+    def validate_mcp_endpoint(cls, value: str, info: ValidationInfo) -> str:
+        if info.data.get("transport") == "http":
+            parsed = urlsplit(value)
+            if parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.username or parsed.password or parsed.fragment:
+                raise ValueError("MCP 地址须为不含账号、密码或片段的 HTTP(S) 地址。")
+            if parsed.port == 0:
+                raise ValueError("MCP 端口须为有效的服务端口。")
+        return value
+
+
+class ProtocolFrameRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True, allow_inf_nan=False)
+
+    protocol: Literal["modbus_tcp", "opc_ua", "mqtt_scada", "mqtt"]
+    payload: dict[str, Any] = Field(min_length=1, validation_alias=AliasChoices("payload", "frame"))
+    voltage_limit_kv: float = Field(default=10.70, gt=0, le=60)
+
+    @field_validator("payload")
+    @classmethod
+    def validate_frame(cls, value: dict[str, Any], info: ValidationInfo) -> dict[str, Any]:
+        if len(json.dumps(value, ensure_ascii=False, allow_nan=False).encode("utf-8")) > 32_768:
+            raise ValueError("遥测帧最多 32 KiB。")
+        protocol = info.data.get("protocol")
+        if protocol == "modbus_tcp":
+            function = value.get("function_code", 3)
+            if type(function) is not int or function not in (3, 4):
+                raise ValueError("Modbus 遥测仅接受只读功能码 FC03/FC04。")
+            rows = value.get("registers")
+        elif protocol == "opc_ua":
+            if str(value.get("operation", "read")).lower() != "read":
+                raise ValueError("OPC-UA 遥测仅接受只读操作。")
+            rows = value.get("nodes")
+        else:
+            topic = value.get("topic", "mine/s35/telemetry/hourly")
+            if (not isinstance(topic, str) or not (topic == "mine/s35/telemetry" or topic.startswith("mine/s35/telemetry/"))
+                    or str(value.get("operation", "subscribe")).lower() not in {"subscribe", "read"}):
+                raise ValueError("MQTT 遥测仅接受订阅得到的遥测主题数据。")
+            rows = value.get("measurements")
+        if not isinstance(rows, list) or not rows or not all(isinstance(row, dict) for row in rows):
+            raise ValueError("遥测帧须包含至少一条记录。")
+        for row in [value, *rows]:
+            for key in ("timestamp", "cabinet", "metric", "node_id"):
+                field = row.get(key)
+                if field is not None and (not isinstance(field, str) or any(char in field for char in ",\r\n")):
+                    raise ValueError(f"遥测字段 {key} 须为单行文本，且不得包含逗号。")
+        return value
 
 
 class SandboxRunRequest(BaseModel):

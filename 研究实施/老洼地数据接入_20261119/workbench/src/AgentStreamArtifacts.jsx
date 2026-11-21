@@ -5,7 +5,7 @@ import {cellHref} from "./api.js";
 
 export const emptyAgentStream = {
   plan: [], reasoning: "", tools: [], runs: [], artifacts: [], content: "", verification: null,
-  canvasHint: null, recommendedAction: null, deepResearchGoal: "", status: "running",
+  canvasHint: null, recommendedAction: null, deepResearchGoal: "", memorySuggestions: [], status: "running",
 };
 
 function deltaText(event) {
@@ -108,6 +108,17 @@ export function applyAgentEvent(state, frame) {
     }
     case "content_delta":
       return {...state, content: state.content + deltaText(event)};
+    case "memory_suggestion": {
+      const suggestions = event.suggestions ?? [event.suggestion ?? event.memory ?? event];
+      const unique = new Map(state.memorySuggestions.map(item => [item.key, item]));
+      for (const candidate of suggestions) {
+        const {category, title, content, scope_cabinet, metric_threshold, tags} = candidate;
+        if (!["semantic", "episodic", "procedural"].includes(category) || !title?.trim() || !content?.trim()) continue;
+        const key = JSON.stringify([category, title, content, scope_cabinet]);
+        unique.set(key, {key, draft: {category, title, content, scope_cabinet: scope_cabinet || null, metric_threshold, tags}});
+      }
+      return {...state, memorySuggestions: [...unique.values()]};
+    }
     case "verification_badge":
       return {...state, verification: event.verification ?? event.badge ?? event};
     case "done": {
@@ -383,7 +394,7 @@ const FENCE = /^ {0,3}(`{3,})([^`]*)$/;
 const ORDERED_ITEM = /^ {0,3}(\d{1,9})[.)]\s+(.*)$/;
 const BULLET_ITEM = /^ {0,3}[-*+]\s+(.*)$/;
 
-function AnswerText({text}) {
+export function AnswerText({text}) {
   const lines = text.split(/\r?\n/);
   const blocks = [];
   for (let i = 0; i < lines.length;) {
@@ -442,6 +453,29 @@ function AnswerText({text}) {
     }
   }
   return <div className="agent-stream-answer">{blocks}</div>;
+}
+
+export function SkillRunReceipt({result}) {
+  if (!result) return null;
+  return <section className="agent-stream-card" aria-label="技能运行回执">
+    <header><strong>{result.title ?? "技能运行回执"}</strong></header>
+    <small className="muted">{[result.target_cabinet && result.target_cabinet + " 柜", result.at_time].filter(Boolean).join(" · ")}</small>
+    {result.checks?.length > 0 && <ul className="agent-stream-plan">
+      {result.checks.map((check, index) => <li key={index}>
+        <div className="agent-stream-step"><strong>{check.step}</strong>
+          {check.status === "warning" ? <Badge variant="warning" label="待复核" />
+            : check.status === "info" ? <Badge variant="neutral" label="提示" /> : <Status status={check.status} />}</div>
+        <div>{check.detail}</div>
+      </li>)}
+    </ul>}
+    {result.evidence_cells?.length > 0 && <ul className="agent-stream-plan">
+      {result.evidence_cells.map(cell => {
+        const href = cellHref(cell);
+        return <li key={cell}>{href ? <a href={href} target="_blank" rel="noreferrer">{cell}</a> : cell}</li>;
+      })}
+    </ul>}
+    {result.steps?.length > 0 && <details><summary>查看技能步骤</summary><AnswerText text={result.steps.join("\n")} /></details>}
+  </section>;
 }
 
 export function AgentStreamArtifacts({stream, onTextProgress, restored = false}) {
