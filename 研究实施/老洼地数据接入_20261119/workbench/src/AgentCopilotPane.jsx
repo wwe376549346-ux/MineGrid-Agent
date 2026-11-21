@@ -5,6 +5,7 @@ import {
   BookmarkCheck,
   BookmarkPlus,
   CheckCircle2,
+  ClipboardList,
   ChevronDown,
   ChevronRight,
   Cpu,
@@ -17,6 +18,7 @@ import {
   Play,
   Plus,
   RefreshCw,
+  Search,
   ShieldAlert,
   ShieldCheck,
   Sparkles,
@@ -30,7 +32,7 @@ import {Badge} from "@astryxdesign/core/Badge";
 import {ProgressBar} from "@astryxdesign/core/ProgressBar";
 import {Spinner} from "@astryxdesign/core/Spinner";
 import {apiRequest, authHeaders, cellHref} from "./api.js";
-import {AgentStreamArtifacts, AgentStreamStyles, applyAgentEvent, emptyAgentStream} from "./AgentStreamArtifacts.jsx";
+import {AgentStreamArtifacts, AgentStreamStyles, applyAgentEvent, emptyAgentStream, restoreAutonomousTurn} from "./AgentStreamArtifacts.jsx";
 
 export async function consumeAgentStream(response, onEvent, label = "自主深度 Agent") {
   if (!response.ok) {
@@ -89,25 +91,55 @@ function SaveReplyMemory({question, content, cabinet, onOpenMemory}) {
   </button>;
 }
 
-function AutonomousTurn({turn, onTextProgress, onOpenMemory}) {
+function AutonomousTurn({turn, onTextProgress, onOpenMemory, onSyncCanvas, onDraftAction, onDeepResearch}) {
+  const {stream} = turn;
+  const {canvasHint, recommendedAction, deepResearchGoal} = stream;
+  const [drafting, setDrafting] = useState(false);
+  const [draftError, setDraftError] = useState("");
+  const canDraft = ["switching_order", "defect_notice", "field_verification"].includes(recommendedAction?.kind)
+    && /^[0-9]{1,16}$/.test(recommendedAction?.target_cabinet ?? "");
+
+  async function draftAction() {
+    const {kind, target_cabinet, at_time, rationale} = recommendedAction;
+    setDraftError("");
+    setDrafting(true);
+    try {
+      await onDraftAction({kind, target_cabinet: String(target_cabinet), at_time, rationale});
+    } catch (error) {
+      setDraftError(error.message);
+    } finally {
+      setDrafting(false);
+    }
+  }
+
   return <div className="chat-turn">
     <div className="chat-user-row"><div className="chat-user-bubble">{turn.question}</div></div>
     <div className="chat-agent-row">
       <div className="chat-agent-avatar" aria-hidden="true"><Sparkles size={14} /></div>
       <div className="chat-agent-body">
-        <AgentStreamArtifacts stream={turn.stream} onTextProgress={onTextProgress} />
+        <AgentStreamArtifacts stream={stream} onTextProgress={onTextProgress} restored={Boolean(turn.result)} />
         {turn.stream.status === "running" && <div className="duty-progress" role="status"><Spinner size="sm" /> 正在分析</div>}
         {turn.stream.status === "stopped" && <small className="muted">已停止接收</small>}
         {turn.error && <div className="chat-error-box" role="alert">{turn.error}</div>}
         {turn.stream.status === "done" && <div className="chat-artifact-actions">
-          <SaveReplyMemory question={turn.question} content={turn.stream.content} onOpenMemory={onOpenMemory} />
+          {canvasHint?.canvas && <button type="button" className="chat-artifact-btn" onClick={() => onSyncCanvas(canvasHint)}>
+            <Layers size={13} /> 查看关联画布
+          </button>}
+          {canDraft && <button type="button" className="chat-artifact-btn" disabled={drafting} onClick={draftAction}>
+            <ClipboardList size={13} /> {drafting ? "正在起草…" : "一键起草两票草案"}
+          </button>}
+          <button type="button" className="chat-artifact-btn" onClick={() => onDeepResearch(deepResearchGoal || turn.question)}>
+            <Search size={13} /> 升级为深度专项排查
+          </button>
+          <SaveReplyMemory question={turn.question} content={stream.content} onOpenMemory={onOpenMemory} />
         </div>}
+        {draftError && <div className="chat-error-box" role="alert">{draftError}</div>}
       </div>
     </div>
   </div>;
 }
 
-const DUTY_PROMPTS = [
+const AUDIT_PROMPTS = [
   {
     label: "查整点读数",
     detail: "303 柜有功",
@@ -146,6 +178,45 @@ const DUTY_PROMPTS = [
     Icon: Activity,
     text: "2026年11月13日15:00，306柜有功和电流为何归零？请查证失压、表计死数和单进线转供。",
     runOnClick: true,
+  },
+];
+
+const AUTONOMOUS_PROMPTS = [
+  {
+    label: "1006 相关性回归",
+    detail: "有功与线电压散点图",
+    Icon: Activity,
+    text: "用老洼地全周整点数据分析 1006 柜有功功率与 Uab 线电压的相关性，给出回归散点图、样本数和原表出处。",
+  },
+  {
+    label: "10 kV 波动排行",
+    detail: "比较各馈线负荷",
+    Icon: Layers,
+    text: "按老洼地全周整点有功功率的标准差，列出 10 kV 馈线负荷波动前 5 名，用柱状图展示并说明缺测处理。",
+  },
+  {
+    label: "2# 主变分接头潮流",
+    detail: "档位与母线电压曲线",
+    Icon: Cpu,
+    text: "以 2026 年 11 月 13 日 17:00 为基准，复算 2# 主变各分接头档位对 10 kV II 段母线电压的影响，给出潮流曲线和假设。",
+  },
+  {
+    label: "精准单点查库",
+    detail: "303 柜原表坐标",
+    Icon: FileSpreadsheet,
+    text: "2026年11月13日15:00，303柜的有功功率是多少？请给出数值、单位和日报单元格坐标。",
+  },
+  {
+    label: "1018 极性核查",
+    detail: "负有功与负功率因数",
+    Icon: GitBranch,
+    text: "核查 1018 馈线全周负有功和负功率因数，比较计量极性与反送电两种解释，列出支持或反驳的原表证据和待核查资料。",
+  },
+  {
+    label: "全站风险盘点",
+    detail: "按证据列出关注项",
+    Icon: ShieldAlert,
+    text: "盘点老洼地全站过去 7 天的运行风险，按优先级列出异常柜、关键时刻、证据和需要现场复核的事项。",
   },
 ];
 
@@ -987,6 +1058,8 @@ export function AgentCopilotPane({
   onOpenCabinet,
   onReviewsUpdate,
   onOpenMemory,
+  onDraftAction,
+  onDeepResearch,
   sidebarOpen,
   chatVisible,
   onShowChat,
@@ -997,7 +1070,10 @@ export function AgentCopilotPane({
 }) {
   const [sessionId, setSessionId] = useState(() => "sess-" + Date.now().toString(36));
   const [agentKind, setAgentKind] = useState("audit");
-  const [mode, setMode] = useState("local");
+  const [auditMode, setAuditMode] = useState("local");
+  const [autonomousMode, setAutonomousMode] = useState("auto");
+  const autonomous = agentKind === "autonomous";
+  const mode = autonomous ? autonomousMode : auditMode;
   const [input, setInput] = useState("");
   const [turns, setTurns] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -1014,26 +1090,23 @@ export function AgentCopilotPane({
   const scrollRef = useRef(null);
   const inputRef = useRef(null);
   const historyRequest = useRef(0);
+  const sessionListRequest = useRef(0);
 
   useEffect(() => () => abortRef.current?.abort(), []);
 
-  async function refreshSessions() {
+  const refreshSessions = useCallback(async signal => {
+    const request = ++sessionListRequest.current;
     try {
-      const data = await apiRequest("/api/sessions");
-      setSessionsList(data.sessions || []);
-      return data.sessions || [];
-    } catch {
-      return [];
-    }
-  }
+      const data = await apiRequest("/api/sessions", {signal});
+      if (!signal?.aborted && request === sessionListRequest.current) setSessionsList(data.sessions || []);
+    } catch {}
+  }, []);
 
   useEffect(() => {
     const ctrl = new AbortController();
-    apiRequest("/api/sessions", {signal: ctrl.signal})
-      .then(data => setSessionsList(data.sessions || []))
-      .catch(() => {});
+    refreshSessions(ctrl.signal);
     return () => ctrl.abort();
-  }, []);
+  }, [refreshSessions]);
 
   useEffect(() => {
     if (!loading) {
@@ -1067,12 +1140,19 @@ export function AgentCopilotPane({
       setInput("");
       setShowMemory(false);
       onShowChat();
-      setTurns(detail.turns || []);
-      setActiveAnchors(
-        detail.active_anchors
-          ? {turn: (detail.turns || []).length, active_anchors: detail.active_anchors}
-          : null,
-      );
+      const history = (detail.turns || []).map(restoreAutonomousTurn);
+      setTurns(history);
+      const latest = history.at(-1);
+      if (latest) {
+        setAgentKind(latest.stream ? "autonomous" : "audit");
+        if (latest.stream && ["local", "deepseek", "auto"].includes(latest.mode)) {
+          setAutonomousMode(latest.mode === "deepseek" && !model ? "auto" : latest.mode);
+        }
+      }
+      setActiveAnchors(detail.active_anchors && {
+        turn: detail.turns_digest?.length ?? history.length,
+        active_anchors: detail.active_anchors,
+      });
     } catch {}
   }
 
@@ -1083,6 +1163,7 @@ export function AgentCopilotPane({
         headers: {"Content-Type": "application/json"},
         body: JSON.stringify({sessionId: sid}),
       });
+      sessionListRequest.current += 1;
       setSessionsList(data.sessions || []);
       if (sid === sessionId) {
         setSessionId("sess-" + Date.now().toString(36));
@@ -1292,14 +1373,14 @@ export function AgentCopilotPane({
     return {finalPayload, streamError};
   }
 
-  async function sendAutonomousQuestion(clean, turnId, ctrl) {
+  async function sendAutonomousQuestion(clean, turnId, ctrl, targetMode) {
     setTurns(prev => [...prev, {id: turnId, question: clean, stream: emptyAgentStream}]);
     const updateTurn = update => setTurns(prev => prev.map(turn => turn.id === turnId ? update(turn) : turn));
     try {
       const response = await fetch("/api/agent/stream", {
         method: "POST",
         headers: authHeaders({"Content-Type": "application/json", Accept: "text/event-stream"}),
-        body: JSON.stringify({question: clean, mode: "auto", sessionId}),
+        body: JSON.stringify({question: clean, mode: targetMode, sessionId}),
         signal: ctrl.signal,
       });
       await consumeAgentStream(response, event => {
@@ -1307,6 +1388,7 @@ export function AgentCopilotPane({
           updateTurn(turn => ({...turn, stream: applyAgentEvent(turn.stream, event)}));
         }
       });
+      if (!ctrl.signal.aborted) refreshSessions();
     } catch (error) {
       if (!ctrl.signal.aborted) {
         updateTurn(turn => ({...turn, error: error.message, stream: {...turn.stream, status: "error"}}));
@@ -1328,7 +1410,7 @@ export function AgentCopilotPane({
     setShowMemory(false);
     const turnId = Date.now();
     if (agentKind === "autonomous") {
-      await sendAutonomousQuestion(clean, turnId, ctrl);
+      await sendAutonomousQuestion(clean, turnId, ctrl, targetMode);
       return;
     }
     setPendingPrompt(clean);
@@ -1526,13 +1608,15 @@ export function AgentCopilotPane({
               ))}
             </div>
           </details>
-          {agentKind === "audit" && <div className="duty-engine-select">
-            <select value={mode} onChange={e => setMode(e.target.value)} aria-label="问答方式" disabled={loading}>
+          <div className="duty-engine-select">
+            <select value={mode} onChange={e => (autonomous ? setAutonomousMode : setAuditMode)(e.target.value)}
+              aria-label="问答方式" disabled={loading}>
+              {autonomous && <option value="auto">自动选择</option>}
               <option value="local">本地分析</option>
               <option value="deepseek" disabled={!model}>{model ? "DeepSeek" : "DeepSeek 未配置"}</option>
             </select>
             <ChevronDown size={13} aria-hidden="true" />
-          </div>}
+          </div>
         </div>
         {loading
           ? <button type="button" className="copilot-send-btn is-stop" onClick={stopWaiting} aria-label="停止等待" title="停止等待">
@@ -1559,8 +1643,10 @@ export function AgentCopilotPane({
       </button>
       <div className="duty-sidebar-scroll">
         <div className="duty-sidebar-section">
-          <p className="duty-sidebar-label">工作台</p>
           {navigation}
+        </div>
+        <div className="duty-sidebar-section">
+          <p className="duty-sidebar-label">值班记录</p>
           <button type="button" className="duty-side-link" aria-expanded={chatVisible && showMemory} onClick={() => {
             onShowChat();
             setShowMemory(open => !chatVisible || !open);
@@ -1618,10 +1704,11 @@ export function AgentCopilotPane({
           <div className="duty-welcome">
             <div className="duty-welcome-mark" aria-hidden="true"><Zap size={25} strokeWidth={1.7} /></div>
             <h1>今天想核查什么？</h1>
-            <p>查运行日报、回看监测事件，或核对不同柜的同期读数。</p>
+            <p>{autonomous ? "查原表、比较运行趋势，或用潮流复算检验工况。"
+              : "查运行日报、回看监测事件，或核对不同柜的同期读数。"}</p>
             {composer}
             <div className="duty-prompts" aria-label="示例问题">
-              {DUTY_PROMPTS.map(({label, detail, Icon, text, runOnClick}) => (
+              {(autonomous ? AUTONOMOUS_PROMPTS : AUDIT_PROMPTS).map(({label, detail, Icon, text, runOnClick}) => (
                 <button type="button" key={label} className="duty-prompt"
                   onClick={() => runOnClick ? sendQuestion(text) : usePrompt(text)}>
                   <Icon size={18} strokeWidth={1.65} />
@@ -1633,7 +1720,8 @@ export function AgentCopilotPane({
         ) : (
           <div className="duty-thread-column">
             {turns.map((t, index) => t.stream ? (
-              <AutonomousTurn key={t.id} turn={t} onTextProgress={followTypedAnswer} onOpenMemory={onOpenMemory} />
+              <AutonomousTurn key={t.id} turn={t} onTextProgress={followTypedAnswer} onOpenMemory={onOpenMemory}
+                onSyncCanvas={onSyncCanvas} onDraftAction={onDraftAction} onDeepResearch={onDeepResearch} />
             ) : (
               <AgentTurnMessage
                 key={t.id}

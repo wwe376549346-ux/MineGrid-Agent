@@ -49,6 +49,7 @@ from zoneinfo import ZoneInfo
 from psycopg import Error as PostgresError
 from pydantic import ValidationError
 
+from laowadi.context import DiagnosisSession
 from laowadi.db.postgres import probe_runtime
 from laowadi.source_files import document_manifest, verified_original
 from laowadi.logging_config import bind_log_context, configure_logging, get_logger, log_event
@@ -107,6 +108,7 @@ from laowadi.security import (
     role_allows,
     verify_token,
 )
+from laowadi.sessions import load_session, save_chat_turn
 from laowadi.storage import METRICS, REPORT_STATION
 from laowadi.task_queue import TERMINAL_STATUSES
 from laowadi.workbench import BUILD, RequestError, Workbench
@@ -160,7 +162,7 @@ AUDITED_PATHS = {
 
 AUTONOMOUS_EVENT_TYPES = {
     "plan_update", "reasoning_delta", "tool_start", "tool_end", "code_run",
-    "content_delta", "verification_badge", "done", "error",
+    "artifact", "content_delta", "verification_badge", "done", "error",
 }
 RESEARCH_EVENT_TYPES = {
     "plan_update", "stage_update", "finding", "reasoning_delta", "section_ready", "done", "error",
@@ -1109,12 +1111,119 @@ def create_app(
 
         client = _stream_model_client(req.mode, workbench.model)
 
+        requested_session = (req.sessionId or "").strip()
+        session_id = requested_session or f"agent-{uuid.uuid4().hex}"
+
         def run(emit):
+            runs, artifacts, tools = [], [], []
+            content, reasoning = [], []
+            plan, badge = [], None
+            finished = False
+
+            def merge_run(run):
+                run_id = run.get("run_id") or run.get("call_id") or run.get("id")
+                if run_id is not None:
+                    for index, previous in enumerate(runs):
+                        if run_id == (previous.get("run_id") or previous.get("call_id") or previous.get("id")):
+                            runs[index] = {**previous, **run}
+                            return
+                if run not in runs:
+                    runs.append(run)
+
+            def persist_then_emit(event):
+                nonlocal finished, plan, badge
+                if finished:
+                    return
+                kind = event["type"]
+                payload = {k: v for k, v in event.items() if k not in ("type", "ts", "data")}
+                payload.update(event.get("data") or {})
+                if kind == "code_run":
+                    output = payload.get("result") or payload.get("execution") or payload.get("output")
+                    run = {k: v for k, v in payload.items() if k not in ("result", "execution", "output")}
+                    merge_run({**run, **(output if isinstance(output, dict) else {})})
+                elif kind == "artifact":
+                    outputs = payload.get("artifacts") or [payload.get("artifact", payload)]
+                    for artifact in outputs:
+                        if artifact not in artifacts:
+                            artifacts.append(artifact)
+                elif kind == "tool_end":
+                    tools.append(payload)
+                elif kind == "plan_update":
+                    plan = payload.get("steps", payload.get("plan", payload.get("items", payload.get("todos", plan))))
+                elif kind == "verification_badge":
+                    badge = payload.get("verification", payload.get("badge", payload))
+                elif kind in ("content_delta", "reasoning_delta"):
+                    delta = payload.get("delta", payload.get("text", payload.get("content", "")))
+                    if isinstance(delta, str):
+                        (content if kind == "content_delta" else reasoning).append(delta)
+                elif kind == "done":
+                    result = payload.get("result") or {}
+                    for run in [*(result.get("code_runs") or []), *(result.get("runs") or [])]:
+                        merge_run(run)
+                    final_artifacts = list(artifacts)
+                    for artifact in result.get("artifacts") or []:
+                        if artifact not in final_artifacts:
+                            final_artifacts.append(artifact)
+                    trace = result.get("tool_trace")
+                    if trace:
+                        trace = [
+                            {**tools[index], **tool}
+                            if index < len(tools) and tools[index].get("tool") == tool.get("tool") else tool
+                            for index, tool in enumerate(trace)
+                        ]
+                    history_offset = max(0, len(session.history) - 8)
+                    result = jsonable_encoder({
+                        "answer_markdown": "".join(content),
+                        "plan": plan,
+                        "verification_badge": badge,
+                        "reasoning": "".join(reasoning),
+                        **result,
+                        "artifacts": final_artifacts,
+                        "tool_trace": trace or tools,
+                        "code_runs": runs,
+                        "turn_kind": "autonomous",
+                        "autonomous_context": {
+                            "mine_id": session.mine_id,
+                            "station": session.station,
+                            "archive_snapshot_sha256": session.archive_snapshot_sha256,
+                            "active_anchors": session.active_anchors,
+                            "turns": [{**turn, "turn": turn["turn"] - history_offset} for turn in session.turns],
+                            "history": [
+                                {**snapshot, "turn": snapshot["turn"] - history_offset}
+                                for snapshot in session.history[-8:]
+                            ],
+                        },
+                    })
+                    save_chat_turn(
+                        session_id, req.question, req.mode, result,
+                        mine_id=session.mine_id, station=session.station,
+                        archive_snapshot_sha256=session.archive_snapshot_sha256,
+                        path=workbench.sessions_db, preserve_memory=True,
+                    )
+                    finished = True
+                    event = {**event, "session_id": session_id, "result": result}
+                    if "data" in event:
+                        event["data"] = {**event["data"], "session_id": session_id, "result": result}
+                emit(event)
+
             with workbench.archive() as archive:
-                session = workbench._get_or_restore_session(archive, req.sessionId) if req.sessionId else None
+                # The two modes keep separate working memory even when they share a transcript.
+                session = DiagnosisSession(archive)
+                saved = load_session(session_id, path=workbench.sessions_db) if requested_session else None
+                for turn in reversed(saved["turns"] if saved else []):
+                    prior = (turn["result"] or {}).get("autonomous_context")
+                    if not prior:
+                        continue
+                    if (prior.get("mine_id"), prior.get("station"), prior.get("archive_snapshot_sha256")) == (
+                        session.mine_id, session.station, session.archive_snapshot_sha256,
+                    ):
+                        session.active_anchors = prior["active_anchors"]
+                        session.turns = prior["turns"]
+                        session.history = prior["history"]
+                    break
                 run_agent(
                     archive, req.question, client=client, session=session, max_steps=req.maxSteps,
-                    memory_db_path=memory_db_path, on_event=emit,
+                    memory_db_path=memory_db_path, on_event=persist_then_emit,
                 )
 
         return _callback_sse_response(run, AUTONOMOUS_EVENT_TYPES, api_logger, "自主深度 Agent 执行中断。")

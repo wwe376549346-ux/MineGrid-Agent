@@ -4,7 +4,8 @@ import {Check, Circle, Code2, ListTodo, LoaderCircle, ShieldCheck, X} from "luci
 import {cellHref} from "./api.js";
 
 export const emptyAgentStream = {
-  plan: [], reasoning: "", tools: [], runs: [], content: "", verification: null, status: "running",
+  plan: [], reasoning: "", tools: [], runs: [], artifacts: [], content: "", verification: null,
+  canvasHint: null, recommendedAction: null, deepResearchGoal: "", status: "running",
 };
 
 function deltaText(event) {
@@ -13,9 +14,72 @@ function deltaText(event) {
 }
 
 function mergeRun(items, item, id) {
-  const index = id == null ? -1 : items.findLastIndex(prev => prev.id === id);
+  const index = id == null
+    ? items.findIndex(prev => JSON.stringify(prev) === JSON.stringify(item))
+    : items.findLastIndex(prev => prev.id === id);
   if (index === -1) return [...items, {...item, id}];
   return items.map((prev, i) => i === index ? {...prev, ...item} : prev);
+}
+
+function addCodeRun(runs, event) {
+  const {type, ts, data, result, execution, output, ...fields} = event;
+  const run = {...fields, ...(result ?? execution ?? output)};
+  return mergeRun(runs, run, run.run_id ?? run.call_id ?? run.id);
+}
+
+const CHART_TYPES = ["scatter", "line", "bar"];
+
+function normalizeArtifact(item, defaultKind) {
+  if (!item || typeof item !== "object") return null;
+  const type = item.kind ?? item.type ?? defaultKind;
+  const payload = item.chart ?? item.table ?? item.payload ?? item.data;
+  const fields = payload && !Array.isArray(payload) && typeof payload === "object" ? {...item, ...payload} : item;
+  if (type === "table" || Array.isArray(fields.rows)) return {...fields, kind: "table"};
+  const chartType = fields.chart_type ?? [fields.type, fields.kind, type].find(value => CHART_TYPES.includes(value));
+  if (CHART_TYPES.includes(chartType)) return {...fields, kind: "chart", chart_type: chartType};
+  return null;
+}
+
+function artifactKey(item) {
+  const {title, columns, rows, data, chart_type, series, points, x, y, x_key, y_key, x_label, y_label} = item;
+  if (item.kind === "table") return JSON.stringify([item.kind, title, columns, rows ?? data]);
+  return JSON.stringify([item.kind, title, chart_type, x_label, y_label, x_key, y_key, series ?? points ?? data ?? [x, y]]);
+}
+
+function mergeArtifacts(items, next) {
+  const unique = [...items];
+  for (const raw of next) {
+    const item = normalizeArtifact(raw);
+    if (!item) continue;
+    const id = item.artifact_id ?? item.id;
+    const key = artifactKey(item);
+    const index = unique.findIndex(existing =>
+      (id != null && existing.kind === item.kind && (existing.artifact_id ?? existing.id) === id)
+      || artifactKey(existing) === key);
+    if (index === -1) unique.push(item);
+    else unique[index] = {...unique[index], ...item};
+  }
+  return unique;
+}
+
+function runArtifacts(run) {
+  return mergeArtifacts([], [
+    ...(run.tables ?? []).map(item => normalizeArtifact(item, "table")),
+    ...(run.charts ?? []).map(item => normalizeArtifact(item, "chart")),
+    ...(run.artifacts ?? []),
+  ]);
+}
+
+function toolStatus(event) {
+  return event.status ?? (event.error || event.ok === false ? "failed" : "completed");
+}
+
+export function restoreAutonomousTurn(turn) {
+  if (turn.result?.turn_kind !== "autonomous") return turn;
+  return {
+    ...turn,
+    stream: applyAgentEvent(emptyAgentStream, {type: "done", result: turn.result}),
+  };
 }
 
 export function applyAgentEvent(state, frame) {
@@ -32,20 +96,45 @@ export function applyAgentEvent(state, frame) {
       const name = event.tool ?? event.name ?? "工具";
       const previous = state.tools.findLast(tool => tool.name === name && tool.status === "running");
       const id = event.call_id ?? event.tool_call_id ?? event.step ?? previous?.id ?? state.tools.length;
-      const status = frame.type === "tool_start" ? "running" : event.status ?? (event.error || event.ok === false ? "failed" : "completed");
+      const status = frame.type === "tool_start" ? "running" : toolStatus(event);
       return {...state, tools: mergeRun(state.tools, {...event, name, status}, id)};
     }
-    case "code_run": {
-      const run = {...event, ...(event.result ?? event.execution ?? event.output)};
-      return {...state, runs: mergeRun(state.runs, run, event.run_id ?? event.call_id ?? event.id)};
+    case "code_run":
+      return {...state, runs: addCodeRun(state.runs, event)};
+    case "artifact": {
+      const {type, data, ...fields} = frame;
+      const output = event.artifact ?? data ?? fields;
+      return {...state, artifacts: mergeArtifacts(state.artifacts, event.artifacts ?? [output])};
     }
     case "content_delta":
       return {...state, content: state.content + deltaText(event)};
     case "verification_badge":
       return {...state, verification: event.verification ?? event.badge ?? event};
     case "done": {
-      const content = event.result?.answer_markdown ?? event.content ?? event.answer;
-      return {...state, status: "done", content: typeof content === "string" && content ? content : state.content};
+      const result = event.result ?? {};
+      const plan = result.plan;
+      const content = result.answer_markdown ?? event.content ?? event.answer;
+      const runs = (result.code_runs ?? result.runs ?? []).reduce(addCodeRun, state.runs);
+      const tools = result.tool_trace?.map((tool, index) => {
+        const name = tool.tool ?? tool.name ?? "工具";
+        const streamed = state.tools[index]?.name === name ? state.tools[index] : null;
+        const merged = {...streamed, ...tool};
+        return {...merged, id: tool.call_id ?? tool.id ?? streamed?.id ?? index, name, status: toolStatus(merged)};
+      });
+      return {
+        ...state,
+        status: "done",
+        content: typeof content === "string" ? content : state.content,
+        plan: Array.isArray(plan) ? plan : (plan?.items ?? plan?.steps ?? state.plan),
+        reasoning: result.reasoning ?? state.reasoning,
+        verification: result.verification_badge ?? state.verification,
+        runs,
+        artifacts: mergeArtifacts(state.artifacts, result.artifacts ?? []),
+        tools: tools?.length ? tools : state.tools,
+        canvasHint: result.ui_artifact_hint ?? null,
+        recommendedAction: result.recommended_action ?? null,
+        deepResearchGoal: result.deep_research_goal ?? "",
+      };
     }
     default:
       return state;
@@ -130,8 +219,10 @@ function chartPoints(series, chart) {
 
 function ResultChart({chart}) {
   const titleId = useId();
+  const [hover, setHover] = useState(null);
+  const [selected, setSelected] = useState(null);
   const kind = chart.chart_type ?? chart.kind ?? chart.type;
-  if (!["scatter", "line", "bar"].includes(kind)) return null;
+  if (!CHART_TYPES.includes(kind)) return null;
   const series = (Array.isArray(chart.series) ? chart.series : [chart])
     .map((item, index) => ({name: item.name, color: SERIES_COLORS[index % SERIES_COLORS.length], points: chartPoints(item, chart)}))
     .filter(item => item.points.length);
@@ -161,44 +252,72 @@ function ResultChart({chart}) {
     });
   const barWidth = Math.min(32, (right - left) * 0.75 / (categories.size * series.length));
   const title = chart.title || {scatter: "散点图", line: "折线图", bar: "柱状图"}[kind];
-  return <figure className="agent-stream-chart">
+  const tooltip = hover ?? selected;
+  return <figure className="agent-stream-chart" onKeyDown={event => {
+    if (event.key === "Escape") { setHover(null); setSelected(null); }
+  }}>
     <figcaption>
       <strong id={titleId}>{title}</strong>
       {chart.y_label && <small>{chart.y_label}</small>}
     </figcaption>
-    <svg viewBox="0 0 480 205" role="img" aria-labelledby={titleId}>
-      {yTicks.map((tick, i) => <g key={i}>
-        <line x1={left} x2={right} y1={yAt(tick)} y2={yAt(tick)} stroke="var(--border)" />
-        <text x={left - 8} y={yAt(tick) + 4} textAnchor="end">{tickLabel.format(tick)}</text>
-      </g>)}
-      <path d={`M ${left} ${top} V ${bottom} H ${right}`} fill="none" stroke="var(--border-strong)" />
-      {xTicks.map(({x, label}) => <text key={x} x={xAt(x)} y={bottom + 15} textAnchor="middle">
-        <title>{label}</title>{label.length > 12 ? label.slice(0, 11) + "…" : label}
-      </text>)}
-      {chart.x_label && <text x={(left + right) / 2} y={201} textAnchor="middle">{chart.x_label}</text>}
-      {series.map(({name, color, points: data}, seriesIndex) => <g key={seriesIndex} fill={color}>
-        {kind === "line" && <polyline fill="none" stroke={color} strokeWidth={2}
-          points={data.map(point => `${xAt(xValue(point.x))},${yAt(point.y)}`).join(" ")} />}
-        {data.map((point, i) => {
-          const x = xAt(xValue(point.x)), y = yAt(point.y);
-          const tip = <title>{name ? `${name} · ` : ""}{point.label ?? point.x} · {point.y}</title>;
-          return bar
-            ? <rect key={i} x={x + (seriesIndex - series.length / 2) * barWidth} y={Math.min(y, yAt(0))}
-              width={barWidth} height={Math.abs(y - yAt(0))} rx={2}>{tip}</rect>
-            : <circle key={i} cx={x} cy={y} r={kind === "scatter" ? 4 : 2.7}>{tip}</circle>;
-        })}
-      </g>)}
-    </svg>
+    <div className="agent-stream-plot">
+      <svg viewBox="0 0 480 205" role="group" aria-labelledby={titleId}>
+        <rect width={480} height={205} fill="transparent" onClick={() => setSelected(null)} />
+        {yTicks.map((tick, i) => <g key={i}>
+          <line x1={left} x2={right} y1={yAt(tick)} y2={yAt(tick)} stroke="var(--border)" />
+          <text x={left - 8} y={yAt(tick) + 4} textAnchor="end">{tickLabel.format(tick)}</text>
+        </g>)}
+        <path d={`M ${left} ${top} V ${bottom} H ${right}`} fill="none" stroke="var(--border-strong)" />
+        {xTicks.map(({x, label}) => <text key={x} x={xAt(x)} y={bottom + 15} textAnchor="middle">
+          {label.length > 12 ? label.slice(0, 11) + "…" : label}
+        </text>)}
+        {chart.x_label && <text x={(left + right) / 2} y={201} textAnchor="middle">{chart.x_label}</text>}
+        {series.map(({name, color, points: data}, seriesIndex) => <g key={seriesIndex} fill={color}>
+          {kind === "line" && <polyline fill="none" stroke={color} strokeWidth={2}
+            points={data.map(point => `${xAt(xValue(point.x))},${yAt(point.y)}`).join(" ")} />}
+          {data.map((point, i) => {
+            const x = xAt(xValue(point.x)), y = yAt(point.y);
+            const id = `${seriesIndex}-${i}`;
+            const barX = x + (seriesIndex - series.length / 2) * barWidth;
+            const tip = {
+              id, x: bar ? barX + barWidth / 2 : x, y: bar ? Math.min(y, yAt(0)) : y,
+              text: [name, point.label ?? point.x, String(point.y)].filter(value => value != null).join(" · "),
+            };
+            const toggle = () => setSelected(current => current?.id === id ? null : tip);
+            return <g key={id} className="agent-stream-point" role="button" tabIndex={0}
+              aria-label={tip.text} aria-pressed={selected?.id === id}
+              onPointerEnter={() => setHover(tip)} onPointerLeave={() => setHover(null)}
+              onFocus={() => setHover(tip)} onBlur={() => setHover(null)}
+              onClick={toggle} onKeyDown={event => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  toggle();
+                }
+              }}>
+              {bar ? <rect x={barX} y={Math.min(y, yAt(0))} width={barWidth} height={Math.max(3, Math.abs(y - yAt(0)))} rx={2} />
+                : <><circle cx={x} cy={y} r={kind === "scatter" ? 4 : 2.7} />
+                  <circle cx={x} cy={y} r={7} fill="transparent" /></>}
+            </g>;
+          })}
+        </g>)}
+      </svg>
+      {tooltip && <span className="agent-stream-tooltip" role="tooltip" style={{
+        left: `${Math.max(20, Math.min(80, tooltip.x / 4.8))}%`,
+        top: `${tooltip.y / 2.05}%`,
+      }}>{tooltip.text}</span>}
+    </div>
     {series.some(item => item.name) && <div className="agent-stream-legend">
       {series.map((item, i) => <span key={i}><i style={{background: item.color}} />{item.name ?? `系列 ${i + 1}`}</span>)}
     </div>}
   </figure>;
 }
 
+function ResultArtifact({item}) {
+  return item.kind === "table" ? <ResultTable table={item} /> : <ResultChart chart={item} />;
+}
+
 function CodeRunCard({run}) {
-  const outputs = Array.isArray(run.artifacts) ? run.artifacts : [];
-  const tables = [...(Array.isArray(run.tables) ? run.tables : []), ...outputs.filter(item => item?.type === "table")];
-  const charts = [...(Array.isArray(run.charts) ? run.charts : []), ...outputs.filter(item => ["chart", "scatter", "line", "bar"].includes(item?.type))];
+  const outputs = runArtifacts(run);
   const status = run.status ?? (run.error || run.success === false || (run.exit_code != null && run.exit_code !== 0) ? "failed" :
     run.success === true || run.exit_code === 0 || run.stdout != null ? "completed" : "pending");
   const elapsed = run.duration_ms ?? run.elapsed_ms;
@@ -213,8 +332,7 @@ function CodeRunCard({run}) {
         <summary>{label}</summary><pre>{value ? displayValue(value) : "无输出"}</pre>
       </details> : null
     )}
-    {tables.map((table, i) => <ResultTable key={i} table={table} />)}
-    {charts.map((chart, i) => <ResultChart key={i} chart={chart} />)}
+    {outputs.map(output => <ResultArtifact key={artifactKey(output)} item={output} />)}
   </section>;
 }
 
@@ -240,36 +358,100 @@ function VerificationBadge({verification}) {
   </div>;
 }
 
-function AnswerText({text}) {
-  function inline(line) {
-    return line.split(/(\*\*[^*\n]+\*\*|`[^`\n]+`)/).map((part, i) => {
-      if (part.startsWith("**") && part.endsWith("**") && part.length > 4) {
-        return <strong key={i}>{part.slice(2, -2)}</strong>;
-      }
-      if (part.startsWith("`") && part.endsWith("`") && part.length > 2) {
-        const citation = part.slice(1, -1);
-        const href = cellHref(citation);
-        return href ? <a key={i} href={href} target="_blank" rel="noreferrer"><code>{citation}</code></a>
-          : <code key={i}>{citation}</code>;
-      }
-      return part;
-    });
-  }
-
-  return <div className="agent-stream-answer">
-    {text.split("\n").map((line, i) => {
-      const heading = line.match(/^#{1,6}\s+(.+)/);
-      if (heading) return <h3 key={i}>{inline(heading[1])}</h3>;
-      if (line.startsWith("> ")) return <blockquote key={i}>{inline(line.slice(2))}</blockquote>;
-      if (!line.trim()) return <div key={i} className="agent-stream-answer-break" aria-hidden="true" />;
-      return <div key={i}>{inline(line.replace(/^[-*] /, "• "))}</div>;
-    })}
-  </div>;
+function inlineMarkdown(line) {
+  return line.split(/(\*\*[^*\n]+\*\*|`[^`\n]+`)/).map((part, i) => {
+    if (part.startsWith("**") && part.endsWith("**") && part.length > 4) {
+      return <strong key={i}>{part.slice(2, -2)}</strong>;
+    }
+    if (part.startsWith("`") && part.endsWith("`") && part.length > 2) {
+      const citation = part.slice(1, -1);
+      const href = cellHref(citation);
+      return href ? <a key={i} href={href} target="_blank" rel="noreferrer"><code>{citation}</code></a>
+        : <code key={i}>{citation}</code>;
+    }
+    return part;
+  });
 }
 
-export function AgentStreamArtifacts({stream, onTextProgress}) {
+function tableCells(line) {
+  return line.trim().replace(/^\|/, "").replace(/(?<!\\)\|$/, "")
+    .split(/(?<!\\)\|/).map(cell => cell.trim().replace(/\\\|/g, "|"));
+}
+
+const TABLE_RULE = /^:?-{3,}:?$/;
+const FENCE = /^ {0,3}(`{3,})([^`]*)$/;
+const ORDERED_ITEM = /^ {0,3}(\d{1,9})[.)]\s+(.*)$/;
+const BULLET_ITEM = /^ {0,3}[-*+]\s+(.*)$/;
+
+function AnswerText({text}) {
+  const lines = text.split(/\r?\n/);
+  const blocks = [];
+  for (let i = 0; i < lines.length;) {
+    const start = i;
+    const line = lines[i++];
+    const fence = line.match(FENCE);
+    const ordered = line.match(ORDERED_ITEM);
+    const bullet = line.match(BULLET_ITEM);
+    const heading = line.match(/^#{1,6}\s+(.+)/);
+    const rules = line.includes("|") && i < lines.length ? tableCells(lines[i]) : null;
+    const columns = rules?.every(rule => TABLE_RULE.test(rule)) ? tableCells(line) : null;
+
+    if (fence) {
+      const code = [];
+      const closing = new RegExp("^ {0,3}`{" + fence[1].length + ",}\\s*$");
+      while (i < lines.length && !closing.test(lines[i])) code.push(lines[i++]);
+      if (i < lines.length) i++;
+      const language = fence[2].trim().split(/\s/, 1)[0];
+      blocks.push(<pre key={start}><code className={language ? "language-" + language : undefined}>{code.join("\n")}</code></pre>);
+    } else if (columns?.length === rules?.length && columns) {
+      i++;
+      const rows = [];
+      const align = rules.map(rule => rule.endsWith(":") ? (rule.startsWith(":") ? "center" : "right") : "left");
+      while (i < lines.length && lines[i].trim() && lines[i].includes("|") && !FENCE.test(lines[i])) {
+        rows.push(tableCells(lines[i++]));
+      }
+      blocks.push(<div key={start} className="agent-stream-table" tabIndex={0} role="region" aria-label="回答中的表格">
+        <table>
+          <thead><tr>{columns.map((cell, col) => <th key={col} scope="col" style={{textAlign: align[col]}}>
+            {inlineMarkdown(cell)}
+          </th>)}</tr></thead>
+          <tbody>{rows.map((row, index) => <tr key={index}>{columns.map((_, col) => <td key={col} style={{textAlign: align[col]}}>
+            {inlineMarkdown(row[col] ?? "")}
+          </td>)}</tr>)}</tbody>
+        </table>
+      </div>);
+    } else if (ordered || bullet) {
+      const pattern = ordered ? ORDERED_ITEM : BULLET_ITEM;
+      const items = [ordered?.[2] ?? bullet[1]];
+      while (i < lines.length) {
+        const next = lines[i].match(pattern);
+        if (!next) break;
+        items.push(next.at(-1));
+        i++;
+      }
+      const children = items.map((item, index) => <li key={index}>{inlineMarkdown(item)}</li>);
+      blocks.push(ordered ? <ol key={start} start={Number(ordered[1])}>{children}</ol> : <ul key={start}>{children}</ul>);
+    } else if (heading) {
+      blocks.push(<h3 key={start}>{inlineMarkdown(heading[1])}</h3>);
+    } else if (line.startsWith("> ")) {
+      blocks.push(<blockquote key={start}>{inlineMarkdown(line.slice(2))}</blockquote>);
+    } else if (line.trim()) {
+      blocks.push(<div key={start}>{inlineMarkdown(line)}</div>);
+    } else {
+      blocks.push(<div key={start} className="agent-stream-answer-break" aria-hidden="true" />);
+    }
+  }
+  return <div className="agent-stream-answer">{blocks}</div>;
+}
+
+export function AgentStreamArtifacts({stream, onTextProgress, restored = false}) {
   const glyphs = useMemo(() => Array.from(stream.content), [stream.content]);
-  const [visible, setVisible] = useState(0);
+  const [typed, setVisible] = useState(0);
+  const visible = restored ? glyphs.length : typed;
+  const standaloneArtifacts = useMemo(() => {
+    const inSandbox = new Set(stream.runs.flatMap(runArtifacts).map(artifactKey));
+    return stream.artifacts.filter(item => !inSandbox.has(artifactKey(item)));
+  }, [stream.artifacts, stream.runs]);
   useEffect(() => {
     if (visible >= glyphs.length) return undefined;
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -287,11 +469,15 @@ export function AgentStreamArtifacts({stream, onTextProgress}) {
     {stream.reasoning && <details className="agent-stream-card"><summary>思考过程</summary><pre>{stream.reasoning}</pre></details>}
     {stream.tools.length > 0 && <details className="agent-stream-card">
       <summary>工具调用 · {stream.tools.length}</summary>
-      <ul className="agent-stream-plan">{stream.tools.map(tool => <li key={tool.id} className="agent-stream-step">
-        <code>{tool.name}</code><Status status={tool.status} />
+      <ul className="agent-stream-plan">{stream.tools.map(tool => <li key={tool.id}>
+        <div className="agent-stream-step"><code>{tool.name}</code><Status status={tool.status} /></div>
+        {tool.summary && <div className="agent-stream-tool-summary muted">{displayValue(tool.summary)}</div>}
       </li>)}</ul>
     </details>}
     {stream.runs.map((run, i) => <CodeRunCard key={run.id ?? i} run={run} />)}
+    {standaloneArtifacts.length > 0 && <section className="agent-stream-card" aria-label="分析图表">
+      {standaloneArtifacts.map(item => <ResultArtifact key={artifactKey(item)} item={item} />)}
+    </section>}
     {visible > 0 && <AnswerText text={glyphs.slice(0, visible).join("")} />}
     {stream.status === "done" && visible >= glyphs.length && stream.verification && <VerificationBadge verification={stream.verification} />}
   </div>;
@@ -330,13 +516,27 @@ export function AgentStreamStyles() {
     .agent-stream-table th { position: sticky; top: 0; background: var(--surface-subtle); }
     .agent-stream-chart { background: var(--surface-subtle); border-radius: 8px; padding: 9px; }
     .agent-stream-chart figcaption { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 5px; }
-    .agent-stream-chart svg { display: block; width: 100%; height: auto; max-width: 720px; margin-inline: auto; }
+    .agent-stream-plot { position: relative; max-width: 720px; margin-inline: auto; }
+    .agent-stream-chart svg { display: block; width: 100%; height: auto; }
+    .agent-stream-point { cursor: pointer; }
+    .agent-stream-point:focus-visible { outline: none; }
+    .agent-stream-point:hover > :first-child, .agent-stream-point:focus-visible > :first-child,
+    .agent-stream-point[aria-pressed="true"] > :first-child { stroke: var(--text); stroke-width: 2px; }
+    .agent-stream-tooltip { position: absolute; z-index: 1; transform: translate(-50%, calc(-100% - 8px));
+      width: max-content; max-width: min(15rem, 70%); color: var(--text); background: var(--surface);
+      border: 1px solid var(--border-strong); border-radius: 7px; padding: 4px 8px; box-shadow: 0 2px 8px #0002;
+      font-size: 12px; pointer-events: none; }
+    .agent-stream-tool-summary { margin-top: 3px; white-space: pre-wrap; }
     .agent-stream-chart text { font-size: 11px; fill: currentColor; }
     .agent-stream-legend, .agent-stream-verification { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 12px; }
     .agent-stream-legend i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; }
     .agent-stream-answer { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.75; margin: 0; }
     .agent-stream-answer h3 { font-size: 1em; margin: 0; }
     .agent-stream-answer blockquote { margin: 0; padding-left: 10px; border-left: 2px solid var(--border-strong); color: var(--muted); }
+    .agent-stream-answer ol, .agent-stream-answer ul { margin: 4px 0; padding-inline-start: 1.65em; }
+    .agent-stream-answer pre { overflow: auto; background: var(--surface-subtle); border: 1px solid var(--border);
+      border-radius: 8px; padding: 9px 11px; white-space: pre; font-size: 12px; }
+    .agent-stream-answer .agent-stream-table { max-height: none; }
     .agent-stream-answer-break { height: .6em; }
   `}</style>;
 }

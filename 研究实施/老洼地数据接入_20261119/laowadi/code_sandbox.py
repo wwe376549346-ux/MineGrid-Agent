@@ -422,8 +422,10 @@ def run_python_analysis(
     # Strip all secrets (API keys, DB credentials, tokens) from child env
     clean_env = {
         "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
-        "LANG": "en_US.UTF-8",
-        "LC_ALL": "en_US.UTF-8",
+        "HOME": "/tmp",
+        "TMPDIR": "/tmp",
+        "PYTHONUTF8": "1",
+        "LANG": "C.UTF-8",
         "OMP_NUM_THREADS": "1",
         "OPENBLAS_NUM_THREADS": "1",
         "MKL_NUM_THREADS": "1",

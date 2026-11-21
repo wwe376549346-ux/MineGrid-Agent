@@ -474,7 +474,11 @@ emit_chart(
                     }
                 ],
             }
-            artifacts.extend([{"kind": "table", **tbl}, {"kind": "chart", **ch}])
+            tbl_art = {"kind": "table", **tbl}
+            ch_art = {"kind": "chart", **ch}
+            artifacts.extend([tbl_art, ch_art])
+            emit("artifact", artifact=tbl_art)
+            emit("artifact", artifact=ch_art)
             answer = (
                 (f"> {fallback_note}\n\n" if fallback_note else "")
                 + "### 核心结论：2# 主变分接头调压交流潮流复核\n\n"
@@ -496,6 +500,68 @@ emit_chart(
         emit("plan_update", steps=plan)
         _stream_markdown_chunks(answer, emit)
         plan[2]["status"] = "done"
+        emit("plan_update", steps=plan)
+        return {"answer_markdown": answer, "plan": plan, "artifacts": artifacts, "tool_trace": tool_trace, "code_runs": code_runs}
+
+    # Branch 3b: Precision scoped / event / single-cabinet / hypothesis query (never answer with generic overview!)
+    has_specific_target = bool(
+        anchors.get("events")
+        or anchors.get("cabinets")
+        or anchors.get("hours")
+        or any(k in q for k in ("1535", "C1535", "反向", "负有功", "归零", "极性", "比较", "变化", "事件", "LW-"))
+    )
+    if has_specific_target and not any(k in q for k in ("全站", "总览", "健康体检", "隐患盘点", "风险盘点")):
+        plan = [
+            {"id": "s1", "title": "识别查询对象并执行精准只读归档取证", "status": "running"},
+            {"id": "s2", "title": "核对原表单元格坐标并组织工程师答复", "status": "pending"},
+        ]
+        emit("plan_update", steps=plan)
+        r_txt = "识别到指定柜号/时刻/事件的精准查证需求，直接调用只读归档查证链获取原表读数与假设检验结论，确保零答非所问。"
+        emit("reasoning_delta", delta=r_txt, text=r_txt)
+
+        from laowadi.diagnose import diagnose_question
+
+        diag = diagnose_question(archive, question, client=None)
+        for step in (diag.get("tool_trace") or [])[:6]:
+            cid = next_call_id()
+            tname = step.get("tool") or "get_window_snapshot"
+            targs = step.get("arguments") or {}
+            tres = step.get("result") or {}
+            emit("tool_start", call_id=cid, tool=tname, arguments=targs)
+            tool_trace.append({"tool": tname, "arguments": targs, "result": tres})
+            emit("tool_end", call_id=cid, tool=tname, summary=_summarize_tool_result(tname, tres), ok=tres.get("status") != "error")
+
+        plan[0]["status"] = "done"
+        plan[1]["status"] = "running"
+        emit("plan_update", steps=plan)
+
+        rep = diag.get("report") or {}
+        summary_txt = str(rep.get("summary") or "已完成精准只读核查。").strip()
+        facts = rep.get("confirmed_facts") or []
+        fact_lines = []
+        for f in facts[:6]:
+            if isinstance(f, dict):
+                ev = f.get("evidence") or []
+                ev_str = "、".join(f"`{c}`" for c in (ev if isinstance(ev, list) else [ev])[:2] if c)
+                fact_lines.append(f"- {f.get('statement', '')}" + (f"（原表：{ev_str}）" if ev_str else ""))
+        hyps = rep.get("hypotheses") or []
+        hyp_lines = [
+            f"- **候选假设 {idx + 1}：{h.get('title', '')}**（置信度 `{h.get('confidence', 'medium')}`）—— {h.get('caveats') or h.get('rationale') or ''}"
+            for idx, h in enumerate(hyps[:3])
+            if isinstance(h, dict)
+        ]
+        missing = rep.get("missing_evidence") or []
+        miss_lines = [f"- {m}" for m in missing[:3] if m]
+
+        answer = (
+            (f"> {fallback_note}\n\n" if fallback_note else "")
+            + f"### 精准核查结论\n\n{summary_txt}\n"
+            + ("\n### 原表核实依据\n" + "\n".join(fact_lines) + "\n" if fact_lines else "")
+            + ("\n### 假设排查与归因\n" + "\n".join(hyp_lines) + "\n" if hyp_lines else "")
+            + ("\n### 待补现场证据\n" + "\n".join(miss_lines) + "\n" if miss_lines else "")
+        ).strip()
+        _stream_markdown_chunks(answer, emit)
+        plan[1]["status"] = "done"
         emit("plan_update", steps=plan)
         return {"answer_markdown": answer, "plan": plan, "artifacts": artifacts, "tool_trace": tool_trace, "code_runs": code_runs}
 
@@ -581,6 +647,49 @@ emit_chart(
     return {"answer_markdown": answer, "plan": plan, "artifacts": artifacts, "tool_trace": tool_trace, "code_runs": code_runs}
 
 
+def _infer_recommended_action(question: str, anchors: dict[str, Any], answer_markdown: str) -> dict[str, Any] | None:
+    """Suggest a matching human-approved action ticket draft when diagnostics surface actionable risks."""
+    blob = f"{question} {answer_markdown}"
+    cabs = anchors.get("cabinets") or []
+    days = anchors.get("days") or []
+    hours = anchors.get("hours") or []
+    at_time = f"{days[0]} {hours[0]}:00" if days and hours else ("2026-11-13 17:00:00" if "1006" in blob or "过压" in blob else None)
+
+    if any(k in blob for k in ("过压", "分接头", "调压", "无功", "补偿", "+2 档", "10.70", "10.65")):
+        cab = cabs[0] if cabs else "1006"
+        return {
+            "kind": "switching_order",
+            "target_cabinet": cab,
+            "at_time": at_time or "2026-11-13 17:00:00",
+            "rationale": f"基于自主排查对 {cab} 柜电压/调压分析，起草标准化电气倒闸操作票草案（须人工逐项核对签发）。",
+        }
+    if any(k in blob for k in ("负有功", "反向", "极性", "1018", "反送")):
+        cab = "1018" if "1018" in blob else (cabs[0] if cabs else "1006")
+        return {
+            "kind": "defect_notice",
+            "target_cabinet": cab,
+            "at_time": at_time or ("2026-11-16 21:00:00" if cab == "1018" else "2026-11-12 12:00:00"),
+            "rationale": f"针对 {cab} 柜负有功/极性异常排查结论，起草二次回路与表计极性消缺通知单。",
+        }
+    if any(k in blob for k in ("归零", "单进线", "载流量", "铭牌", "补证", "VoI", "N-1", "n-1")):
+        cab = cabs[0] if cabs else "303"
+        return {
+            "kind": "field_verification",
+            "target_cabinet": cab,
+            "at_time": at_time or "2026-11-13 15:00:00",
+            "rationale": f"针对 {cab} 柜裕度与缺失现场台账，起草现场铭牌与开关状态补录核校单。",
+        }
+    return None
+
+
+def _infer_deep_research_goal(question: str, anchors: dict[str, Any]) -> str:
+    cabs = anchors.get("cabinets") or []
+    if cabs:
+        return f"围绕 {'/'.join(cabs[:3])} 柜专项核查全周运行隐患、交流潮流调压优化与 VoI 补证优先级"
+    q_short = str(question or "").strip()[:80]
+    return f"围绕「{q_short}」开展老洼地 7 日配电网 6 阶段深度专项排查与报告生成"
+
+
 def run_autonomous_agent(
     archive: Any,
     question: str,
@@ -595,9 +704,13 @@ def run_autonomous_agent(
     t0 = time.monotonic()
     toolbox = DiagnosticToolbox(archive)
     known_cabs = {num for _, num in archive.devices}
-    anchors = extract_query_anchors(question, known_cabs)
+    if session is not None:
+        effective_question, anchors, _ctx_snap = session.resolve_question(question)
+    else:
+        effective_question = question
+        anchors = extract_query_anchors(question, known_cabs)
     applied_memories = retrieve_relevant_memories(
-        question,
+        effective_question,
         cabinets=anchors.get("cabinets"),
         limit=6,
         db_path=memory_db_path,
@@ -639,7 +752,7 @@ def run_autonomous_agent(
 
     # 2. Offline / local autonomous mode
     if client is None:
-        local_out = _run_local_autonomous(archive, toolbox, question, anchors, emit)
+        local_out = _run_local_autonomous(archive, toolbox, effective_question, anchors, emit)
         answer_md = local_out["answer_markdown"]
         if applied_memories:
             mem_note = "\n\n### 已参考生效长期记忆\n" + "\n".join(
@@ -649,7 +762,15 @@ def run_autonomous_agent(
             emit("content_delta", delta=mem_note, text=answer_md)
         badge = _compute_verification_badge(archive, answer_md, local_out["tool_trace"], local_out["code_runs"])
         emit("verification_badge", **badge)
-        hint = _infer_ui_artifact_hint(question, anchors, local_out["tool_trace"])
+        hint = _infer_ui_artifact_hint(effective_question, anchors, local_out["tool_trace"])
+        rec_action = _infer_recommended_action(effective_question, anchors, answer_md)
+        dr_goal = _infer_deep_research_goal(effective_question, anchors)
+        if session is not None and hasattr(session, "record_autonomous_turn"):
+            session.record_autonomous_turn(
+                question,
+                answer_md,
+                verified_cells=list(dict.fromkeys(_INLINE_CELL_RE.findall(answer_md)))[:6],
+            )
         res = {
             "status": "ok",
             "mode": "autonomous_local",
@@ -658,6 +779,8 @@ def run_autonomous_agent(
             "plan": local_out["plan"],
             "artifacts": local_out["artifacts"],
             "applied_memories": applied_memories,
+            "recommended_action": rec_action,
+            "deep_research_goal": dr_goal,
             "tool_trace": [
                 {"tool": t["tool"], "arguments": t["arguments"], "summary": _summarize_tool_result(t["tool"], t["result"]) if t["tool"] != "run_python_analysis" else f"沙盒 {t['result'].get('status')}"}
                 for t in local_out["tool_trace"]
@@ -676,9 +799,9 @@ def run_autonomous_agent(
         sys_prompt = f"{sys_prompt}\n\n{mem_block}"
     messages: list[dict[str, Any]] = [{"role": "system", "content": sys_prompt}]
     if session is not None:
-        for m in session.format_history_messages(question, max_turns=4):
+        for m in session.format_history_messages(effective_question, max_turns=4):
             messages.append(m)
-    messages.append({"role": "user", "content": question})
+    messages.append({"role": "user", "content": effective_question})
 
     plan_steps: list[dict[str, str]] = []
     tool_trace: list[dict[str, Any]] = []
@@ -841,7 +964,15 @@ def run_autonomous_agent(
 
     badge = _compute_verification_badge(archive, final_answer, tool_trace, code_runs)
     emit("verification_badge", **badge)
-    hint = _infer_ui_artifact_hint(question, anchors, tool_trace)
+    hint = _infer_ui_artifact_hint(effective_question, anchors, tool_trace)
+    rec_action = _infer_recommended_action(effective_question, anchors, final_answer)
+    dr_goal = _infer_deep_research_goal(effective_question, anchors)
+    if session is not None and hasattr(session, "record_autonomous_turn"):
+        session.record_autonomous_turn(
+            question,
+            final_answer,
+            verified_cells=list(dict.fromkeys(_INLINE_CELL_RE.findall(final_answer)))[:6],
+        )
     result = {
         "status": "ok",
         "mode": "autonomous_model",
@@ -850,6 +981,8 @@ def run_autonomous_agent(
         "plan": plan_steps,
         "artifacts": artifacts,
         "applied_memories": applied_memories,
+        "recommended_action": rec_action,
+        "deep_research_goal": dr_goal,
         "tool_trace": [
             {
                 "tool": t["tool"],

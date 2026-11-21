@@ -49,8 +49,11 @@ const DUTY_TABS = [
   {id: "topology", Icon: Layers, label: "主接线巡检"},
   {id: "tickets", Icon: ClipboardCheck, label: "事件工单"},
   {id: "cabinet", Icon: Activity, label: "柜级档案"},
-  {id: "deep-research", Icon: Search, label: "深度排查"},
+];
+
+const INVESTIGATION_TABS = [
   {id: "live-ops", Icon: Radio, label: "实时态势与两票审批"},
+  {id: "deep-research", Icon: Search, label: "深度排查"},
 ];
 
 const RESEARCH_TABS = [
@@ -60,10 +63,14 @@ const RESEARCH_TABS = [
   {id: "governance", Icon: ShieldCheck, label: "多智体与治理"},
 ];
 
-const ALL_TABS = [...DUTY_TABS, ...RESEARCH_TABS];
+const ALL_TABS = [...DUTY_TABS, ...INVESTIGATION_TABS, ...RESEARCH_TABS];
+const THEME_KEY = "laowadi_workbench_theme";
+const SOURCE_LABELS = {archive: "历史回放", drill: "实时演练", sandbox: "增量沙盒"};
 
 function App() {
-  const [darkMode, setDarkMode] = useState(false);
+  const [darkMode, setDarkMode] = useState(() => {
+    try { return localStorage.getItem(THEME_KEY) === "dark"; } catch { return false; }
+  });
   const [canvasTab, setCanvasTab] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(() => !window.matchMedia("(max-width: 760px)").matches);
   const [unreadBadge, setUnreadBadge] = useState(0);
@@ -81,11 +88,20 @@ function App() {
   const [pendingQuestion, setPendingQuestion] = useState("");
   const [memoryPlaybook, setMemoryPlaybook] = useState(null);
   const [researchVisited, setResearchVisited] = useState(false);
+  const [researchPrefill, setResearchPrefill] = useState(null);
   const [openedActionTicket, setOpenedActionTicket] = useState(null);
+  const [liveSource, setLiveSource] = useState("drill");
+  const sourceMode = canvasTab === "live-ops" ? liveSource : "archive";
 
   useEffect(() => {
-    document.documentElement.dataset.theme = darkMode ? "dark" : "light";
+    const theme = darkMode ? "dark" : "light";
+    document.documentElement.dataset.theme = theme;
+    try { localStorage.setItem(THEME_KEY, theme); } catch {}
   }, [darkMode]);
+
+  useEffect(() => {
+    if (canvasTab !== "live-ops") setLiveSource("drill");
+  }, [canvasTab]);
 
   useEffect(() => {
     const ctrl = new AbortController();
@@ -168,6 +184,11 @@ function App() {
     }
   }
 
+  function openDeepResearch(goal) {
+    setResearchPrefill({goal});
+    syncCanvasFromAgent({canvas: "deep-research"});
+  }
+
   function handleReviewsUpdate(nextReviews) {
     setHealth(curr => (curr ? {...curr, reviews: nextReviews} : curr));
   }
@@ -230,7 +251,9 @@ function App() {
             : <span className="duty-page-title">值班问答</span>}
         </div>
         <div className="duty-topbar-trailing">
-          <span className="duty-source-mode"><span aria-hidden="true" />历史回放</span>
+          <span className="duty-source-mode" data-source={sourceMode} role="status">
+            <span aria-hidden="true" />{SOURCE_LABELS[sourceMode]}
+          </span>
           <button type="button" className="duty-back-link" aria-label="长期记忆管理"
             onClick={() => setMemoryPlaybook({draft: null})}><BookOpen size={16} /> 长期记忆</button>
           <button
@@ -254,6 +277,8 @@ function App() {
         onOpenCabinet={openCabinetDrawer}
         onReviewsUpdate={handleReviewsUpdate}
         onOpenMemory={draft => setMemoryPlaybook({draft})}
+        onDraftAction={openActionDraft}
+        onDeepResearch={openDeepResearch}
         sidebarOpen={sidebarOpen}
         chatVisible={!activeTab}
         onShowChat={showChat}
@@ -261,10 +286,15 @@ function App() {
         connectionError={catalogError}
         onRetry={() => setRetry(n => n + 1)}
         navigation={<>
-          <nav className="duty-side-nav" aria-label="值班工具">
+          <nav className="duty-side-nav duty-nav-group" aria-labelledby="duty-daily-nav">
+            <p className="duty-sidebar-label" id="duty-daily-nav">日常巡检</p>
             {DUTY_TABS.map(workspaceLink)}
           </nav>
-          <details className="duty-research">
+          <nav className="duty-side-nav duty-nav-group" aria-labelledby="duty-investigation-nav">
+            <p className="duty-sidebar-label" id="duty-investigation-nav">告警与专项排查</p>
+            {INVESTIGATION_TABS.map(workspaceLink)}
+          </nav>
+          <details className="duty-research duty-nav-group" open={RESEARCH_TABS.includes(activeTab) || undefined}>
             <summary className="duty-side-link">
               <FlaskConical size={17} strokeWidth={1.65} />
               <span>研究工具</span>
@@ -354,14 +384,15 @@ function App() {
 
       {canvasTab === "live-ops" && <main className="agent-artifact-canvas duty-workspace" aria-label="实时态势与两票审批">
         <Suspense fallback={<div className="duty-loading" role="status"><Spinner size="sm" />正在打开实时态势</div>}>
-          <LiveStreamConsole days={dates} openedTicket={openedActionTicket} onDraft={openActionDraft} />
+          <LiveStreamConsole days={dates} openedTicket={openedActionTicket} onDraft={openActionDraft}
+            onSourceChange={setLiveSource} />
         </Suspense>
       </main>}
 
       {researchVisited && <main className="agent-artifact-canvas duty-workspace" aria-label="深度排查"
         style={canvasTab === "deep-research" ? undefined : {display: "none"}}>
         <Suspense fallback={<div className="duty-loading" role="status"><Spinner size="sm" />正在打开深度排查</div>}>
-          <DeepInvestigationView hasModel={Boolean(catalog?.model)} />
+          <DeepInvestigationView hasModel={Boolean(catalog?.model)} goalPrefill={researchPrefill} />
         </Suspense>
       </main>}
 

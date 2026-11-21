@@ -10,6 +10,7 @@
 [![React 19](https://img.shields.io/badge/React-19%20%2B%20Meta%20Astryx-61DAFB?logo=react&logoColor=black)](https://react.dev/)
 [![pandapower](https://img.shields.io/badge/AC%20Power%20Flow-pandapower%203.x-orange)](https://www.pandapower.org/)
 [![MCP](https://img.shields.io/badge/MCP-JSON--RPC%202.0%20Read--Only-6B4FBB)](https://modelcontextprotocol.io/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 </div>
 
@@ -117,6 +118,15 @@ All metrics below are deterministically reproduced against the read-only operati
 
 ### 1. Clone & Bootstrap Environment
 
+**Option A — Docker One-Command Launch (Recommended for Quick Evaluation)**:
+```bash
+git clone git@github.com:wwe376549346-ux/MineGrid-Agent.git
+cd MineGrid-Agent
+docker compose up --build
+# Open http://127.0.0.1:8765/
+```
+
+**Option B — Local Python Virtual Environment**:
 ```bash
 git clone git@github.com:wwe376549346-ux/MineGrid-Agent.git
 cd MineGrid-Agent

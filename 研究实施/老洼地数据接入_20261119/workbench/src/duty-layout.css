@@ -111,6 +111,9 @@
   background: var(--duty-accent);
 }
 
+.duty-source-mode[data-source="drill"] > span { background: var(--success, #16805b); }
+.duty-source-mode[data-source="sandbox"] > span { background: var(--duty-alert); }
+
 .duty-sidebar {
   grid-area: sidebar;
   display: flex;
@@ -229,6 +232,12 @@
   background: color-mix(in srgb, var(--duty-alert) 9%, transparent);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
+}
+
+.duty-nav-group + .duty-nav-group {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--duty-line);
 }
 
 .duty-nav-chevron { margin-left: auto; }

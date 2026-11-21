@@ -110,8 +110,8 @@ async function reportResponse(id, format, signal) {
   return response;
 }
 
-export function DeepInvestigationView({hasModel}) {
-  const [goal, setGoal] = useState("");
+export function DeepInvestigationView({hasModel, goalPrefill}) {
+  const [goal, setGoal] = useState(() => goalPrefill?.goal.slice(0, 1200) ?? "");
   const [mode, setMode] = useState("auto");
   const [taskGoal, setTaskGoal] = useState("");
   const [runStatus, setRunStatus] = useState("idle");
@@ -131,6 +131,9 @@ export function DeepInvestigationView({hasModel}) {
   const running = runStatus === "running";
 
   useEffect(() => () => runningRequest.current?.abort(), []);
+  useEffect(() => {
+    if (goalPrefill) setGoal(goalPrefill.goal.slice(0, 1200));
+  }, [goalPrefill]);
   useEffect(() => {
     const request = new AbortController();
     setHistoryLoading(true);

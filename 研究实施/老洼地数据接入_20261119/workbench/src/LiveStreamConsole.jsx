@@ -199,7 +199,7 @@ function UploadPanel({uploads, onUploaded, uploadListError, onRetry}) {
   </section>;
 }
 
-export function LiveStreamConsole({days, openedTicket, onDraft}) {
+export function LiveStreamConsole({days, openedTicket, onDraft, onSourceChange}) {
   const [uploads, setUploads] = useState([]);
   const [uploadsError, setUploadsError] = useState("");
   const [uploadsRevision, setUploadsRevision] = useState(0);
@@ -227,9 +227,13 @@ export function LiveStreamConsole({days, openedTicket, onDraft}) {
     ...days, ...uploadedDays, ...uploads.map(item => item.day).filter(Boolean),
   ])].sort(), [days, uploads, uploadedDays]);
   const replayDay = date || replayDays.at(-1) || "";
+  const [streamSource, setStreamSource] = useState(null);
+  const hasSandboxData = uploadedDays.includes(replayDay) || uploads.some(item => item.day === replayDay);
+  const sourceMode = streamSource ?? (hasSandboxData ? "sandbox" : "drill");
   const ticket = tickets.find(item => getTicketId(item) === selectedId);
 
   useEffect(() => () => requestRef.current?.abort(), []);
+  useEffect(() => { onSourceChange?.(sourceMode); }, [sourceMode, onSourceChange]);
   useEffect(() => {
     const request = new AbortController();
     setUploadsError("");
@@ -266,6 +270,7 @@ export function LiveStreamConsole({days, openedTicket, onDraft}) {
     requestRef.current = controller;
     const limit = threshold !== "" ? Number(threshold) : null;
     setActiveThreshold(limit);
+    setStreamSource(null);
     setTicks([]);
     setAlerts([]);
     setStreamError("");
@@ -281,6 +286,7 @@ export function LiveStreamConsole({days, openedTicket, onDraft}) {
         if (controller.signal.aborted) return;
         const event = {...frame, ...frame.data};
         if (frame.type === "telemetry_tick") {
+          setStreamSource(event.source === "live_upload" ? "sandbox" : "drill");
           setTicks(current => [...current, normalizeTick(event)].slice(-96));
           setActiveThreshold(event.threshold_kv ?? limit);
         }
@@ -379,7 +385,7 @@ export function LiveStreamConsole({days, openedTicket, onDraft}) {
             <Badge variant="neutral" label="归档与增量沙盒回放" /></div>
           <form className="liveops-stack" onSubmit={startReplay}>
             <div className="liveops-controls">
-              <label className="liveops-field">演练日<select aria-label="演练日" value={replayDay} disabled={running} onChange={e => setDate(e.target.value)}>
+              <label className="liveops-field">演练日<select aria-label="演练日" value={replayDay} disabled={running} onChange={e => { setDate(e.target.value); setStreamSource(null); }}>
                 {!replayDays.length && <option value="">暂无可回放日期</option>}
                 {replayDays.map(value => <option key={value} value={value}>{value}</option>)}
               </select></label>
@@ -443,7 +449,12 @@ export function LiveStreamConsole({days, openedTicket, onDraft}) {
           {ticket && <ActionApprovalCard key={selectedId} ticket={ticket} onChange={replaceTicket} webhookConfigured={webhookConfigured} />}
         </section>
         <UploadPanel uploads={uploads} onUploaded={result => {
-          setUploadedDays(current => [...new Set([...current, ...(result.days_covered ?? [])])]);
+          const daysCovered = result.days_covered ?? [];
+          setUploadedDays(current => [...new Set([...current, ...daysCovered])]);
+          if (!requestRef.current && daysCovered.length) {
+            setDate(daysCovered.at(-1));
+            setStreamSource(null);
+          }
           setUploadsRevision(current => current + 1);
         }}
           uploadListError={uploadsError} onRetry={() => setUploadsRevision(current => current + 1)} />

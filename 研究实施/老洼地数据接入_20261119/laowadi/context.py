@@ -562,6 +562,35 @@ class DiagnosisSession:
         }
         self.turns = (self.turns + [record])[-8:]
 
+    def record_autonomous_turn(
+        self,
+        question: str,
+        answer_markdown: str,
+        *,
+        verified_cells: list[str] | None = None,
+        archive_snapshot_sha256: str = "",
+    ) -> None:
+        """Persist a compact digest of an autonomous-mode turn for cross-turn memory."""
+        clean_ans = re.sub(r"[#>*`]+", "", str(answer_markdown or "")).strip()
+        summary = " ".join(clean_ans.splitlines()[:3])[:260]
+        if not summary:
+            return
+        digest = {
+            "turn": len(self.history) or (len(self.turns) + 1),
+            "question": question,
+            "resolved_question": self.history[-1]["resolved_question"] if self.history else question,
+            "verification_policy": "autonomous_posthoc",
+            "kind": "autonomous",
+            "summary": summary,
+            "facts": [],
+            "hypotheses": [],
+            "verified_cells": list((verified_cells or [])[:6]),
+            "active_anchors": deepcopy(self.active_anchors),
+            "mine_id": self.mine_id,
+            "archive_snapshot_sha256": archive_snapshot_sha256 or self.archive_snapshot_sha256,
+        }
+        self.turns = (self.turns + [digest])[-8:]
+
     def latest_turn(self) -> dict | None:
         return next((turn for turn in reversed(self.turns) if turn.get("kind") != "supplement"), None)
 

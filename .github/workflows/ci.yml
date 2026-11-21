@@ -50,19 +50,24 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e .
 
-      - name: Run core correctness & autonomous agent gates
+      - name: Gate 1 — Live telemetry & action tickets
+        run: python -B verify_live_and_actions.py
+
+      - name: Gate 2 — Operational memory & deep research
+        run: python -B verify_memory_and_deep_research.py
+
+      - name: Gate 3 — Read-only sandbox & autonomous agent
+        run: python -B verify_autonomous_sandbox.py
+
+      - name: Gate 4 — P0 correctness & claim grounding
         run: |
-          for s in \
-            verify_live_and_actions.py \
-            verify_memory_and_deep_research.py \
-            verify_autonomous_sandbox.py \
-            verify_p0_correctness.py \
-            verify_diagnostic_claims.py \
-            verify_diagnose.py \
-            verify_task_alignment.py; do
-            echo "=== RUNNING $s ==="
-            python -B "$s"
-          done
+          python -B verify_p0_correctness.py
+          python -B verify_diagnostic_claims.py
+
+      - name: Gate 5 — Core diagnosis & task alignment
+        run: |
+          python -B verify_diagnose.py
+          python -B verify_task_alignment.py
 
       - name: Run multi-agent, power-flow, VoI & DAG gates
         run: |

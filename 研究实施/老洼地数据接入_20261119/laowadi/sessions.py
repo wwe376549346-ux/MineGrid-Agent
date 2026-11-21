@@ -65,6 +65,7 @@ def save_chat_turn(
     station: str = "",
     archive_snapshot_sha256: str = "",
     path: Path = SESSION_DB,
+    preserve_memory: bool = False,
 ) -> dict:
     sid = str(session_id or "default").strip()[:64] or "default"
     q = str(question or "").strip()
@@ -74,23 +75,26 @@ def save_chat_turn(
     digest_json = json.dumps(turns_digest or [], ensure_ascii=False)
     res_json = json.dumps(result, ensure_ascii=False, allow_nan=False) if result is not None else None
 
+    # Autonomous results share the transcript without changing strict-audit working memory.
+    memory_updates = "" if preserve_memory else """,
+                    mine_id = excluded.mine_id,
+                    station = excluded.station,
+                    archive_snapshot_sha256 = excluded.archive_snapshot_sha256,
+                    active_anchors_json = excluded.active_anchors_json,
+                    turns_digest_json = excluded.turns_digest_json
+    """
     _ensure_schema(Path(path))
     with closing(connect(Path(path), writable=True)) as db:
         with db:
             db.execute(
-                """
+                f"""
                 INSERT INTO chat_session (
                     session_id, title, created_at, updated_at, mine_id, station,
                     archive_snapshot_sha256, active_anchors_json, turns_digest_json
                 )
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(session_id) DO UPDATE SET
-                    updated_at = excluded.updated_at,
-                    mine_id = excluded.mine_id,
-                    station = excluded.station,
-                    archive_snapshot_sha256 = excluded.archive_snapshot_sha256,
-                    active_anchors_json = excluded.active_anchors_json,
-                    turns_digest_json = excluded.turns_digest_json
+                    updated_at = excluded.updated_at{memory_updates}
                 """,
                 (sid, title, now, now, str(mine_id or "")[:64], str(station or "")[:32], str(archive_snapshot_sha256 or "")[:64], anchors_json, digest_json),
             )
