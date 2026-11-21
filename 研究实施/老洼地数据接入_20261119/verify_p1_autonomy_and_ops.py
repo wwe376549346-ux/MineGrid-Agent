@@ -128,17 +128,39 @@ def verify_01_proactive_watcher_and_outbox_retry() -> None:
             return _Ctx()
 
         watcher = ProactiveWatcherDaemon(_arc_ctx, store, archive_version_fn=lambda: "v-test-1")
-        s1 = watcher.scan_once(max_new_tickets=3)
-        assert s1["status"] == "ok" and s1["created_count"] == 3 and s1["dispatch"]["delivered"] == 3
-        for t in s1["created_tickets"]:
-            assert t["pre_diagnosis"] is not None and t["pre_diagnosis"]["verification_status"] == "verified"
+        scans = [watcher.scan_once(max_new_tickets=3) for _ in range(6)]
+        assert [s["created_count"] for s in scans] == [3, 3, 3, 3, 2, 0]
+        assert all(s["status"] == "ok" and s["dispatch"]["delivered"] == s["created_count"] for s in scans)
+        assert scans[-1]["skipped_existing"] == 14
+        tickets = [t for s in scans for t in s["created_tickets"]]
+        assert [t["severity"] for t in tickets] == ["high"] * 7 + ["medium"] * 7
+        by_kind = {t["pre_diagnosis"]["kind"]: t for t in tickets}
+        for ticket in tickets:
+            pre = ticket["pre_diagnosis"]
+            assert pre["summary"] and pre["pending_hypotheses"] and pre["missing_evidence"]
+            assert pre["followup_question"] and ticket["at_time"][:16] in pre["followup_question"]
+            assert set(ticket["evidence_cells"]) <= set(pre["evidence_cells"])
+            assert len(pre["evidence_cells"]) == len(set(pre["evidence_cells"]))
+            assert store.get_ticket_detail(ticket["ticket_id"])["pre_diagnosis"] == pre
 
-        # The batch limit applies to new tickets. Later scans drain later findings.
-        s2 = watcher.scan_once(max_new_tickets=3)
-        s3 = watcher.scan_once(max_new_tickets=3)
-        s4 = watcher.scan_once(max_new_tickets=3)
-        assert [s["created_count"] for s in (s1, s2, s3, s4)] == [3, 3, 1, 0]
-        assert s4["skipped_existing"] == 7
+        # The follow-up reaches the same hypothesis path through the normal chat entry point.
+        with _arc_ctx() as archive:
+            for kind, cases, source_cell, site_evidence in [
+                ("reverse_power_review", {"H2"}, "1112.xls / New Sheet1!AF16", "母联遥信"),
+                ("feeder_polarity_review", {"H2"}, "1116.xls / New Sheet1!AO25", "相位仪"),
+                ("zero_incomer_review", {"H1", "H2"}, "1113.xls / New Sheet1!F11", "倒闸操作票"),
+            ]:
+                pre = by_kind[kind]["pre_diagnosis"]
+                assert pre["verified"] == "verified"
+                assert {check["hypothesis"] for check in pre["refuted_hypotheses"]} == cases
+                assert all(check["title"] and "证伪" in check["judgment"] for check in pre["refuted_hypotheses"])
+                assert source_cell in pre["evidence_cells"]
+                assert any(site_evidence in item for item in pre["missing_evidence"])
+                followup = diagnose_question(archive, pre["followup_question"], client=None)
+                assert followup["report"]["hypothesis_trace"]["scenario"] == kind
+        for kind in ("voltage_over_limit", "low_power_factor", "scada_polling_skew"):
+            pre = by_kind[kind]["pre_diagnosis"]
+            assert pre["verified"] == "pending_site_review" and pre["refuted_hypotheses"] == []
 
         # Astra #12: Outbox callback fails on first attempt, retries & recovers 100% on second attempt (0 lost!)
         tkt, created = store.create_ticket_with_outbox(
@@ -282,7 +304,31 @@ def verify_04_fastapi_tickets_lifecycle_rbac_and_prometheus() -> None:
             # Dispatcher runs proactive scan
             r_scan = client.post("/api/proactive/scan", json={"max_new_tickets": 2}, headers=d_hdr)
             assert r_scan.status_code == 200 and r_scan.json()["created_count"] == 2
-            tid = r_scan.json()["created_tickets"][0]["ticket_id"]
+            ticket = r_scan.json()["created_tickets"][0]
+            tid = ticket["ticket_id"]
+            pre = ticket["pre_diagnosis"]
+            assert pre["kind"] == "reverse_power_review" and pre["refuted_hypotheses"]
+            ticket_url = f"/api/tickets/{tid}"
+            assert client.get(ticket_url, headers=v_hdr).json()["pre_diagnosis"] == pre
+            listing = client.get("/api/tickets", headers=v_hdr).json()["tickets"]
+            assert next(t for t in listing if t["ticket_id"] == tid)["pre_diagnosis"] == pre
+
+            # A legacy ticket can be explicitly upgraded without another ticket or notification.
+            with wb.ticket_store._write() as runtime:
+                runtime.execute("UPDATE incident_ticket SET pre_diagnosis_json = NULL WHERE ticket_id = ?", (tid,))
+            refresh_url = f"{ticket_url}/pre-diagnosis?expected_revision={ticket['revision']}"
+            assert client.post(refresh_url, headers=v_hdr).status_code == 403
+            refreshed = client.post(refresh_url, headers=d_hdr)
+            assert refreshed.status_code == 200, refreshed.text
+            assert refreshed.json()["revision"] == ticket["revision"] + 1 and refreshed.json()["pre_diagnosis"] == pre
+            assert client.post(refresh_url, headers=d_hdr).status_code == 409
+            stale_transition = client.post(
+                f"{ticket_url}/transition", json={"action": "claim", "expected_revision": ticket["revision"]}, headers=d_hdr,
+            )
+            assert stale_transition.status_code == 409
+            refreshed_detail = client.get(ticket_url, headers=v_hdr).json()
+            assert len(refreshed_detail["outbox"]) == 1
+            assert refreshed_detail["logs"][-1]["action"] == "refresh_pre_diagnosis"
 
             # Full shift lifecycle transitions on the ticket
             for act, note in [
@@ -302,7 +348,19 @@ def verify_04_fastapi_tickets_lifecycle_rbac_and_prometheus() -> None:
                 assert rt.status_code == 200, rt.text
 
             det = client.get(f"/api/tickets/{tid}", headers=v_hdr).json()
-            assert det["status"] == "reopened" and len(det["logs"]) == 8  # create + 7 transitions
+            assert det["status"] == "reopened" and len(det["logs"]) == 9  # create + refresh + 7 transitions
+            supersede = client.post(
+                f"{ticket_url}/transition",
+                json={"action": "supersede", "note": "订正后替代原发现", "expected_revision": det["revision"]},
+                headers=d_hdr,
+            )
+            assert supersede.status_code == 200, supersede.text
+            assert client.post(
+                f"{ticket_url}/pre-diagnosis?expected_revision={supersede.json()['ticket']['revision']}", headers=d_hdr,
+            ).status_code == 409
+            superseded = client.get(ticket_url, headers=v_hdr).json()
+            assert superseded["status"] == "superseded" and superseded["pre_diagnosis"] == pre
+            assert superseded["outbox"][0]["status"] == "revoked"
 
             # Engineer reconciles correction
             r_rec = client.post(

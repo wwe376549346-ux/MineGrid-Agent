@@ -187,6 +187,8 @@ def format_channel_payload(channel: str, ticket: dict[str, Any]) -> dict[str, An
     if channel == "dingtalk":
         return {"msgtype": "markdown", "markdown": {"title": title, "text": body_md}}
     if channel == "cmms_export":
+        pre_diagnosis = ticket.get("pre_diagnosis") or {}
+        legacy_report = pre_diagnosis.get("report") or {}
         return {
             "workorder_schema": "coal_power_cmms_v1",
             "ticket_id": ticket["ticket_id"],
@@ -196,8 +198,8 @@ def format_channel_payload(channel: str, ticket: dict[str, Any]) -> dict[str, An
             "title": ticket.get("title", ""),
             "description": ticket.get("summary", ""),
             "evidence_cells": ticket.get("evidence_cells") or [],
-            "recommended_actions": ((ticket.get("pre_diagnosis") or {}).get("report") or {}).get("field_sop") or [],
-            "missing_evidence": ((ticket.get("pre_diagnosis") or {}).get("report") or {}).get("missing_evidence") or [],
+            "recommended_actions": pre_diagnosis.get("recommended_actions") or legacy_report.get("field_sop") or [],
+            "missing_evidence": pre_diagnosis.get("missing_evidence", legacy_report.get("missing_evidence") or []),
         }
     return {
         "event": "laowadi_incident_alert",
@@ -412,6 +414,32 @@ class IncidentTicketStore:
                     ),
                 )
             return ticket, True
+
+    def refresh_pre_diagnosis(
+        self, ticket_id: str, pre_diagnosis: dict[str, Any], *, expected_revision: int, archive_version: str, actor: str,
+    ) -> dict[str, Any]:
+        now = _utc_now()
+        with self._write() as conn:
+            row = conn.execute(
+                """
+                UPDATE incident_ticket SET pre_diagnosis_json = ?, updated_at = ?, revision = revision + 1
+                WHERE ticket_id = ? AND revision = ? AND status NOT IN ('closed', 'superseded')
+                RETURNING *
+                """,
+                (json.dumps(pre_diagnosis, ensure_ascii=False), now, ticket_id, expected_revision),
+            ).fetchone()
+            if row is None:
+                raise TicketStateConflict("工单已更新或已结束，请核对最新状态。")
+            conn.execute(
+                """
+                INSERT INTO incident_ticket_log(
+                    ticket_id, action, from_status, to_status, actor, shift_name, note, payload_json, created_at
+                ) VALUES (?, 'refresh_pre_diagnosis', ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (ticket_id, row["status"], row["status"], actor, row["shift_name"], "重新核对归档并刷新初诊。",
+                 json.dumps({"archive_version": archive_version, "kind": pre_diagnosis["kind"]}), now),
+            )
+            return self._row_to_ticket(row)
 
     def transition_ticket(
         self,
@@ -775,6 +803,131 @@ class IncidentTicketStore:
                 )
 
 
+_REVIEW_BOUNDARIES = {
+    "voltage_over_limit": [
+        ("tap_position", "2# 主变档位与电压偏差", "2# 主变铭牌、同期分接头档位和变更记录。"),
+        ("reactive_state", "轻载及补偿状态与电压偏差", "II 段同期无功量测和电容器投切记录。"),
+    ],
+    "voltage_high_35kv": [
+        ("upstream_voltage", "上级电源电压与档位影响", "上级站同期母线电压、1# 主变实际档位及变更记录。"),
+    ],
+    "low_power_factor": [
+        ("load_reactive_demand", "带载工况及就地补偿状态", "同期负荷工况和就地无功补偿投入记录。"),
+        ("metering_scale", "功率因数量测口径偏差", "表计 CT/PT 变比、接线图及同期无功量测。"),
+    ],
+    "capacitor_cos_anomaly": [
+        ("metering_channel", "表计接线或采样通道偏差", "表计二次接线图和功率因数通道配置。"),
+        ("capacitor_state", "补偿投入状态与读数不一致", "同期电容器投切记录。"),
+    ],
+    "systematic_scale_offset": [
+        ("metering_scale", "表计倍率或接线折算口径偏差", "CT 变比配置、功率计算口径及二次接线图。"),
+    ],
+    "scada_polling_skew": [
+        ("polling_skew", "整点截面存在采集时差", "各测点采集时间戳及同一冻结断面的量测。"),
+    ],
+    "diurnal_baseline_outlier": [
+        ("operating_schedule", "生产安排或运行方式变化", "同期生产排班、避峰执行记录及主变切换记录。"),
+    ],
+}
+
+
+def _eligible_findings(archive):
+    from laowadi.health import evaluate_health
+
+    for finding in evaluate_health(archive)["findings"]:
+        if finding["severity"] in ("high", "medium"):
+            evidence = finding.get("evidence") or []
+            at_time = evidence[0].get("time", "") if evidence else ""
+            dedup_key = f"{finding['id']}::{finding.get('cabinet', '')}::{at_time}"
+            yield finding, at_time, dedup_key
+
+
+def _finding_cells(finding):
+    return [f"{e['file']} / {e['sheet']}!{e['cell']}" for e in finding.get("evidence", [])
+            if {"file", "sheet", "cell"} <= e.keys()]
+
+
+def _build_pre_diagnosis(archive, finding, at_time):
+    from laowadi.diag_tools import DiagnosticToolbox
+    from laowadi.hypothesis import FEEDER_POLARITY, REVERSE_POWER, ZERO_INCOMER, execute_hypotheses
+    from laowadi.verifier import finalize_diagnosis, finalize_scoped_diagnosis
+
+    category = finding["category"]
+    cabinet = finding["cabinet"]
+    at = at_time[:16]
+    cells = _finding_cells(finding)
+    reviews = _REVIEW_BOUNDARIES.get(category, [
+        ("site_conditions", "同期运行工况与量测口径", "同期运行日志与相关测点的采集记录。"),
+    ])
+    pre = {
+        "kind": category,
+        "verified": "pending_site_review" if cells else "insufficient_data",
+        "summary": finding["summary"] + " 初诊范围限于日报筛查，现场原因待核。",
+        "refuted_hypotheses": [],
+        "pending_hypotheses": [
+            {"hypothesis": name, "title": title, "judgment": "待现场核对。"} for name, title, _ in reviews
+        ],
+        "missing_evidence": [evidence for _, _, evidence in reviews],
+        "evidence_cells": list(dict.fromkeys(cells)),
+        "followup_question": f"请核查老洼地 {at} 的 {cabinet} 测点及同期工况，复核这项发现：{finding['title']}。哪些原表读数支持筛查，最少还需补哪些现场记录？",
+        "recommended_actions": [f"核对{evidence}" for _, _, evidence in reviews],
+    }
+    if category == "main_chain_reverse_power":
+        scenario = REVERSE_POWER
+        question = f"请查证老洼地 {at} 的 306/312/1006 柜反向有功，对照 1027 和前后整点。哪些假设可在该采样点排除，最少还需补哪些现场证据？"
+    elif category == "persistent_negative_power" and cabinet in FEEDER_POLARITY.cabinets:
+        scenario = FEEDER_POLARITY
+        question = f"请查证老洼地 {at} 的 {cabinet} 柜持续负有功与负功率因数，区分极性整定和二采区倒送。哪些假设可排除，最少还需补哪些现场证据？"
+    elif category == "single_incomer_dual_transformer":
+        scenario = ZERO_INCOMER
+        question = f"请查证老洼地 {at} 的 306 柜有功和 A 相电流归零，对照归零窗口前后量测。区分实际退出、失压与采集异常，需要哪些现场证据？"
+    else:
+        return pre
+
+    pre.update(kind=scenario.kind, followup_question=question)
+    if not at_time:
+        pre.update(verified="insufficient_data", summary=scenario.missing_observation,
+                   missing_evidence=[scenario.missing_observation], recommended_actions=[])
+        return pre
+
+    result = execute_hypotheses(
+        archive, DiagnosticToolbox(archive), question, scenario, at_time, client=None,
+        max_rounds=5, max_tool_calls=5, emit=lambda *_args, **_kwargs: None,
+        fallback_to_local=False, summarize=lambda *_args: None,
+    )
+    finalize = finalize_scoped_diagnosis if result.get("task_alignment") else finalize_diagnosis
+    report, verification = finalize(archive, result["report"], result["tool_trace"])
+    pre.update(verified=verification["status"], summary=report["summary"])
+    trace = report.get("hypothesis_trace") or {}
+    if not trace or result["stop_reason"] == "missing_observation":
+        pre.update(summary=trace.get("stop_message") or report["summary"],
+                   verified="insufficient_data" if result["stop_reason"] == "missing_observation" else verification["status"],
+                   missing_evidence=report.get("missing_evidence") or [scenario.missing_observation],
+                   recommended_actions=[])
+        return pre
+
+    facts = report["confirmed_facts"]
+    pre["pending_hypotheses"] = []
+    for check in trace["checks"]:
+        hypothesis = {key: check[key] for key in ("hypothesis", "title", "judgment")}
+        refuted = check["outcome"] == "refuted_at_sample"
+        pre["refuted_hypotheses" if refuted else "pending_hypotheses"].append(hypothesis)
+        check_cells = [cell for index in check["fact_indices"] for cell in facts[index]["evidence"]]
+        cells.extend(check_cells if refuted else check_cells[:6])
+    pre["pending_hypotheses"].extend(
+        {"hypothesis": check["hypothesis"], "title": check["title"], "judgment": check["criterion"]}
+        for check in trace["pending"]
+    )
+    for index in trace["observation_fact_indices"]:
+        cells.extend(facts[index]["evidence"])
+    pre.update(
+        missing_evidence=report["missing_evidence"],
+        evidence_cells=list(dict.fromkeys(cells)),
+        recommended_actions=report.get("field_sop") or [],
+    )
+    return pre
+
+
 class ProactiveWatcherDaemon:
     """Event-driven background watcher that detects new anomalies and autonomously generates pre-diagnosis tickets."""
 
@@ -797,11 +950,31 @@ class ProactiveWatcherDaemon:
         self._lock = threading.Lock()
         self._running = False
 
-    def scan_once(self, *, max_new_tickets: int = 4, channels: list[dict[str, str]] | None = None) -> dict[str, Any]:
-        """Run one deterministic proactive inspection pass: scan high-priority findings -> pre-diagnose -> ticket + outbox."""
-        from laowadi.diagnose import diagnose_question
-        from laowadi.health import evaluate_health
+    def _archive_version(self, archive) -> str:
+        if archive.pg_url:
+            publication = archive.db.execute("SELECT version FROM publication WHERE singleton=1").fetchone()
+            if not publication:
+                raise ValueError("主动巡检等待已发布的归档版本。")
+            return publication[0]
+        return str(self._archive_version_fn())
 
+    def refresh_pre_diagnosis(self, ticket, *, expected_revision: int, actor: str):
+        if ticket["revision"] != expected_revision or ticket["status"] in ("closed", "superseded"):
+            raise TicketStateConflict("工单已更新或已结束，请核对最新状态。")
+        with self._archive_factory() as archive:
+            version = self._archive_version(archive)
+            for finding, at_time, key in _eligible_findings(archive):
+                if key == ticket["dedup_key"]:
+                    pre = _build_pre_diagnosis(archive, finding, at_time)
+                    break
+            else:
+                raise TicketStateConflict("当前归档未检出同一发现，无法刷新初诊。")
+        return self.store.refresh_pre_diagnosis(
+            ticket["ticket_id"], pre, expected_revision=expected_revision, archive_version=version, actor=actor,
+        )
+
+    def scan_once(self, *, max_new_tickets: int = 4, channels: list[dict[str, str]] | None = None) -> dict[str, Any]:
+        """Pre-diagnose high and medium findings before creating tickets and notifications."""
         t0 = time.monotonic()
         ver = ""
         created_tickets: list[dict[str, Any]] = []
@@ -811,26 +984,10 @@ class ProactiveWatcherDaemon:
 
         try:
             with self._archive_factory() as archive:
-                if archive.pg_url:
-                    publication = archive.db.execute("SELECT version FROM publication WHERE singleton=1").fetchone()
-                    if not publication:
-                        raise ValueError("主动巡检等待已发布的归档版本。")
-                    ver = publication[0]
-                else:
-                    ver = str(self._archive_version_fn())
-                report = evaluate_health(archive)
-                high_findings = [f for f in report.get("findings") or [] if f.get("severity") == "high"]
-                for f in high_findings:
+                ver = self._archive_version(archive)
+                for f, at_time, dedup_key in _eligible_findings(archive):
                     if len(created_tickets) >= batch_limit:
                         break
-                    ev_list = f.get("evidence") or []
-                    at_time = ev_list[0].get("time", "") if ev_list and isinstance(ev_list[0], dict) else ""
-                    ev_cells = [
-                        f"{e['file']} / {e['sheet']}!{e['cell']}"
-                        for e in ev_list
-                        if isinstance(e, dict) and {"file", "sheet", "cell"} <= e.keys()
-                    ]
-                    dedup_key = f"{f['id']}::{f.get('cabinet', '')}::{at_time}"
                     # Check existence first so we don't redundantly re-run pre-diagnosis
                     with closing(self.store._connect()) as conn:
                         exists = conn.execute("SELECT 1 FROM incident_ticket WHERE dedup_key = ?", (dedup_key,)).fetchone()
@@ -838,14 +995,7 @@ class ProactiveWatcherDaemon:
                         skipped += 1
                         continue
 
-                    prompt = f"主动巡检预诊断：{f['title']}（涉及对象 {f.get('cabinet', '')}，请核实原表证据与排查步骤）"
-                    pre_diag = diagnose_question(archive, prompt, client=None)
-                    compact_pre = {
-                        "status": pre_diag.get("status"),
-                        "verification_status": (pre_diag.get("verification") or {}).get("status"),
-                        "tool_calls": pre_diag.get("tool_calls", 0),
-                        "report": pre_diag.get("report"),
-                    }
+                    compact_pre = _build_pre_diagnosis(archive, f, at_time)
                     ticket, created = self.store.create_ticket_with_outbox(
                         source_finding_id=f["id"],
                         title=f["title"],
@@ -853,7 +1003,7 @@ class ProactiveWatcherDaemon:
                         cabinet=str(f.get("cabinet", "")),
                         at_time=at_time,
                         severity=f["severity"],
-                        evidence_cells=ev_cells,
+                        evidence_cells=_finding_cells(f),
                         pre_diagnosis=compact_pre,
                         archive_version=ver,
                         dedup_key=dedup_key,

@@ -164,7 +164,19 @@ def verify_pandapower_all_scenarios(archive: Archive) -> dict:
     assert d["line_loss_reduction_pct"] > 20.0
     assert d["total_loss_reduction_kw"] > 3.0
 
-    # 5. Agent Tool 11 end-to-end groundedness check
+    # 5. 24-hour discrete tap & capacitor switching DP schedule (2026-11-13)
+    from laowadi.powerflow import optimize_daily_tap_cap_schedule
+
+    sched = optimize_daily_tap_cap_schedule(archive, "2026-11-13", target_cabinet="1010")
+    assert sched["status"] == "ok" and len(sched["hours"]) == 24
+    assert sched["all_hours_safe"] is True and sched["optimized_violations_count"] == 0
+    assert sched["baseline_violations_count"] > 0
+    assert sched["tap_changes"] <= sched["max_tap_changes"]
+    assert sched["cap_changes"] <= sched["max_cap_changes"]
+    assert sched["optimized_loss_kwh"] < sched["baseline_loss_kwh"]
+    assert all(h["feeder_q_kvar"] >= -1e-6 for h in sched["hours"])
+
+    # 6. Agent Tool 11 end-to-end groundedness check
     diag = diagnose_question(
         archive,
         "请用 pandapower 交流潮流评估 2026年11月13日17:00 2#主变分接头调几档可以消除 10 kV II段过压？",
@@ -184,6 +196,8 @@ def verify_pandapower_all_scenarios(archive: Archive) -> dict:
         "tap_post_kv": rec["bus_10kv_ii_kv"],
         "n1_verdict": n1["verdict"],
         "reactive_loss_reduction_kw": d["total_loss_reduction_kw"],
+        "daily_24h_loss_saving_kwh": sched["loss_saving_kwh"],
+        "daily_24h_all_safe": sched["all_hours_safe"],
         "agent_tool11_verified": True,
     }
 

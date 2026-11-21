@@ -631,6 +631,19 @@ def create_app(
     def api_get_ticket(ticket_id: str):
         return workbench.get_ticket(unquote(ticket_id))
 
+    @app.post("/api/tickets/{ticket_id}/pre-diagnosis", tags=["Incident Tickets & Proactive Watcher"])
+    def api_refresh_pre_diagnosis(ticket_id: str, request: Request, expected_revision: int = Query(ge=1)):
+        from laowadi.proactive import TicketStateConflict
+
+        ticket = workbench.get_ticket(unquote(ticket_id))
+        actor = getattr(request.state, "actor", "dispatcher")
+        try:
+            return workbench.proactive_watcher.refresh_pre_diagnosis(
+                ticket, expected_revision=expected_revision, actor=actor,
+            )
+        except TicketStateConflict as exc:
+            raise RequestError(409, str(exc)) from None
+
     @app.post("/api/tickets/{ticket_id}/transition", tags=["Incident Tickets & Proactive Watcher"])
     def api_transition_ticket(ticket_id: str, req: TicketTransitionRequest, request: Request):
         actor = getattr(request.state, "actor", "值班员")

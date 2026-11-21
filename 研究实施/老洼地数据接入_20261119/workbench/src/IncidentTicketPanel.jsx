@@ -17,7 +17,7 @@ import {Button} from "@astryxdesign/core/Button";
 import {Card} from "@astryxdesign/core/Card";
 import {Spinner} from "@astryxdesign/core/Spinner";
 import {TextInput} from "@astryxdesign/core/TextInput";
-import {apiRequest, cellHref, SEVERITY_META} from "./api.js";
+import {apiRequest, authHeaders, cellHref, SEVERITY_META} from "./api.js";
 
 const STATUS_BADGE = {
   open: "error",
@@ -69,7 +69,102 @@ function notificationLabel(notification) {
   return OUTBOX_LABELS[notification.status] || notification.status;
 }
 
-export function IncidentTicketPanel({onBadgeUpdate, onAskDiagnose}) {
+const REVIEW_STATUS = {
+  verified: "原表证据已核验",
+  pending_site_review: "原因待现场核证",
+  insufficient_data: "归档证据不足",
+  warning: "证据核验待复查",
+};
+
+export function EvidenceDownloadLink({cell}) {
+  const [error, setError] = useState("");
+  const href = cellHref(cell);
+  if (!href) return <span className="cell-chip">{cell}</span>;
+
+  async function downloadWithAuth(event) {
+    const headers = authHeaders();
+    if (!headers.Authorization) return;
+    event.preventDefault();
+    setError("");
+    try {
+      const response = await fetch(href, {headers});
+      if (!response.ok) throw new Error(`原表下载失败（${response.status}）`);
+      const url = URL.createObjectURL(await response.blob());
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = decodeURIComponent(href.split("/").pop());
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (e) {
+      setError(e.message);
+    }
+  }
+
+  return (
+    <>
+      <a className="cell-chip" href={href} download onClick={downloadWithAuth}>{cell}</a>
+      {error && <span role="status">{error}</span>}
+    </>
+  );
+}
+
+function TicketEvidenceCells({cells}) {
+  return (
+    <div className="inline-cells">
+      {cells.map(cell => <EvidenceDownloadLink key={cell} cell={cell} />)}
+    </div>
+  );
+}
+
+function PreDiagnosis({ticket, onContinueInChat}) {
+  const pre = ticket.pre_diagnosis;
+  if (!pre) return null;
+  const checks = [
+    ["已证伪假设", pre.refuted_hypotheses, "success", "采样点已证伪"],
+    ["待核假设", pre.pending_hypotheses, "warning", "待核"],
+  ];
+  const missing = pre.missing_evidence ?? pre.report?.missing_evidence ?? [];
+  const status = pre.verified ?? pre.verification_status;
+  return (
+    <div className="detail-block">
+      <h4>AI 自动预证伪初诊</h4>
+      {status && <Badge variant={status === "verified" ? "success" : "warning"} label={REVIEW_STATUS[status] || status} />}
+      <p>{pre.summary ?? pre.report?.summary}</p>
+      {checks.map(([label, hypotheses, variant, badge]) => hypotheses?.length > 0 && (
+        <div key={label}>
+          <strong>{label}</strong>
+          <ul>
+            {hypotheses.map(({hypothesis, title, judgment}, index) => (
+              <li key={`${hypothesis}-${index}`}>
+                <Badge variant={variant} label={badge} /> <strong>{title}</strong>
+                <div>{judgment}</div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+      {missing.length > 0 && <>
+        <strong>最小待补现场证据</strong>
+        <ul>{missing.map((item, index) => <li key={index}>{item}</li>)}</ul>
+      </>}
+      {pre.report?.field_sop?.length > 0 && <ol>{pre.report.field_sop.map((step, index) => <li key={index}>{step}</li>)}</ol>}
+      {pre.evidence_cells?.length > 0 && <>
+        <strong>初诊原表单元格</strong>
+        <TicketEvidenceCells cells={pre.evidence_cells} />
+      </>}
+      {onContinueInChat && pre.followup_question && (
+        <Button
+          size="sm"
+          variant="primary"
+          label="转入对话台继续追问"
+          onClick={() => onContinueInChat(pre.followup_question, ticket)}
+        />
+      )}
+    </div>
+  );
+}
+
+export function IncidentTicketPanel({onBadgeUpdate, onAskDiagnose, onContinueInChat}) {
   const [statusFilter, setStatusFilter] = useState("active");
   const [tickets, setTickets] = useState([]);
   const [sla, setSla] = useState(null);
@@ -211,6 +306,31 @@ export function IncidentTicketPanel({onBadgeUpdate, onAskDiagnose}) {
     else setStatusFilter("all");
   }
 
+  async function refreshPreDiagnosis(ticket) {
+    const url = `/api/tickets/${encodeURIComponent(ticket.ticket_id)}`;
+    setBusy("refresh-pre-diagnosis");
+    setNotice("");
+    setErr("");
+    try {
+      await apiRequest(`${url}/pre-diagnosis?expected_revision=${ticket.revision}`, {method: "POST"});
+      const latest = await apiRequest(url);
+      setDetail(current => current?.ticket_id === ticket.ticket_id ? latest : current);
+      await refreshAfterTransition(latest);
+      setNotice(`工单 ${ticket.ticket_id} 的初诊已刷新。`);
+    } catch (e) {
+      if (e.status === 409) {
+        const latest = await apiRequest(url).catch(() => null);
+        if (latest) {
+          setDetail(current => current?.ticket_id === ticket.ticket_id ? latest : current);
+          await refreshAfterTransition(latest);
+        }
+      }
+      setErr(e.message);
+    } finally {
+      setBusy("");
+    }
+  }
+
   function downloadCmmsWorkorder() {
     if (!detail?.cmms_workorder) return;
     const blob = new Blob([JSON.stringify(detail.cmms_workorder, null, 2)], {type: "application/json"});
@@ -331,7 +451,7 @@ export function IncidentTicketPanel({onBadgeUpdate, onAskDiagnose}) {
           <div style={{padding: 24, textAlign: "center"}}><Spinner size="md" /></div>
         ) : tickets.length === 0 ? (
           <div className="empty-pane" style={{padding: 24}}>
-            当前筛选条件下暂无工单。可点击上方「立即自主巡检预诊断」自动发现高危事件并建单。
+            当前筛选条件下暂无工单。可点击上方「立即自主巡检预诊断」，筛查高、中优先级发现并建单。
           </div>
         ) : (
           <ul className="finding-list">
@@ -371,7 +491,10 @@ export function IncidentTicketPanel({onBadgeUpdate, onAskDiagnose}) {
               </div>
               <div className="detail-actions">
                 <Button size="sm" variant="secondary" label="导出 CMMS 派工单" onClick={downloadCmmsWorkorder} />
-                {onAskDiagnose && (
+                {detail.source_finding_id.startsWith("HLTH-") && !["closed", "superseded"].includes(detail.status) && (
+                  <Button size="sm" variant="secondary" label="刷新初诊" disabled={Boolean(busy)} onClick={() => refreshPreDiagnosis(detail)} />
+                )}
+                {onAskDiagnose && !detail.pre_diagnosis?.followup_question && (
                   <Button
                     size="sm"
                     variant="primary"
@@ -387,14 +510,7 @@ export function IncidentTicketPanel({onBadgeUpdate, onAskDiagnose}) {
             {detail.evidence_cells?.length > 0 && (
               <div className="detail-block">
                 <h4>原表证据</h4>
-                <div className="inline-cells">
-                  {detail.evidence_cells.map(cell => {
-                    const href = cellHref(cell);
-                    return href
-                      ? <a key={cell} className="cell-chip" href={href} download>{cell}</a>
-                      : <span key={cell} className="cell-chip">{cell}</span>;
-                  })}
-                </div>
+                <TicketEvidenceCells cells={detail.evidence_cells} />
               </div>
             )}
             {detail.superseded_reason && (
@@ -403,18 +519,7 @@ export function IncidentTicketPanel({onBadgeUpdate, onAskDiagnose}) {
               </div>
             )}
 
-            {/* Pre-Diagnosis Attached by Proactive Watcher */}
-            {detail.pre_diagnosis?.report && (
-              <div className="detail-block">
-                <h4>自主巡检预诊断单（核验状态：{detail.pre_diagnosis.verification_status}）</h4>
-                <p style={{margin: "4px 0"}}>{detail.pre_diagnosis.report.summary}</p>
-                {detail.pre_diagnosis.report.field_sop?.length > 0 && (
-                  <ol style={{margin: "6px 0 0", paddingLeft: 18, fontSize: 13}}>
-                    {detail.pre_diagnosis.report.field_sop.map((s, idx) => <li key={idx}>{s}</li>)}
-                  </ol>
-                )}
-              </div>
-            )}
+            <PreDiagnosis ticket={detail} onContinueInChat={onContinueInChat} />
 
             {/* Shift Lifecycle Transition Controls */}
             <div className="detail-block">

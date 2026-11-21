@@ -517,9 +517,9 @@ footer {margin-top:24px;color:var(--sub);font-size:.86rem}
       "deps": [
         "data"
       ],
-      "now": "已有四柜历史回放、25 柜整周体检、周期巡检、工单和 Outbox 重试。P1 指定的回调失败恢复场景已复验。复审 23–25 已修复。SQLite 与 PostgreSQL 隔离复验 7 项高优先级发现按 4、3、0 补齐，并发只认领一次。订正确认后待发通知取消，已经发送的保留撤销状态和回执。现场连续采集与实际签收待验。",
-      "implementation": "monitor.py 负责四柜小时级回放与模拟缺测归档；daily 命令汇总四柜日况；新增 health.py 对全站 25 柜 × 4 指标执行量测物理自洽（P/√3UabIacos）、电能质量（GB/T 12325 电压偏差与 10 kV I/II 段聚类、带载功率因数）、系统运行方式与功率平衡（单进线带双主变、反向有功、SCADA 整点轮询偏移分离）及分时段基线异常聚合，并保留原表单元格证据。 巡检按新建数量限批。通知在数据库内先认领，发送前复验有效状态，重试沿用同一通知编号。",
-      "output": "四柜七天报告、全站 25 柜四维电气体检报告（Markdown / JSON）、运行编号、事件编号、触发规则、前后读数及源单元格。 巡检补建、通知认领与订正撤销实现及专项回归。",
+      "now": "已有四柜历史回放、25 柜整周体检、周期巡检、工单和 Outbox 重试。P1 指定的回调失败恢复场景已复验。复审 23–25 已修复。SQLite 与 PostgreSQL 隔离复验 7 项高优先级发现按 4、3、0 补齐，并发只认领一次。订正确认后待发通知取消，已经发送的保留撤销状态和回执。现场连续采集与实际签收待验。 当前已按高、中优先级分批建单，回放共 14 项。反向有功、1018 持续负值与 306 归零自动挂接本地预证伪；其他发现记录筛查边界及需补的现场资料。",
+      "implementation": "monitor.py 负责四柜小时级回放与模拟缺测归档；daily 命令汇总四柜日况；新增 health.py 对全站 25 柜 × 4 指标执行量测物理自洽（P/√3UabIacos）、电能质量（GB/T 12325 电压偏差与 10 kV I/II 段聚类、带载功率因数）、系统运行方式与功率平衡（单进线带双主变、反向有功、SCADA 整点轮询偏移分离）及分时段基线异常聚合，并保留原表单元格证据。 巡检按新建数量限批。通知在数据库内先认领，发送前复验有效状态，重试沿用同一通知编号。 proactive.py 按发现类别调用只读假设检验并核验原表，建单时保存初诊。显式刷新须在当前归档命中同一发现并通过工单版本校验，刷新写入审计日志。",
+      "output": "四柜七天报告、全站 25 柜四维电气体检报告（Markdown / JSON）、运行编号、事件编号、触发规则、前后读数及源单元格。 巡检补建、通知认领与订正撤销实现及专项回归。 结构化初诊包含采样点证伪、待核假设、原表坐标、待补证据和追问问题。",
       "checks": [
         "重跑同配置时新增提示为零",
         "模拟缺测与历史事件按运行编号可区分",
@@ -529,7 +529,8 @@ footer {margin-top:24px;color:var(--sub);font-size:.86rem}
         "同一整点缺一条进线有功时，标注无法计算的指标并保留其他柜的结果",
         "复验失败通知可补发并核对送达回执，订正数据后旧告警可撤销或替代且保留原记录",
         "验证默认巡检上限下全部高优先级发现最终建单，并发分发和崩溃重试时同一接收方只接受一条有效通知，撤销后旧待发消息停止投递。",
-        "在 SQLite 和 PostgreSQL 复验 7 项高优先级发现分批补齐、并发认领、过期接管、撤销与晚到回执。"
+        "在 SQLite 和 PostgreSQL 复验 7 项高优先级发现分批补齐、并发认领、过期接管、撤销与晚到回执。",
+        "按每批 3 张验证 7 项高优先级和 7 项中优先级依次建单，重扫新增为零。三类初诊需逐项核对采样点证伪、原表坐标、待补证据和追问场景。"
       ],
       "files": [
         [
@@ -1314,9 +1315,9 @@ footer {margin-top:24px;color:var(--sub);font-size:.86rem}
         "monitor",
         "tools"
       ],
-      "now": "已有事件工单台、通知回执、问答首页和值班工具和 60 条 OpenAPI 路径。复审 26 已修复。工单仅展示合法操作，销项和复开均要求依据，旧版本提交返回 409。代码中业务署名与令牌主体的绑定仍待专项处理。真实班表、交接签认、对象权限、并发状态与目标环境工作台待验。 本轮工作台区分已核验读数、条件计算、待核原因、人工复核备注及待核参考条款。历史会话仍保留原记录，主对话提示重新核验。条件复算单独进入会话记录。 生产 API 和外部 Worker 共用 PostgreSQL 队列、SSE、熔断及工单状态。双节点 kind 在运行中强制删除一只 Worker Pod，另一节点接管，SSE 从原事件号跨 API 续读。 8765 首页改为以问答为主。历史对话、主接线、工单、柜级档案和人工复核从侧栏进入，研究工具默认收起。回复先呈现结论，原表证据可展开，回答完成后保持在对话中。 首页可用三类异常查证入口打开检验。1440 和 390 像素浏览器均已复验检验记录、逐轮查询展开和日报下载。 研究工作台支持两类五步证据交换与质疑仲裁（reactive_collaboration.py）：① 1010 无功补偿与 II 段过压的同点复算（单投、仅调压、先调压再补偿）；② 下井双回 1009→1010 N-1 转供双口径包络仲裁（pandapower 平衡潮流 110.78 A vs 表计代数峰值 159.69 A vs 比例修正包络 167.70 A），并在 GovernanceMultiAgentPanel.jsx 展示三口径包络对比表与角色消息。 最近一轮已核验且完成的假设检验可一键对照相邻整点。调压补偿和 N-1 卡片可显示跨时段校核与原表链接。",
-      "implementation": "后端已升级为FastAPI + Uvicorn ASGI 单机多进程运行时、统一动态 DAG 编排内核（laowadi/dag_engine.py）、PostgreSQL 16 + TimescaleDB + pgvector 存储与运维保障体系，提供 60 条 OpenAPI 3.1 路径（/docs，含 /api/dag/run|resume|threads、/api/storage/* 与 /api/ops/*）、默认 2×API Worker + 2×独立外部 Job Worker OS 进程水平扩展、持久化外部任务队列与 Last-Event-ID 断点续传 SSE、跨进程共享三态熔断器、标准 NDJSON 结构化日志及在线热备与沙箱 DR 演练；React 19 + Meta Astryx 前端 SingleLineDiagram.jsx 实现 100% 图模自动排版，GovernanceMultiAgentPanel.jsx 集成统一动态 DAG 任意节点挂起/恢复控制台、多 Worker 进程池、熔断器、TimescaleDB/pgvector 与热备/DR/JSON 日志面板。 Astryx 页面的值班外壳由 main.jsx 与 duty-layout.css 提供。AgentCopilotPane.jsx 维护历史会话、简洁输入和结果证据，非首页工具按需加载。 工单使用数据库版本校验流转，工作台可直接下载源表、查看站内通知和撤销回执。 AgentCopilotPane.jsx 从 SSE 展示查证计划，终审后显示各轮判定和可下载的原表出处。",
-      "output": "FastAPI 单机多进程服务、统一 DAG、SQLite 任务队列及 SSE 续接、存储与运维控制台、Astryx 工作台及本轮企业级 Agent 复审。 PostgreSQL 跨 Pod 共享运行态与演练记录。 8765 对话首页、侧栏和按需加载的值班工具入口。 工单合法流转、并发版本保护、原表证据和撤销记录。 反向有功假设检验面板及诊断单。 假设检验快捷追问及调压补偿、N-1 跨时段稳健性校核表。",
+      "now": "已有事件工单台、通知回执、问答首页和值班工具和 60 条 OpenAPI 路径。复审 26 已修复。工单仅展示合法操作，销项和复开均要求依据，旧版本提交返回 409。代码中业务署名与令牌主体的绑定仍待专项处理。真实班表、交接签认、对象权限、并发状态与目标环境工作台待验。 本轮工作台区分已核验读数、条件计算、待核原因、人工复核备注及待核参考条款。历史会话仍保留原记录，主对话提示重新核验。条件复算单独进入会话记录。 生产 API 和外部 Worker 共用 PostgreSQL 队列、SSE、熔断及工单状态。双节点 kind 在运行中强制删除一只 Worker Pod，另一节点接管，SSE 从原事件号跨 API 续读。 8765 首页改为以问答为主。历史对话、主接线、工单、柜级档案和人工复核从侧栏进入，研究工具默认收起。回复先呈现结论，原表证据可展开，回答完成后保持在对话中。 首页可用三类异常查证入口打开检验。1440 和 390 像素浏览器均已复验检验记录、逐轮查询展开和日报下载。 研究工作台支持两类五步证据交换与质疑仲裁（reactive_collaboration.py）：① 1010 无功补偿与 II 段过压的同点复算（单投、仅调压、先调压再补偿）；② 下井双回 1009→1010 N-1 转供双口径包络仲裁（pandapower 平衡潮流 110.78 A vs 表计代数峰值 159.69 A vs 比例修正包络 167.70 A），并在 GovernanceMultiAgentPanel.jsx 展示三口径包络对比表与角色消息。 最近一轮已核验且完成的假设检验可一键对照相邻整点。调压补偿和 N-1 卡片可显示跨时段校核与原表链接。 工单可查看自动初诊、下载原表、刷新初诊并直接转问答。调压补偿会诊可展示 24 小时离散投切方案。",
+      "implementation": "后端已升级为FastAPI + Uvicorn ASGI 单机多进程运行时、统一动态 DAG 编排内核（laowadi/dag_engine.py）、PostgreSQL 16 + TimescaleDB + pgvector 存储与运维保障体系，提供 60 条 OpenAPI 3.1 路径（/docs，含 /api/dag/run|resume|threads、/api/storage/* 与 /api/ops/*）、默认 2×API Worker + 2×独立外部 Job Worker OS 进程水平扩展、持久化外部任务队列与 Last-Event-ID 断点续传 SSE、跨进程共享三态熔断器、标准 NDJSON 结构化日志及在线热备与沙箱 DR 演练；React 19 + Meta Astryx 前端 SingleLineDiagram.jsx 实现 100% 图模自动排版，GovernanceMultiAgentPanel.jsx 集成统一动态 DAG 任意节点挂起/恢复控制台、多 Worker 进程池、熔断器、TimescaleDB/pgvector 与热备/DR/JSON 日志面板。 Astryx 页面的值班外壳由 main.jsx 与 duty-layout.css 提供。AgentCopilotPane.jsx 维护历史会话、简洁输入和结果证据，非首页工具按需加载。 工单使用数据库版本校验流转，工作台可直接下载源表、查看站内通知和撤销回执。 AgentCopilotPane.jsx 从 SSE 展示查证计划，终审后显示各轮判定和可下载的原表出处。 工单刷新使用 revision，冲突返回 409。问答沿用当前会话。GovernanceMultiAgentPanel.jsx 显示越限校核、调档及投切次数、网损节省、动作清单和默认折叠的逐时表。",
+      "output": "FastAPI 单机多进程服务、统一 DAG、SQLite 任务队列及 SSE 续接、存储与运维控制台、Astryx 工作台及本轮企业级 Agent 复审。 PostgreSQL 跨 Pod 共享运行态与演练记录。 8765 对话首页、侧栏和按需加载的值班工具入口。 工单合法流转、并发版本保护、原表证据和撤销记录。 反向有功假设检验面板及诊断单。 假设检验快捷追问及调压补偿、N-1 跨时段稳健性校核表。 班次工单初诊卡和 24 小时分时投切方案卡。",
       "checks": [
         "回放 11 月 13 日 14:00 的 1010 与 1006，核验单投、仅调压与联合候选。验证正常电压下可选单投，以及过补、非整点缺证和不收敛时可停止。",
         "能从值班问题跳到实际证据或待查资料",
@@ -1339,7 +1340,9 @@ footer {margin-top:24px;color:var(--sub);font-size:.86rem}
         "用桌面和窄屏验证首次打开为问答页，能展开侧栏、进入工单和原图、返回原草稿、发送只读问题、打开原表并恢复历史会话。",
         "用 11 月 10 日 12:00 的 303 柜回放建立隔离工单，验证原表下载、306 柜同期对照、认领、销项、复开、旧版本冲突、模拟订正和撤销回执。",
         "用工作台快捷问法查看初始断面、三项假设状态和各轮回执，下载 1112.xls 核实 AF16 和 AE16。",
-        "复核快捷按钮沿用当前诊断会话，卡片展示工况、电压、首端功率因数、结果及原表出处，兼容缺项和旧回执。"
+        "复核快捷按钮沿用当前诊断会话，卡片展示工况、电压、首端功率因数、结果及原表出处，兼容缺项和旧回执。",
+        "工单列表与详情返回相同初诊，旧工单可显式刷新，刷新不重复投递，过期版本及已替代工单返回 409。",
+        "用 1440 和 390 像素视口验证原表下载、一键追问、旧会诊回执和新方案卡；展开逐时表后核对全部 24 行。"
       ],
       "files": [
         [
@@ -1481,6 +1484,14 @@ footer {margin-top:24px;color:var(--sub);font-size:.86rem}
         [
           "反向有功查证与回执界面",
           "研究实施/老洼地数据接入_20261119/workbench/src/AgentCopilotPane.jsx"
+        ],
+        [
+          "工单初诊刷新 API",
+          "研究实施/老洼地数据接入_20261119/laowadi/api.py"
+        ],
+        [
+          "24 小时分时投切方案卡",
+          "研究实施/老洼地数据接入_20261119/workbench/src/GovernanceMultiAgentPanel.jsx"
         ]
       ],
       "adapt": "第 13、16 章提供应用集成与验收思路。前端组件以 Astryx 官方文档和实际版本为准，数据与电气判定继续使用本项目的只读查询和复核流程。"
@@ -2036,6 +2047,35 @@ footer {margin-top:24px;color:var(--sub);font-size:.86rem}
       ],
       "verified": "双线合并后全量 15 套自动化验证脚本（verify_diagnose、verify_diagnostic_claims、verify_task_alignment、verify_p0_correctness、verify_p1_autonomy_and_ops、verify_reliability_and_contracts、verify_multi_agent_and_governance、verify_unified_dag、verify_enterprise_and_powerflow、verify_rag_and_graph、verify_supplement_and_mcp、verify_multimine_generalization、verify_evaluation、verify_workbench 及 thesis_eval.probe）100% 零报错通过；Vite 生产构建（257ms）通过；两份只读黄金归档库 SHA-256 严格未变。",
       "next": "已将双线全部成果提交并推送至 GitHub 远程仓库 MineGrid-Agent (origin/main)；后续可按需接入矿方连续点表或启动论文正文与实测章节撰写。"
+    },
+    {
+      "date": "2026-11-21",
+      "title": "巡检工单挂接预证伪初诊并展示分时投切方案",
+      "stages": [
+        "monitor",
+        "review"
+      ],
+      "done": [
+        "高、中优先级发现分批建单。反向有功、1018 持续负值和 306 归零运行本地假设检验，保存采样点证伪、待核假设、原表和待补证据。",
+        "工单列表和详情提供初诊。工作台支持刷新、日报下载及一键进入值班对话追问。会诊展示 24 小时投切指标、动作及逐时潮流。"
+      ],
+      "verified": "P1 6/6 通过，覆盖 14 张工单、三类预证伪与追问、重复建单保护、显式刷新、409、撤销回执及两份归档 SHA-256。Vite 构建通过；以实际 API 回执在 Chromium 1440 和 390 像素视口复验鉴权下载、一键追问、旧会诊回执及 24 行逐时表。11 月 13 日 1010 柜会诊回执含 5 项分时动作。",
+      "next": "现场开关、计量和调档资料待核，分时方案须随现场参数及增量数据复算。独立旧巡检脚本仍按仅 7 项高优先级计数，待后续同步新口径。"
+    },
+    {
+      "date": "2026-11-21",
+      "title": "完成 24 小时分时离散投切动态规划优化器与巡检预证伪双线联合验收并推送 GitHub",
+      "stages": [
+        "monitor",
+        "graph",
+        "review"
+      ],
+      "done": [
+        "【选项 1 · 24h 序贯优化】在 laowadi/powerflow.py 新增 optimize_daily_tap_cap_schedule()（单小时复网热启动 + 归档 SHA-256 指纹缓存 + 精确有限时域动态规划），在离散动作空间（主变分接头 -2..+2 档 × 末端电容 50 kvar 步长 0..400 kvar）及设备寿命动作约束（分接头 ≤2 次/日、电容 ≤4 次/日）下求解 24 小时最优策略：老洼地 2026-11-13 违规整点由 12/24 清零至 0/24（全天 0 电压越限、0 无功倒送），实际动作分接头 1 次（05:00 +1→+2 档）、电容 4 次（03:00/07:00/11:00/14:00），24h 总网损由 731.70 降至 722.08 kWh（节电 +9.625 kWh / +1.32%）。",
+        "【多智体 + 巡检预证伪合拢】在 laowadi/reactive_collaboration.py 与 multi_agent.py 自动挂接 daily_schedule，并与 Codex 完成的巡检工单自动预证伪初诊（laowadi/proactive.py）、工单台一键转入对话追问（IncidentTicketPanel.jsx / main.jsx）及 24h 分时方案卡片（GovernanceMultiAgentPanel.jsx）无缝对接。"
+      ],
+      "verified": "双线合并后全量 15 套自动化回归门禁与论文探针（verify_p1_autonomy_and_ops、verify_p0_correctness、verify_diagnose、verify_diagnostic_claims、verify_task_alignment、verify_reliability_and_contracts、verify_multi_agent_and_governance、verify_unified_dag、verify_enterprise_and_powerflow、verify_rag_and_graph、verify_supplement_and_mcp、verify_multimine_generalization、verify_evaluation、verify_workbench 及 thesis_eval.probe）100% 全部绿灯通过；两份只读黄金归档库 SHA-256 严格未变。",
+      "next": "按需推进局部增量自愈重写协议（Patch-Only Reflection，提升真实 DeepSeek 端到端通过率与响应速度）、多场景 48 题真实大模型对比实测或将 24h 分时优化与 N-1 反事实重仲裁扩展至全周 7 日对比。"
     }
   ]
 }

@@ -21,9 +21,9 @@ REVIEW_REQUIREMENTS = [
 
 
 def reactive_request(question, hints, profile):
-    if not re.search(r"补偿|电容|(?:提高|提升|改善)功率因数|低功率因数.*过压", question):
+    if not re.search(r"补偿|电容|分时投切|24\s*小时.*(?:调压|投切|优化)|(?:提高|提升|改善)功率因数|低功率因数.*过压", question):
         return None
-    if re.search(r"N-1|转供", question, re.I) and not re.search(r"补偿|电容", question):
+    if re.search(r"N-1|转供", question, re.I) and not re.search(r"补偿|电容|分时投切", question):
         return None
     if hints["mentioned_c1535"] and not hints["mentioned_s35"]:
         return None
@@ -38,9 +38,10 @@ def reactive_request(question, hints, profile):
     capacity = re.search(r"(?<![\d.\-])(\d+(?:\.\d+)?)\s*kvar\b", question, re.I)
     time = re.search(r"(?<!\d)\d{1,2}:(\d{2})(?::(\d{2}))?(?!\d)", question)
     non_hourly = bool(time and (time[1] != "00" or time[2] not in (None, "00")))
+    want_schedule = bool(re.search(r"分时|24\s*小时|几点投|几点切|投切计划|动作次数", question))
     return {
         "target": targets[0].cabinet, "requested_qc_kvar": float(capacity[1]) if capacity else None,
-        "non_hourly": non_hourly,
+        "non_hourly": non_hourly, "want_daily_schedule": want_schedule,
     }
 
 
@@ -559,6 +560,23 @@ def evaluate_multi_hour_envelope(archive, profile, decision, policy):
         "summary": verdict_text,
     }
     decision["content"] = decision["content"].rstrip("。") + "。" + verdict_text
+
+    # When fixed daily operation triggers violations (or user explicitly asks for 24h switching),
+    # solve the exact 24-hour discrete tap & capacitor schedule with equipment switching limits.
+    if switching_mode == "time_of_use_switching_required" or payload.get("want_daily_schedule"):
+        from laowadi.powerflow import optimize_daily_tap_cap_schedule
+
+        schedule = optimize_daily_tap_cap_schedule(
+            archive,
+            day,
+            target_cabinet=target,
+            pf_target=float(policy.get("pf_target", PF_TARGET)),
+            profile=profile,
+        )
+        if schedule.get("status") == "ok":
+            payload["daily_schedule"] = schedule
+            decision["content"] = decision["content"].rstrip("。") + "。" + schedule["summary"]
+
     return [{"round": 3, "agent": "physics", "tool": "get_window_snapshot", "arguments": args, "result": win}]
 
 

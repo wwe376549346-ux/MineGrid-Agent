@@ -444,20 +444,23 @@ def _extract_solution(
     }
 
 
-def _solve_nr(net) -> bool:
-    try:
-        pp.runpp(
-            net,
-            algorithm="nr",
-            calculate_voltage_angles=True,
-            init="auto",
-            max_iteration=30,
-            tolerance_mva=1e-8,
-            numba=False,
-        )
-        return bool(net.converged)
-    except Exception:
-        return False
+def _solve_nr(net, *, warm_start: bool = False) -> bool:
+    for init_mode in (("results", "auto") if warm_start else ("auto",)):
+        try:
+            pp.runpp(
+                net,
+                algorithm="nr",
+                calculate_voltage_angles=True,
+                init=init_mode,
+                max_iteration=30,
+                tolerance_mva=1e-8,
+                numba=False,
+            )
+            if bool(net.converged):
+                return True
+        except Exception:
+            continue
+    return False
 
 
 def solve_reactive_study_state(profile, snapshot, cabinet, transformer, tap, qc_kvar):
@@ -832,3 +835,373 @@ def run_ac_power_flow(
             }
 
     return result
+
+
+def _solve_hour_grid_inplace(
+    profile: MineProfile,
+    snap: dict[str, dict[str, dict[str, Any]]],
+    cabinet: str,
+    transformer_id: str,
+    tap_grid: list[int],
+    cap_grid: list[float],
+    supply_bus: str,
+    receiving_bus: str,
+    voltage_cabinet: str,
+    v_lo: float,
+    v_hi: float,
+    base_tap: int,
+) -> tuple[dict[str, Any], dict[tuple[int, float], dict[str, Any]]]:
+    """Evaluate all discrete (tap, qc) combinations for one hour by reusing a single pandapower net."""
+    feeder = profile.feeder_map()[cabinet]
+    max_cap = max(cap_grid) if cap_grid else 0.0
+    net, meta = build_pandapower_network(
+        profile,
+        snap,
+        shunt_target_bus=feeder.downstream_bus_id,
+        shunt_qc_kvar=max(max_cap, 50.0),
+    )
+    trafo_pp = next(t["pp_idx"] for t in meta["trafo_meta"] if t["spec"].id == transformer_id)
+    line_pp = next(l["pp_idx"] for l in meta["line_meta"] if l["spec"].cabinet == cabinet)
+    supply_pp = meta["bus_idx"][supply_bus]
+    recv_pp = meta["bus_idx"][receiving_bus]
+    supply_vn = profile.bus_map()[supply_bus].nominal_kv
+    recv_vn = profile.bus_map()[receiving_bus].nominal_kv
+    shunt_idx = int(net.shunt.index[0]) if len(net.shunt) else None
+
+    meas_u = snap.get(voltage_cabinet, {}).get("Uab", {}).get("value")
+    meas_u = float(meas_u) if isinstance(meas_u, (int, float)) and math.isfinite(meas_u) else None
+    p_meas = _val(snap, cabinet, "P", 0.0)
+    cos_meas = _val(snap, cabinet, "cos", 0.85)
+    q_load_est = _safe_q_mvar(p_meas, cos_meas) * 1000.0
+
+    has_prev_res = False
+
+    def _eval(tap: int, qc: float) -> dict[str, Any]:
+        nonlocal has_prev_res
+        net.trafo.at[trafo_pp, "tap_pos"] = tap
+        if shunt_idx is not None:
+            if qc > 0.0:
+                net.shunt.at[shunt_idx, "in_service"] = True
+                net.shunt.at[shunt_idx, "q_mvar"] = -qc / 1000.0
+            else:
+                net.shunt.at[shunt_idx, "in_service"] = False
+                net.shunt.at[shunt_idx, "q_mvar"] = 0.0
+        ok = _solve_nr(net, warm_start=has_prev_res)
+        if not ok:
+            has_prev_res = False
+            return {"tap": tap, "qc_kvar": qc, "converged": False}
+        has_prev_res = True
+        br = net.res_line.loc[line_pp]
+        p_kw = float(br.p_from_mw) * 1000.0
+        q_kvar = float(br.q_from_mvar) * 1000.0
+        u_sup = float(net.res_bus.at[supply_pp, "vm_pu"]) * supply_vn
+        u_rec = float(net.res_bus.at[recv_pp, "vm_pu"]) * recv_vn
+        loading = max(
+            [float(v) for tbl in (net.res_line, net.res_trafo) for v in tbl.loading_percent],
+            default=0.0,
+        )
+        loss_kw = float(net.res_line.pl_mw.sum() + net.res_trafo.pl_mw.sum()) * 1000.0
+        pf = p_kw / math.hypot(p_kw, q_kvar) if p_kw > 0 else 1.0
+        return {
+            "tap": tap,
+            "qc_kvar": qc,
+            "converged": True,
+            "bus_kv": u_sup,
+            "recv_kv": u_rec,
+            "feeder_pf": pf,
+            "feeder_q_kvar": q_kvar,
+            "max_loading_pct": loading,
+            "loss_kw": loss_kw,
+        }
+
+    baseline = _eval(base_tap, 0.0)
+    base_u = baseline["bus_kv"] if baseline["converged"] else None
+
+    def _annotate(st: dict[str, Any]) -> dict[str, Any]:
+        if not st["converged"]:
+            st["projected_bus_kv"] = None
+            st["violations"] = ["non_converged"]
+            st["pass"] = False
+            return st
+        proj_u = (meas_u + st["bus_kv"] - base_u) if (meas_u is not None and base_u is not None) else st["bus_kv"]
+        viols: list[str] = []
+        if not (v_lo <= st["bus_kv"] <= v_hi):
+            viols.append("modeled_bus_voltage")
+        if not (v_lo <= proj_u <= v_hi):
+            viols.append("projected_bus_voltage")
+        if not (v_lo <= st["recv_kv"] <= v_hi):
+            viols.append("receiving_bus_voltage")
+        if st["max_loading_pct"] > 100.0:
+            viols.append("thermal_limit")
+        if st["feeder_q_kvar"] < -1e-6:
+            viols.append("leading_feeder_q")
+        st["projected_bus_kv"] = proj_u
+        st["violations"] = viols
+        st["pass"] = len(viols) == 0
+        return st
+
+    _annotate(baseline)
+    grid: dict[tuple[int, float], dict[str, Any]] = {}
+    for tap in tap_grid:
+        for qc in cap_grid:
+            # Fast prune capacitors grossly larger than reactive load (guaranteed reverse Q)
+            if qc > 0.0 and qc > q_load_est + 95.0:
+                continue
+            if tap == base_tap and qc == 0.0:
+                grid[(tap, qc)] = baseline
+            else:
+                grid[(tap, qc)] = _annotate(_eval(tap, qc))
+    return baseline, grid
+
+
+_DAILY_SCHEDULE_CACHE: dict[tuple, dict[str, Any]] = {}
+
+
+def optimize_daily_tap_cap_schedule(
+    archive,
+    day: str,
+    *,
+    target_cabinet: str = "1010",
+    cap_step_kvar: float = 50.0,
+    max_cap_kvar: float = 400.0,
+    max_tap_changes: int = 2,
+    max_cap_changes: int = 4,
+    pf_target: float = 0.90,
+    profile: MineProfile | None = None,
+) -> dict[str, Any]:
+    """24-hour discrete tap & capacitor switching optimization via exact finite-horizon DP on pandapower."""
+    from copy import deepcopy
+
+    prof = profile or load_mine_profile()
+    day_row = archive.db.execute("SELECT sha256 FROM report WHERE day = ?", (day,)).fetchone()
+    day_sha = str(day_row["sha256"]) if day_row else ""
+    cache_key = (
+        prof.mine_id, day, day_sha, target_cabinet,
+        round(float(cap_step_kvar), 3), round(float(max_cap_kvar), 3),
+        int(max_tap_changes), int(max_cap_changes), round(float(pf_target), 4),
+    )
+    if day_sha and cache_key in _DAILY_SCHEDULE_CACHE:
+        return deepcopy(_DAILY_SCHEDULE_CACHE[cache_key])
+    feeder = prof.feeder_map().get(target_cabinet)
+    if not feeder or not feeder.downstream_bus_id:
+        raise ValueError(f"目标柜 {target_cabinet} 缺少下游等值潮流支路模型。")
+    transformer = next((tr for tr in prof.transformers if tr.lv_bus == feeder.bus_id), None)
+    if not transformer:
+        raise ValueError(f"未找到向母线 {feeder.bus_id} 供电的主变配置。")
+
+    supply_bus = feeder.bus_id
+    receiving_bus = feeder.downstream_bus_id
+    voltage_cabinet = prof.bus_map()[supply_bus].reference_cabinet or transformer.lv_cabinet
+    v_lim = prof.voltage_limit_for_kv(prof.bus_map()[supply_bus].nominal_kv)
+    v_lo, v_hi = v_lim.lo_kv, v_lim.hi_kv
+
+    base_tap = transformer.calibrated_tap_pos
+    tap_grid = sorted({
+        t for t in range(max(transformer.tap_min, base_tap - 1), min(transformer.tap_max, base_tap + 1) + 1)
+    })
+    steps_n = max(1, int(round(max_cap_kvar / max(cap_step_kvar, 10.0))))
+    cap_grid = [round(i * cap_step_kvar, 1) for i in range(steps_n + 1)]
+
+    # Load all available archived hours for `day`
+    hour_rows = archive.db.execute(
+        """
+        SELECT DISTINCT time FROM reading
+        WHERE station = ? AND day = ?
+        ORDER BY time ASC
+        """,
+        (prof.primary_station, day),
+    ).fetchall()
+    hours = [row["time"] for row in hour_rows]
+    if not hours:
+        return {"status": "missing_day", "day": day, "summary": f"归档库中缺少 {day} 的小时级数据。"}
+
+    hourly_baselines: list[dict[str, Any]] = []
+    hourly_grids: list[dict[tuple[int, float], dict[str, Any]]] = []
+    hourly_snaps: list[dict[str, dict[str, dict[str, Any]]]] = []
+    for at_time in hours:
+        snap = _load_hour_snapshot(archive, at_time, prof.primary_station)
+        base_st, grid = _solve_hour_grid_inplace(
+            prof, snap, target_cabinet, transformer.id,
+            tap_grid, cap_grid, supply_bus, receiving_bus,
+            voltage_cabinet, v_lo, v_hi, base_tap,
+        )
+        hourly_baselines.append(base_st)
+        hourly_grids.append(grid)
+        hourly_snaps.append(snap)
+
+    # Exact DP over (tap, qc, tap_changes_used, cap_changes_used)
+    INF = 1e18
+    TAP_SW_PENALTY = 0.08
+    CAP_SW_PENALTY = 0.02
+    VIOL_PENALTY = 10000.0
+
+    def _hour_cost(st: dict[str, Any]) -> float:
+        if not st.get("converged"):
+            return VIOL_PENALTY * 5.0
+        cost = float(st["loss_kw"])
+        if not st["pass"]:
+            cost += VIOL_PENALTY * max(1, len(st["violations"]))
+        if st["feeder_pf"] < pf_target:
+            cost += 3.0 * (pf_target - st["feeder_pf"])
+        return cost
+
+    dp_prev: dict[tuple[int, float, int, int], float] = {}
+    backptr: list[dict[tuple[int, float, int, int], tuple[int, float, int, int] | None]] = []
+
+    bp0: dict[tuple[int, float, int, int], tuple[int, float, int, int] | None] = {}
+    for (tap, qc), st in hourly_grids[0].items():
+        # Starting at hour 0 from calibrated tap / 0 kvar avoids hidden pre-day tap jump if equal
+        key = (tap, qc, 0, 0)
+        init_bias = 0.01 * (abs(tap - base_tap) + (1 if qc > 0 else 0))
+        dp_prev[key] = _hour_cost(st) + init_bias
+        bp0[key] = None
+    backptr.append(bp0)
+
+    for h_idx in range(1, len(hours)):
+        dp_cur: dict[tuple[int, float, int, int], float] = {}
+        bp_h: dict[tuple[int, float, int, int], tuple[int, float, int, int] | None] = {}
+        grid_h = hourly_grids[h_idx]
+        # Precompute per-hour state cost once
+        h_costs = {k: _hour_cost(st) for k, st in grid_h.items()}
+        for (p_tap, p_qc, used_t, used_c), prev_cost in dp_prev.items():
+            for (c_tap, c_qc), scost in h_costs.items():
+                dt = 1 if c_tap != p_tap else 0
+                dc = 1 if c_qc != p_qc else 0
+                nt = used_t + dt
+                nc = used_c + dc
+                if nt > max_tap_changes or nc > max_cap_changes:
+                    continue
+                tot = prev_cost + scost + dt * TAP_SW_PENALTY + dc * CAP_SW_PENALTY
+                nkey = (c_tap, c_qc, nt, nc)
+                if tot < dp_cur.get(nkey, INF):
+                    dp_cur[nkey] = tot
+                    bp_h[nkey] = (p_tap, p_qc, used_t, used_c)
+        dp_prev = dp_cur
+        backptr.append(bp_h)
+
+    best_end = min(dp_prev.items(), key=lambda item: item[1])[0]
+    chosen_keys: list[tuple[int, float, int, int]] = [best_end]
+    cur = best_end
+    for h_idx in range(len(hours) - 1, 0, -1):
+        prev = backptr[h_idx][cur]
+        assert prev is not None
+        chosen_keys.append(prev)
+        cur = prev
+    chosen_keys.reverse()
+
+    schedule_hours: list[dict[str, Any]] = []
+    actions: list[dict[str, Any]] = []
+    base_loss_kwh = 0.0
+    opt_loss_kwh = 0.0
+    base_viols = 0
+    opt_viols = 0
+
+    for idx, (at_time, key) in enumerate(zip(hours, chosen_keys)):
+        tap, qc, _, _ = key
+        base_st = hourly_baselines[idx]
+        opt_st = hourly_grids[idx][(tap, qc)]
+        snap = hourly_snaps[idx]
+        base_loss_kwh += float(base_st.get("loss_kw") or 0.0)
+        opt_loss_kwh += float(opt_st.get("loss_kw") or 0.0)
+        if not base_st.get("pass"):
+            base_viols += 1
+        if not opt_st.get("pass"):
+            opt_viols += 1
+
+        if idx > 0:
+            p_tap, p_qc, _, _ = chosen_keys[idx - 1]
+            if tap != p_tap:
+                actions.append({
+                    "hour": at_time,
+                    "type": "tap_change",
+                    "from_val": f"{p_tap:+d} 档",
+                    "to_val": f"{tap:+d} 档",
+                    "reason": (
+                        f"母线实测 {_val(snap, voltage_cabinet, 'Uab', 0.0):.2f} kV，"
+                        f"调档后模型母线 {opt_st['bus_kv']:.4f} kV（投影 {opt_st['projected_bus_kv']:.4f} kV）"
+                    ),
+                })
+            if qc != p_qc:
+                actions.append({
+                    "hour": at_time,
+                    "type": "cap_switch",
+                    "from_val": f"{p_qc:g} kvar",
+                    "to_val": f"{qc:g} kvar",
+                    "reason": (
+                        f"{target_cabinet} 有功 {_val(snap, target_cabinet, 'P', 0.0):.1f} kW、"
+                        f"实测 cos {_val(snap, target_cabinet, 'cos', 0.0):.2f}，"
+                        f"投切后首端 cos {opt_st['feeder_pf']:.4f}、无功 {opt_st['feeder_q_kvar']:.1f} kvar"
+                    ),
+                })
+
+        cells = [
+            c for c in (
+                _cell(snap, target_cabinet, "P"),
+                _cell(snap, target_cabinet, "cos"),
+                _cell(snap, voltage_cabinet, "Uab"),
+            ) if c
+        ]
+        schedule_hours.append({
+            "hour": at_time,
+            "tap": tap,
+            "qc_kvar": qc,
+            "baseline_bus_kv": round(float(base_st["bus_kv"]), 4) if base_st.get("converged") else None,
+            "optimized_bus_kv": round(float(opt_st["bus_kv"]), 4) if opt_st.get("converged") else None,
+            "projected_bus_kv": round(float(opt_st["projected_bus_kv"]), 4) if opt_st.get("projected_bus_kv") is not None else None,
+            "optimized_pf": round(float(opt_st["feeder_pf"]), 4) if opt_st.get("converged") else None,
+            "feeder_q_kvar": round(float(opt_st["feeder_q_kvar"]), 2) if opt_st.get("converged") else None,
+            "baseline_loss_kw": round(float(base_st["loss_kw"]), 3) if base_st.get("converged") else None,
+            "optimized_loss_kw": round(float(opt_st["loss_kw"]), 3) if opt_st.get("converged") else None,
+            "pass": bool(opt_st.get("pass")),
+            "violations": list(opt_st.get("violations") or []),
+            "cells": cells,
+        })
+
+    tap_changes_used = best_end[2]
+    cap_changes_used = best_end[3]
+    base_loss_kwh = round(base_loss_kwh, 3)
+    opt_loss_kwh = round(opt_loss_kwh, 3)
+    loss_saving_kwh = round(base_loss_kwh - opt_loss_kwh, 3)
+    loss_saving_pct = round(loss_saving_kwh / max(base_loss_kwh, 1e-6) * 100.0, 2)
+    all_safe = opt_viols == 0
+    action_brief = (
+        "；".join(f'{a["hour"][11:16]} {a["from_val"]}→{a["to_val"]}' for a in actions)
+        if actions else f'全天维持 {chosen_keys[0][0]:+d} 档 + {chosen_keys[0][1]:g} kvar'
+    )
+    summary = (
+        f'{day} 24 小时分时离散优化（{transformer.id} + {target_cabinet} 柜 {cap_step_kvar:g} kvar 分级，'
+        f'约束：分接头 ≤{max_tap_changes} 次/日、电容 ≤{max_cap_changes} 次/日）：'
+        f'违规整点由基线 {base_viols}/{len(hours)} 降至 {opt_viols}/{len(hours)}'
+        f'（{"全天 24h 零越限、零无功倒送" if all_safe else "仍有约束冲突待现场补证"}），'
+        f'实际动作分接头 {tap_changes_used} 次、电容 {cap_changes_used} 次（{action_brief}），'
+        f'24h 等值总网损由 {base_loss_kwh:.2f} 降至 {opt_loss_kwh:.2f} kWh（节电 {loss_saving_kwh:+.2f} kWh / {loss_saving_pct:+.2f}%）。'
+    )
+    out = {
+        "status": "ok",
+        "day": day,
+        "target_cabinet": target_cabinet,
+        "transformer": transformer.id,
+        "supply_bus": supply_bus,
+        "receiving_bus": receiving_bus,
+        "cap_step_kvar": cap_step_kvar,
+        "max_tap_changes": max_tap_changes,
+        "max_cap_changes": max_cap_changes,
+        "tap_changes": tap_changes_used,
+        "cap_changes": cap_changes_used,
+        "initial_tap": chosen_keys[0][0],
+        "initial_qc_kvar": chosen_keys[0][1],
+        "all_hours_safe": all_safe,
+        "baseline_violations_count": base_viols,
+        "optimized_violations_count": opt_viols,
+        "baseline_loss_kwh": base_loss_kwh,
+        "optimized_loss_kwh": opt_loss_kwh,
+        "loss_saving_kwh": loss_saving_kwh,
+        "loss_saving_pct": loss_saving_pct,
+        "actions": actions,
+        "hours": schedule_hours,
+        "summary": summary,
+        "model_assumptions": prof.model_assumption_disclaimer,
+    }
+    if day_sha and len(_DAILY_SCHEDULE_CACHE) < 32:
+        _DAILY_SCHEDULE_CACHE[cache_key] = deepcopy(out)
+    return out

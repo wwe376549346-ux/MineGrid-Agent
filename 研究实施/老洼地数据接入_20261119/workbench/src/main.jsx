@@ -313,6 +313,7 @@ function App() {
             <IncidentTicketPanel
               onBadgeUpdate={setUnreadBadge}
               onAskDiagnose={askAgent}
+              onContinueInChat={askAgent}
             />
           )}
 

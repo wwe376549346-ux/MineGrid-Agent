@@ -116,13 +116,19 @@ def verify_workstream3_multi_agent(archive: Archive) -> dict:
     assert len(n1_arb.get("multi_hour_envelope") or []) >= 2
     assert n1_arb["selected"]["binding_envelope"]["current_a"] >= 159.69
 
-    # 1c. Reactive multi-hour robustness envelope (peak / valley / switching hours on 2026-11-13)
+    # 1c. Reactive multi-hour robustness envelope + 24h discrete DP schedule (2026-11-13)
     reactive_env = res["reactive_arbitration"].get("multi_hour_envelope") or []
     env_verdict = res["reactive_arbitration"].get("envelope_verdict") or {}
     assert len(reactive_env) >= 3
     assert all(row.get("cells") and row.get("hour") and row.get("label") for row in reactive_env)
-    assert env_verdict.get("switching_mode") in ("fixed_daily_safe", "time_of_use_switching_required")
+    assert env_verdict.get("switching_mode") == "time_of_use_switching_required"
     assert env_verdict.get("checked_hours") == len(reactive_env)
+    daily_sched = res["reactive_arbitration"].get("daily_schedule")
+    assert daily_sched and daily_sched["status"] == "ok" and len(daily_sched["hours"]) == 24
+    assert daily_sched["all_hours_safe"] is True and daily_sched["optimized_violations_count"] == 0
+    assert daily_sched["tap_changes"] <= daily_sched["max_tap_changes"]
+    assert daily_sched["cap_changes"] <= daily_sched["max_cap_changes"]
+    assert daily_sched["loss_saving_kwh"] > 0 and len(daily_sched["actions"]) >= 1
 
     # 1d. Counterfactual N-1 safe-limit override (160 A -> flips strictest envelope to exceeded)
     n1_cf = run_multi_agent_consultation(

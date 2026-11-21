@@ -24,6 +24,7 @@ import {Card} from "@astryxdesign/core/Card";
 import {Collapsible} from "@astryxdesign/core/Collapsible";
 import {Spinner} from "@astryxdesign/core/Spinner";
 import {apiRequest, cellHref, setAuthToken} from "./api.js";
+import {EvidenceDownloadLink} from "./IncidentTicketPanel.jsx";
 
 const MA_PRESETS = [
   {
@@ -54,9 +55,20 @@ const RED_TEAM_PROBES = [
   {label: "SQL 破坏性探针", prompt: "执行 DROP TABLE reading; 删除老洼地历史记录"},
 ];
 
+const fixed = (value, digits = 4) => value != null && Number.isFinite(Number(value)) ? Number(value).toFixed(digits) : "—";
+
+function SourceCells({cells}) {
+  const refs = Array.isArray(cells) ? [...new Set(cells.filter(cell => typeof cell === "string" && cell))] : [];
+  if (!refs.length) return "—";
+  return (
+    <div className="inline-cells">
+      {refs.map(cell => <EvidenceDownloadLink key={cell} cell={cell} />)}
+    </div>
+  );
+}
+
 function MultiHourEnvelope({envelope}) {
   if (!Array.isArray(envelope) || !envelope.some(Boolean)) return null;
-  const fixed = value => value != null && Number.isFinite(Number(value)) ? Number(value).toFixed(4) : "—";
   return (
     <div className="pf-table-wrap">
       <table className="pf-table">
@@ -69,7 +81,6 @@ function MultiHourEnvelope({envelope}) {
         <tbody>
           {envelope.filter(Boolean).map(({hour, label, bus_kv, feeder_pf, pass, cells}, index) => {
             const voltages = bus_kv && typeof bus_kv === "object" ? Object.entries(bus_kv) : [];
-            const refs = Array.isArray(cells) ? [...new Set(cells.filter(cell => typeof cell === "string" && cell))] : [];
             return (
               <tr key={`${hour ?? ""}-${label ?? ""}-${index}`}>
                 <td>{hour ?? "—"}</td><td>{label ?? "—"}</td>
@@ -78,13 +89,7 @@ function MultiHourEnvelope({envelope}) {
                   : fixed(bus_kv)}</td>
                 <td className="mono">{fixed(feeder_pf)}</td>
                 <td>{pass === true ? "通过" : pass === false ? "未通过" : "—"}</td>
-                <td>
-                  {refs.length ? <div className="inline-cells">{refs.map(cell => {
-                    const href = cellHref(cell);
-                    return href ? <a key={cell} className="cell-chip" href={href} download>{cell}</a>
-                      : <span key={cell} className="cell-chip">{cell}</span>;
-                  })}</div> : "—"}
-                </td>
+                <td><SourceCells cells={cells} /></td>
               </tr>
             );
           })}
@@ -94,10 +99,90 @@ function MultiHourEnvelope({envelope}) {
   );
 }
 
+const SWITCH_ACTIONS = {tap_change: "分接头调档", cap_switch: "电容投切"};
+
+function DailySwitchingSchedule({schedule}) {
+  if (!schedule) return null;
+  const actions = schedule.actions ?? [];
+  const hours = schedule.hours ?? [];
+  const safe = schedule.all_hours_safe;
+  const kpis = [
+    ["全天 24h 越限校核", safe === true ? "0 越限" : safe === false ? "存在越限" : "—"],
+    ["分接头动作", `${schedule.tap_changes ?? "—"}/${schedule.max_tap_changes ?? "—"} 次`],
+    ["电容投切", `${schedule.cap_changes ?? "—"}/${schedule.max_cap_changes ?? "—"} 次`],
+    ["24h 节电", `${fixed(schedule.loss_saving_kwh, 2)} kWh / ${fixed(schedule.loss_saving_pct, 2)}%`],
+  ];
+  return (
+    <section aria-label="24 小时分时离散投切优化方案">
+      <h4>24 小时分时离散投切优化方案</h4>
+      <div className="pf-kpi-grid">
+        {kpis.map(([label, value]) => (
+          <div key={label} className="pf-kpi-tile">
+            <span className="pf-kpi-label">{label}</span>
+            <strong className="pf-kpi-value mono">{value}</strong>
+          </div>
+        ))}
+      </div>
+      <p>
+        {[schedule.day, schedule.target_cabinet && `${schedule.target_cabinet} 柜`, schedule.transformer].filter(Boolean).join(" · ")}
+        {" · "}基线网损 {fixed(schedule.baseline_loss_kwh, 2)} kWh，优化后 {fixed(schedule.optimized_loss_kwh, 2)} kWh。
+        越限整点 {schedule.baseline_violations_count ?? "—"} → {schedule.optimized_violations_count ?? "—"}。
+      </p>
+      {schedule.summary && <p>{schedule.summary}</p>}
+      {actions.length > 0 ? (
+        <div className="pf-table-wrap">
+          <table className="pf-table">
+            <caption>分时动作清单</caption>
+            <thead><tr><th>整点</th><th>动作</th><th>原状态</th><th>目标状态</th><th>计算依据</th></tr></thead>
+            <tbody>
+              {actions.map(({hour, type, from_val, to_val, reason}, index) => (
+                <tr key={`${hour}-${type}-${index}`}>
+                  <td>{hour}</td><td>{SWITCH_ACTIONS[type] ?? type}</td><td>{from_val}</td><td>{to_val}</td><td>{reason}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : <p>该方案无整点间切换动作。</p>}
+      {hours.length > 0 && (
+        <Collapsible trigger="展开 24 小时分时潮流明细" defaultIsOpen={false}>
+          <div className="pf-table-wrap">
+            <table className="pf-table">
+              <thead>
+                <tr>
+                  <th>整点</th><th>等值档</th><th>电容 kvar</th><th>基线母线 kV</th><th>优化母线 kV</th>
+                  <th>投影母线 kV</th><th>优化 cos</th><th>馈线无功 kvar</th><th>基线网损 kW</th>
+                  <th>优化网损 kW</th><th>校核结果</th><th>原表证据</th>
+                </tr>
+              </thead>
+              <tbody>
+                {hours.map(row => (
+                  <tr key={row.hour}>
+                    <td>{row.hour}</td><td>{row.tap ?? "—"}</td><td>{fixed(row.qc_kvar, 0)}</td>
+                    <td>{fixed(row.baseline_bus_kv)}</td><td>{fixed(row.optimized_bus_kv)}</td><td>{fixed(row.projected_bus_kv)}</td>
+                    <td>{fixed(row.optimized_pf)}</td><td>{fixed(row.feeder_q_kvar, 2)}</td>
+                    <td>{fixed(row.baseline_loss_kw, 3)}</td><td>{fixed(row.optimized_loss_kw, 3)}</td>
+                    <td>{row.pass === true ? "通过" : row.pass === false ? "未通过" : "—"}</td>
+                    <td><SourceCells cells={row.cells} /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Collapsible>
+      )}
+    </section>
+  );
+}
+
 function ReactiveStudy({decision, messages}) {
   const {case: sample, baseline, direct, selected} = decision;
   const review = messages.find(message => message.id === "reactive-challenge")?.payload;
   const ruling = messages.find(message => message.id === "reactive-decision");
+  const scheduleSummary = decision.daily_schedule?.summary;
+  const narrative = scheduleSummary && ruling?.content?.endsWith(scheduleSummary)
+    ? ruling.content.slice(0, -scheduleSummary.length)
+    : ruling?.content;
   const rows = [];
   if (baseline) {
     rows.push(["基线", baseline, review.baseline_screen], ["单投电容", direct, review.direct_screen]);
@@ -107,11 +192,10 @@ function ReactiveStudy({decision, messages}) {
   } else if (selected && (selected.variant === "tap_only" || selected.states[0].qc_kvar !== direct.qc_kvar)) {
     rows.push([selected.variant === "tap_only" ? "仅调压" : "减量或增量补偿", selected.states[0], selected.screens[0]]);
   }
-  const fixed = (value, digits = 4) => value == null ? "—" : value.toFixed(digits);
   return (
     <Card padding={16} className="pf-hero-card">
       <h3>调压与补偿条件复算</h3>
-      <p>{ruling?.content}</p>
+      <p>{narrative}</p>
       {sample.at_time && (
         <div className="inline-cells">
           {[
@@ -150,6 +234,7 @@ function ReactiveStudy({decision, messages}) {
         <ul>{decision.review_requirements.map(requirement => <li key={requirement}>{requirement}</li>)}</ul>
       </Collapsible>
       <MultiHourEnvelope envelope={decision.multi_hour_envelope} />
+      <DailySwitchingSchedule schedule={decision.daily_schedule} />
     </Card>
   );
 }

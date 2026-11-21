@@ -714,6 +714,8 @@ def run_multi_agent_consultation(
             objection = ctx.completed_outputs["reactive:challenge"]
             revision = ctx.completed_outputs["reactive:revise"]
             decision = reactive.arbitrate(profile, frame, proposal, objection, revision)
+            if reactive_req.get("want_daily_schedule"):
+                decision["payload"]["want_daily_schedule"] = True
             env_trace = []
             if decision["payload"].get("selected"):
                 env_trace = reactive.evaluate_multi_hour_envelope(
