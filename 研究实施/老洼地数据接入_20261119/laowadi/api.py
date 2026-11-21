@@ -27,7 +27,7 @@ import os
 from pathlib import Path
 import sqlite3
 import time
-from typing import Annotated
+from typing import Annotated, Literal
 from urllib.parse import quote, unquote
 import uuid
 
@@ -54,10 +54,14 @@ from laowadi.schemas import (
     CircuitBreakerTripRequest,
     DAGResumeRequest,
     DAGRunRequest,
+    DeepResearchRequest,
     DiagnoseRequest,
     GraphDemoRequest,
     HealthzResponse,
     JobSubmitRequest,
+    MemoryCategory,
+    MemoryCreateRequest,
+    MemoryPatchRequest,
     MultiAgentConsultRequest,
     OutboxDispatchRequest,
     PowerFlowRequest,
@@ -99,6 +103,7 @@ COMPUTE_RATE_LIMITED_PATHS = {
     "/api/diagnose",
     "/api/diagnose/stream",
     "/api/agent/stream",
+    "/api/deep-research/stream",
     "/api/sandbox/run",
     "/api/powerflow",
     *READ_ONLY_COMPUTE_PATHS,
@@ -113,6 +118,8 @@ AUDITED_PATHS = {
     "/api/diagnose",
     "/api/diagnose/stream",
     "/api/agent/stream",
+    "/api/deep-research/stream",
+    "/api/memory",
     "/api/sandbox/run",
     "/api/diagnose/reset",
     "/api/powerflow",
@@ -131,6 +138,9 @@ AUDITED_PATHS = {
 AUTONOMOUS_EVENT_TYPES = {
     "plan_update", "reasoning_delta", "tool_start", "tool_end", "code_run",
     "content_delta", "verification_badge", "done", "error",
+}
+RESEARCH_EVENT_TYPES = {
+    "plan_update", "stage_update", "finding", "reasoning_delta", "section_ready", "done", "error",
 }
 
 
@@ -152,6 +162,63 @@ def _security_headers(headers: dict[str, str] | None = None) -> dict[str, str]:
     if headers:
         base.update(headers)
     return base
+
+
+def _stream_model_client(mode: str, configured_model: str | None):
+    if mode == "local" or (mode == "auto" and configured_model is None):
+        return None
+    try:
+        return ChatClient.from_env(stream=True)
+    except LLMError:
+        if mode == "deepseek":
+            raise RequestError(409, "本次工作台尚未启用可用的 DeepSeek 配置。") from None
+        return None
+
+
+def _callback_sse_response(run, event_types: set[str], logger, failure_message: str):
+    """Bridge synchronous runner callbacks to SSE with bounded backpressure."""
+    async def events():
+        sender, receiver = anyio.create_memory_object_stream[str](16)
+
+        def encode(event):
+            # The runner may reuse and mutate event objects after the callback returns.
+            data = json.dumps(jsonable_encoder(event), ensure_ascii=False, allow_nan=False)
+            return f"event: {event['type']}\ndata: {data}\n\n"
+
+        def emit(event):
+            if event["type"] in event_types:
+                anyio.from_thread.run(sender.send, encode(event))
+
+        async def produce():
+            async with sender:
+                try:
+                    await anyio.to_thread.run_sync(run, emit, abandon_on_cancel=True)
+                except (anyio.BrokenResourceError, anyio.ClosedResourceError):
+                    return
+                except Exception:
+                    logger.exception("%s", failure_message)
+                    await sender.send(encode({"type": "error", "error": failure_message}))
+
+        worker = asyncio.create_task(produce())
+        try:
+            async with receiver:
+                while True:
+                    with anyio.move_on_after(15) as idle:
+                        try:
+                            frame = await receiver.receive()
+                        except anyio.EndOfStream:
+                            return
+                    yield ": heartbeat\n\n" if idle.cancelled_caught else frame
+        finally:
+            worker.cancel()
+            with suppress(asyncio.CancelledError):
+                await worker
+
+    return StreamingResponse(
+        events(),
+        media_type="text/event-stream",
+        headers=_security_headers({"Cache-Control": "no-cache, no-store", "X-Accel-Buffering": "no"}),
+    )
 
 
 async def _tail_durable_job_sse(workbench: Workbench, job_id: str, *, after_seq: int = 0):
@@ -210,6 +277,8 @@ def create_app(
     local_ports = {str(allowed_port)} if allowed_port else set()
     local_ports.update(port.strip() for port in os.environ.get("LAOWADI_ALLOWED_LOCAL_PORTS", "").split(",") if port.strip())
     max_age_hours = float(os.environ.get("LAOWADI_MAX_DATA_AGE_HOURS", "0"))
+    memory_db_path = workbench.sessions_db.parent / "laowadi_memory.sqlite3"
+    reports_dir = workbench.sessions_db.parent / "deep_reports"
 
     app = FastAPI(
         title="老洼地煤矿配电网健康监测与诊断智能体企业级 API",
@@ -269,7 +338,8 @@ def create_app(
                         client=client_host,
                         action=action or "",
                     )
-            if action or path in AUDITED_PATHS or resp.status_code in (401, 403, 429):
+            if (action or path in AUDITED_PATHS or path.startswith("/api/memory/")
+                    or path.startswith("/api/deep-research/reports/") or resp.status_code in (401, 403, 429)):
                 workbench.audit_ledger.record(
                     trace_id=trace_id,
                     actor=actor,
@@ -322,8 +392,12 @@ def create_app(
         if method == "POST":
             req_role = {
                 "/api/agent/stream": "dispatcher",
+                "/api/deep-research/stream": "dispatcher",
+                "/api/memory": "dispatcher",
                 "/api/sandbox/run": "engineer",
             }.get(path, req_role)
+        elif method in {"PATCH", "DELETE"} and path.startswith("/api/memory/"):
+            req_role = "dispatcher"
         actor = "local-workbench"
         role = "engineer"
         auth_header = request.headers.get("authorization", "").strip()
@@ -914,55 +988,17 @@ def create_app(
         if not security["allowed"]:
             raise RequestError(400, security["message"])
 
-        client = None
-        if req.mode == "deepseek" or (req.mode == "auto" and workbench.model is not None):
-            try:
-                client = ChatClient.from_env(stream=True)
-            except LLMError:
-                if req.mode == "deepseek":
-                    raise RequestError(409, "本次工作台尚未启用可用的 DeepSeek 配置。") from None
+        client = _stream_model_client(req.mode, workbench.model)
 
-        async def events():
-            sender, receiver = anyio.create_memory_object_stream[str](16)
+        def run(emit):
+            with workbench.archive() as archive:
+                session = workbench._get_or_restore_session(archive, req.sessionId) if req.sessionId else None
+                run_agent(
+                    archive, req.question, client=client, session=session, max_steps=req.maxSteps,
+                    memory_db_path=memory_db_path, on_event=emit,
+                )
 
-            def emit(event):
-                kind = event["type"]
-                if kind in AUTONOMOUS_EVENT_TYPES:
-                    # Serialize here because the runner mutates plan steps between callbacks.
-                    data = json.dumps(jsonable_encoder(event), ensure_ascii=False, allow_nan=False)
-                    anyio.from_thread.run(sender.send, f"event: {kind}\ndata: {data}\n\n")
-
-            def run():
-                with workbench.archive() as archive:
-                    session = workbench._get_or_restore_session(archive, req.sessionId) if req.sessionId else None
-                    run_agent(archive, req.question, client=client, session=session, max_steps=req.maxSteps, on_event=emit)
-
-            async def produce():
-                async with sender:
-                    try:
-                        await anyio.to_thread.run_sync(run, abandon_on_cancel=True)
-                    except (anyio.BrokenResourceError, anyio.ClosedResourceError):
-                        return
-                    except Exception:
-                        api_logger.exception("Autonomous agent stream failed")
-                        data = json.dumps({"type": "error", "error": "自主深度 Agent 执行中断。"}, ensure_ascii=False)
-                        await sender.send(f"event: error\ndata: {data}\n\n")
-
-            worker = asyncio.create_task(produce())
-            try:
-                async with receiver:
-                    async for frame in receiver:
-                        yield frame
-            finally:
-                worker.cancel()
-                with suppress(asyncio.CancelledError):
-                    await worker
-
-        return StreamingResponse(
-            events(),
-            media_type="text/event-stream",
-            headers=_security_headers({"Cache-Control": "no-cache, no-store", "X-Accel-Buffering": "no"}),
-        )
+        return _callback_sse_response(run, AUTONOMOUS_EVENT_TYPES, api_logger, "自主深度 Agent 执行中断。")
 
     @app.post("/api/sandbox/run", tags=["Autonomous Agent"])
     def api_sandbox_run(req: SandboxRunRequest):
@@ -971,6 +1007,88 @@ def create_app(
         )
         with workbench.archive() as archive:
             return run_python(archive, req.code, timeout_s=req.timeout_s)
+
+    def memory_runner(name: str):
+        return _load_optional_runner("memory_store", name, "长期记忆模块暂未就绪。")
+
+    @app.get("/api/memory", tags=["Operational Memory"])
+    def api_list_memory(category: MemoryCategory | None = None, enabled_only: bool = False):
+        items = memory_runner("list_memories")(category=category, enabled_only=enabled_only, db_path=memory_db_path)
+        return {"memories": items}
+
+    @app.post("/api/memory", tags=["Operational Memory"], status_code=201)
+    def api_create_memory(req: MemoryCreateRequest, request: Request):
+        create_memory = memory_runner("create_memory")
+        memory = create_memory(**req.model_dump(), source=request.state.actor, db_path=memory_db_path)
+        return {"memory": memory}
+
+    @app.patch("/api/memory/{memory_id}", tags=["Operational Memory"])
+    def api_update_memory(memory_id: str, req: MemoryPatchRequest):
+        update_memory = memory_runner("update_memory")
+        changes = req.model_dump(exclude_none=True)
+        if not changes:
+            raise RequestError(400, "请提供启用状态或记忆内容。")
+        memory = update_memory(memory_id, **changes, db_path=memory_db_path)
+        if memory is None:
+            raise RequestError(404, "未找到这条长期记忆。")
+        return {"memory": memory}
+
+    @app.delete("/api/memory/{memory_id}", tags=["Operational Memory"])
+    def api_delete_memory(memory_id: str):
+        if not memory_runner("delete_memory")(memory_id, db_path=memory_db_path):
+            raise RequestError(404, "未找到这条长期记忆。")
+        return {"deleted": True, "id": memory_id}
+
+    def research_runner(name: str):
+        return _load_optional_runner("deep_research", name, "深度排查模块暂未就绪。")
+
+    @app.post(
+        "/api/deep-research/stream",
+        tags=["Deep Research"],
+        response_class=StreamingResponse,
+        responses={200: {"content": {"text/event-stream": {}}}, 503: {"description": "深度排查暂未就绪"}},
+    )
+    async def api_deep_research(req: DeepResearchRequest):
+        investigate = research_runner("run_deep_investigation")
+        security = inspect_prompt_security(req.goal)
+        if not security["allowed"]:
+            raise RequestError(400, security["message"])
+
+        client = _stream_model_client(req.mode, workbench.model)
+
+        def run(emit):
+            with workbench.archive() as archive:
+                investigate(
+                    archive, req.goal, client=client, memory_db_path=memory_db_path,
+                    reports_dir=reports_dir, on_event=emit,
+                )
+
+        return _callback_sse_response(run, RESEARCH_EVENT_TYPES, api_logger, "深度排查执行中断。")
+
+    @app.get("/api/deep-research/reports", tags=["Deep Research"])
+    def api_deep_reports():
+        reports = research_runner("list_deep_reports")(reports_dir=reports_dir)
+        return {"reports": reports}
+
+    @app.get(
+        "/api/deep-research/reports/{report_id}/export",
+        tags=["Deep Research"],
+        response_class=Response,
+        responses={200: {"content": {"text/markdown": {}, "text/html": {}}}},
+    )
+    def api_export_deep_report(
+        report_id: str,
+        report_format: Annotated[Literal["md", "html"], Query(alias="format")] = "md",
+    ):
+        export = research_runner("export_deep_report")
+        try:
+            content, mime, filename = export(report_id, fmt=report_format, reports_dir=reports_dir)
+        except FileNotFoundError as exc:
+            raise RequestError(404, "未找到深度排查报告。") from exc
+        headers = _security_headers({"Content-Disposition": "attachment; filename*=UTF-8''" + quote(filename, safe="")})
+        if report_format == "html":
+            headers["Content-Security-Policy"] = "default-src 'none'; style-src 'unsafe-inline'; sandbox"
+        return Response(content, media_type=mime, headers=headers)
 
     # ── State Graph, Supplement Recalculation & Evaluation ─────────────────────
     @app.get("/api/supplement", tags=["State Graph & Evaluation"])

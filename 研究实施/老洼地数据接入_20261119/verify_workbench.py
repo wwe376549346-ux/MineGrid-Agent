@@ -42,6 +42,18 @@ def fetch_json(base: str, path: str, payload: dict | None = None):
         return json.loads(resp.read().decode("utf-8"))
 
 
+def decode_named_events(body: str) -> list[dict]:
+    events = []
+    for frame in body.split("\n\n"):
+        lines = frame.splitlines()
+        data = [line[5:].lstrip() for line in lines if line.startswith("data:")]
+        if data:
+            event = json.loads("\n".join(data))
+            assert f"event: {event['type']}" in lines, lines
+            events.append(event)
+    return events
+
+
 def verify_sensitivity_voi(workbench: Workbench) -> dict:
     path = "/api/powerflow/sensitivity-voi"
     with TestClient(create_app(workbench, require_auth=True)) as client:
@@ -109,17 +121,6 @@ def verify_autonomous_endpoints(workbench: Workbench) -> dict:
         {"type": "done", "session_id": "test-agent-stream"},
     ]
 
-    def decode_events(body):
-        frames = [frame.splitlines() for frame in body.strip().split("\n\n") if frame]
-        events = []
-        for frame in frames:
-            data = [line[5:].lstrip() for line in frame if line.startswith("data:")]
-            if data:
-                event = json.loads("\n".join(data))
-                assert f"event: {event['type']}" in frame, frame
-                events.append(event)
-        return events
-
     async def verify_arrival_before_completion():
         first_sent = threading.Event()
         sent = bytearray()
@@ -128,9 +129,10 @@ def verify_autonomous_endpoints(workbench: Workbench) -> dict:
 
         model_client = object()
 
-        def run_agent(archive, task, *, client, session, max_steps, on_event):
+        def run_agent(archive, task, *, client, session, max_steps, memory_db_path, on_event):
             assert ("S35", "1006") in archive.devices and task == question
             assert client is model_client and session is not None and max_steps == 8
+            assert memory_db_path.parent == workbench.sessions_db.parent
             on_event(expected[0])
             assert first_sent.wait(timeout=3), "Agent SSE buffered the first frame until completion"
             for event in expected[1:]:
@@ -152,7 +154,7 @@ def verify_autonomous_endpoints(workbench: Workbench) -> dict:
             elif message.get("body"):
                 sent.extend(message["body"])
                 if not first_sent.is_set():
-                    assert decode_events(sent.decode()) == expected[:1]
+                    assert decode_named_events(sent.decode()) == expected[:1]
                     first_sent.set()
 
         scope = {
@@ -168,7 +170,7 @@ def verify_autonomous_endpoints(workbench: Workbench) -> dict:
         with (patch.dict(sys.modules, {agent_module: SimpleNamespace(run_autonomous_agent=run_agent)}),
               patch("laowadi.api.ChatClient.from_env", return_value=model_client)):
             await asyncio.wait_for(app(scope, receive, send), timeout=5)
-        assert first_sent.is_set() and decode_events(sent.decode()) == expected
+        assert first_sent.is_set() and decode_named_events(sent.decode()) == expected
 
     asyncio.run(verify_arrival_before_completion())
 
@@ -208,7 +210,7 @@ def verify_autonomous_endpoints(workbench: Workbench) -> dict:
                 continue
             assert response.status_code == 200, response.text
             if path == agent_path:
-                events = decode_events(response.text)
+                events = decode_named_events(response.text)
                 assert events[-1]["type"] == "done" and all(event["type"] != "error" for event in events), events
                 assert {event["type"] for event in events} == {event["type"] for event in expected}, events
                 run = next(event for event in events if event["type"] == "code_run")
@@ -217,6 +219,115 @@ def verify_autonomous_endpoints(workbench: Workbench) -> dict:
                 assert response.json()["stdout"].strip() == "42", response.text
             coverage[path] = "end-to-end"
         return coverage
+
+
+def verify_memory_and_research_endpoints(workbench: Workbench) -> dict:
+    memory_path = "/api/memory"
+    stream_path = "/api/deep-research/stream"
+    reports_path = "/api/deep-research/reports"
+    missing_report = reports_path + "/DR-999999/export"
+    missing_memory = memory_path + "/MEM-999999"
+    dispatcher = {"Authorization": f"Bearer {issue_token('test-memory', 'dispatcher')['access_token']}"}
+    viewer = {"Authorization": f"Bearer {issue_token('test-memory-reader', 'viewer')['access_token']}"}
+    threshold = {"metric": "Uab", "operator": ">", "value": 10.65, "unit": "kV"}
+    rule = {
+        "category": "semantic",
+        "title": "1006 柜过压红线复验",
+        "content": "验收用的老洼地 1006 柜线电压上限，取 10.65 kV。",
+        "scope_cabinet": "1006",
+        "metric_threshold": threshold,
+        "tags": ["过压", "1006"],
+    }
+    goal = "全周排查老洼地运行风险，重点核查 1006 柜过压与转供条件 <b>验收样例</b>"
+    task = {"goal": goal, "mode": "local"}
+    coverage = {}
+    with TestClient(create_app(workbench, require_auth=True)) as client:
+        unavailable = {"laowadi.memory_store": None, "laowadi.deep_research": None}
+        with patch.dict(sys.modules, unavailable):
+            assert client.get(memory_path, headers=viewer).status_code == 503
+            assert client.post(memory_path, headers=dispatcher, json=rule).status_code == 503
+            assert client.patch(missing_memory, headers=dispatcher, json={"enabled": False}).status_code == 503
+            assert client.delete(missing_memory, headers=dispatcher).status_code == 503
+            assert client.post(stream_path, headers=dispatcher, json=task).status_code == 503
+            assert client.get(reports_path, headers=viewer).status_code == 503
+            assert client.get(missing_report, headers=viewer).status_code == 503
+
+        assert client.get(memory_path).status_code == 401
+        assert client.post(memory_path, headers=viewer, json=rule).status_code == 403
+        assert client.post(stream_path, headers=viewer, json=task).status_code == 403
+        assert client.post(stream_path, headers=dispatcher, json={"goal": " "}).status_code == 400
+        assert client.get(memory_path, headers=viewer, params={"category": "invalid"}).status_code == 400
+        assert client.post(memory_path, headers=dispatcher,
+                           json={**rule, "metric_threshold": {**threshold, "operator": "<"}}).status_code == 400
+
+        listed = client.get(memory_path, headers=viewer)
+        if listed.status_code == 503:
+            coverage[memory_path] = "503 (runner unavailable)"
+            memory_id = None
+        else:
+            assert listed.status_code == 200 and listed.json()["memories"] == []
+            created = client.post(memory_path, headers=dispatcher, json=rule)
+            assert created.status_code == 201, created.text
+            memory = created.json()["memory"]
+            memory_id = memory["id"]
+            path = f"{memory_path}/{memory_id}"
+            assert memory["source"] == "test-memory" and memory["enabled"]
+            assert all(memory[field] == value for field, value in rule.items())
+            assert client.get(memory_path, headers=viewer, params={"category": "episodic"}).json()["memories"] == []
+            assert client.patch(path, headers=viewer, json={"enabled": False}).status_code == 403
+            assert client.patch(path, headers=dispatcher, json={}).status_code == 400
+            changed = client.patch(path, headers=dispatcher, json={"content": rule["content"] + " 已复核。", "enabled": False})
+            assert changed.status_code == 200 and changed.json()["memory"]["content"].endswith("已复核。")
+            assert changed.json()["memory"]["enabled"] is False
+            assert client.get(memory_path, headers=viewer, params={"enabled_only": True}).json()["memories"] == []
+            assert client.get(memory_path, headers=viewer).json()["memories"] == [changed.json()["memory"]]
+            assert client.patch(path, headers=dispatcher, json={"enabled": True}).json()["memory"]["enabled"]
+            coverage[memory_path] = "end-to-end"
+
+        response = client.post(stream_path, headers=dispatcher, json=task)
+        if response.status_code == 503:
+            coverage[stream_path] = "503 (runner unavailable)"
+        else:
+            assert response.status_code == 200, response.text
+            assert response.headers["content-type"].startswith("text/event-stream")
+            assert response.headers["x-accel-buffering"] == "no"
+            events = decode_named_events(response.text)
+            assert events[0]["type"] == "plan_update" and events[-1]["type"] == "done", events[-1]
+            assert {e["type"] for e in events} == {
+                "plan_update", "stage_update", "reasoning_delta", "finding", "section_ready", "done",
+            }
+            report = events[-1]["result"]
+            assert report["goal"] == goal and report["mode"] == "local" and len(report["sections"]) == 6
+            assert len(report["evidence_cells"]) >= 4 and all(step["status"] == "done" for step in report["plan"])
+            if memory_id:
+                assert memory_id in {item["id"] for item in report["applied_memories"]}
+                assert any(f["id"].startswith("F-MEM-") and f["metrics"]["threshold_kv"] == 10.65
+                           and f["evidence_cells"] for f in report["findings"])
+            listed_reports = client.get(reports_path, headers=viewer)
+            report_id = report["report_id"]
+            assert listed_reports.status_code == 200 and listed_reports.json()["reports"][0]["report_id"] == report_id
+            export_path = f"{reports_path}/{report_id}/export"
+            markdown = client.get(export_path, headers=viewer)
+            html = client.get(export_path, headers=viewer, params={"format": "html"})
+            assert markdown.status_code == html.status_code == 200
+            assert markdown.headers["content-type"].startswith("text/markdown") and markdown.text == report["markdown"]
+            assert html.headers["content-type"].startswith("text/html") and "@media print" in html.text
+            assert "&lt;b&gt;验收样例&lt;/b&gt;" in html.text and "<b>验收样例</b>" not in html.text
+            for download, extension in ((markdown, "md"), (html, "html")):
+                assert download.headers["content-disposition"].startswith("attachment;")
+                assert f"{report_id}.{extension}" in download.headers["content-disposition"]
+            assert client.get(export_path, headers=viewer, params={"format": "pdf"}).status_code == 400
+            assert client.get(missing_report, headers=viewer).status_code == 404
+            coverage[stream_path] = "end-to-end"
+            coverage[reports_path] = ["md", "html"]
+
+        if memory_id:
+            assert client.delete(path, headers=viewer).status_code == 403
+            assert client.delete(path, headers=dispatcher).json()["deleted"] is True
+            assert client.delete(path, headers=dispatcher).status_code == 404
+            assert client.patch(path, headers=dispatcher, json={"enabled": False}).status_code == 404
+            assert client.get(memory_path, headers=viewer).json()["memories"] == []
+    return coverage
 
 
 def main():
@@ -256,6 +367,7 @@ def main():
                 assert "/api/powerflow/sensitivity-voi" in flow_bundle and "参数灵敏度龙卷风图" in flow_bundle
             sensitivity = verify_sensitivity_voi(server.app)
             autonomous_endpoints = verify_autonomous_endpoints(server.app)
+            research_endpoints = verify_memory_and_research_endpoints(server.app)
 
             # 2. /api/dates
             dates = fetch_json(base, "/api/dates")
@@ -539,6 +651,7 @@ def main():
                 "static_assets_verified": len(assets),
                 "sensitivity_voi_items_verified": len(sensitivity["voi_ranking"]),
                 "autonomous_endpoints": autonomous_endpoints,
+                "research_endpoints": research_endpoints,
                 "cabinets_cards": len(health["cabinets_cards"]),
                 "diagrams_verified": len(diagrams),
                 "review_feedback_loop_verified": True,

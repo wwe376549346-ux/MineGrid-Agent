@@ -32,13 +32,13 @@ import {Spinner} from "@astryxdesign/core/Spinner";
 import {apiRequest, authHeaders, cellHref} from "./api.js";
 import {AgentStreamArtifacts, AgentStreamStyles, applyAgentEvent, emptyAgentStream} from "./AgentStreamArtifacts.jsx";
 
-async function consumeAgentStream(response, onEvent) {
+export async function consumeAgentStream(response, onEvent, label = "自主深度 Agent") {
   if (!response.ok) {
     const payload = await response.json().catch(() => null);
     throw new Error(payload?.error || `请求失败 (${response.status})`);
   }
   if (!response.body || !response.headers.get("content-type")?.includes("text/event-stream")) {
-    throw new Error("自主深度 Agent 未返回事件流。");
+    throw new Error(`${label}未返回事件流。`);
   }
 
   const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
@@ -48,7 +48,7 @@ async function consumeAgentStream(response, onEvent) {
   try {
     while (true) {
       const {value, done} = await reader.read();
-      if (done) throw new Error("连接已提前结束，未收到自主 Agent 的完成事件。");
+      if (done) throw new Error(`连接已提前结束，未收到${label}的完成事件。`);
       const lines = (buffer + value).split(/\r?\n/);
       buffer = lines.pop();
       for (const line of lines) {
@@ -61,7 +61,7 @@ async function consumeAgentStream(response, onEvent) {
             const payload = JSON.parse(data.join("\n"));
             const event = {...payload, type: eventName || payload.type};
             if (event.type === "error") {
-              throw new Error(event.error ?? event.message ?? event.data?.error ?? "自主深度 Agent 执行中断。");
+              throw new Error(event.error ?? event.message ?? event.data?.error ?? `${label}执行中断。`);
             }
             onEvent(event);
             if (event.type === "done") return;
@@ -77,7 +77,19 @@ async function consumeAgentStream(response, onEvent) {
   }
 }
 
-function AutonomousTurn({turn, onTextProgress}) {
+function SaveReplyMemory({question, content, cabinet, onOpenMemory}) {
+  if (!content) return null;
+  return <button type="button" className="chat-artifact-btn" onClick={() => onOpenMemory({
+    category: "episodic",
+    title: question.slice(0, 140),
+    content: content.slice(0, 2000),
+    scope_cabinet: cabinet ?? "",
+  })}>
+    <BookmarkPlus size={13} /> 写入长期记忆
+  </button>;
+}
+
+function AutonomousTurn({turn, onTextProgress, onOpenMemory}) {
   return <div className="chat-turn">
     <div className="chat-user-row"><div className="chat-user-bubble">{turn.question}</div></div>
     <div className="chat-agent-row">
@@ -87,6 +99,9 @@ function AutonomousTurn({turn, onTextProgress}) {
         {turn.stream.status === "running" && <div className="duty-progress" role="status"><Spinner size="sm" /> 正在分析</div>}
         {turn.stream.status === "stopped" && <small className="muted">已停止接收</small>}
         {turn.error && <div className="chat-error-box" role="alert">{turn.error}</div>}
+        {turn.stream.status === "done" && <div className="chat-artifact-actions">
+          <SaveReplyMemory question={turn.question} content={turn.stream.content} onOpenMemory={onOpenMemory} />
+        </div>}
       </div>
     </div>
   </div>;
@@ -616,7 +631,7 @@ function HypothesisTrace({report, onCompareAdjacent}) {
   </section>;
 }
 
-function AgentTurnMessage({turn, sessionId, health, onSyncCanvas, onOpenCabinet, onReviewsUpdate, onQuickFollowUp, canCompareAdjacent}) {
+function AgentTurnMessage({turn, sessionId, health, onSyncCanvas, onOpenCabinet, onReviewsUpdate, onQuickFollowUp, canCompareAdjacent, onOpenMemory}) {
   const [showMore, setShowMore] = useState(false);
   const [memOpen, setMemOpen] = useState(false);
   const [memSaved, setMemSaved] = useState(false);
@@ -916,6 +931,8 @@ function AgentTurnMessage({turn, sessionId, health, onSyncCanvas, onOpenCabinet,
               <Layers size={12} />
               <span>主接线定位</span>
             </button>
+            <SaveReplyMemory question={turn.question} content={rep.summary || res.markdown}
+              cabinet={res.context_snapshot?.active_anchors?.cabinets?.[0]} onOpenMemory={onOpenMemory} />
             <details className="duty-reply-more">
               <summary className="chat-artifact-btn">更多 <ChevronDown size={13} /></summary>
               <div className="duty-reply-menu">
@@ -969,6 +986,7 @@ export function AgentCopilotPane({
   onSyncCanvas,
   onOpenCabinet,
   onReviewsUpdate,
+  onOpenMemory,
   sidebarOpen,
   chatVisible,
   onShowChat,
@@ -1615,7 +1633,7 @@ export function AgentCopilotPane({
         ) : (
           <div className="duty-thread-column">
             {turns.map((t, index) => t.stream ? (
-              <AutonomousTurn key={t.id} turn={t} onTextProgress={followTypedAnswer} />
+              <AutonomousTurn key={t.id} turn={t} onTextProgress={followTypedAnswer} onOpenMemory={onOpenMemory} />
             ) : (
               <AgentTurnMessage
                 key={t.id}
@@ -1625,6 +1643,7 @@ export function AgentCopilotPane({
                 onSyncCanvas={onSyncCanvas}
                 onOpenCabinet={onOpenCabinet}
                 onReviewsUpdate={onReviewsUpdate}
+                onOpenMemory={onOpenMemory}
                 onQuickFollowUp={q => sendQuestion(q)}
                 canCompareAdjacent={!loading && index === turns.length - 1}
               />

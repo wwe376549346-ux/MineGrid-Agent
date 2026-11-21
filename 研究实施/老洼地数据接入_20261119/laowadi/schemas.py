@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Any, Literal
+import json
+import math
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -63,6 +65,53 @@ class AgentStreamRequest(BaseModel):
 class SandboxRunRequest(BaseModel):
     code: str = Field(min_length=1, max_length=16_000, pattern=r"\S")
     timeout_s: float = Field(default=6.0, ge=0.5, le=15.0)
+
+
+MemoryCategory = Literal["semantic", "episodic", "procedural"]
+MemoryContent = Annotated[str, Field(min_length=1, max_length=2000, pattern=r"\S")]
+MemoryTag = Annotated[str, Field(min_length=1, max_length=40, pattern=r"\S")]
+
+
+class MemoryCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True, allow_inf_nan=False)
+
+    category: MemoryCategory
+    title: str = Field(min_length=1, max_length=140, pattern=r"\S")
+    content: MemoryContent
+    scope_cabinet: str | None = Field(default=None, min_length=1, max_length=24)
+    metric_threshold: dict[str, Any] | Annotated[str, Field(max_length=240)] | float | None = None
+    tags: list[MemoryTag] = Field(default_factory=list, max_length=12)
+
+    @field_validator("metric_threshold")
+    @classmethod
+    def validate_metric_threshold(cls, threshold):
+        if isinstance(threshold, dict):
+            if len(json.dumps(threshold, allow_nan=False, ensure_ascii=False)) > 2000:
+                raise ValueError("阈值配置最多 2000 字符。")
+            if str(threshold.get("metric", "")).strip().lower() in {"uab", "voltage", "电压"}:
+                try:
+                    value = float(threshold["value"])
+                except (KeyError, TypeError, ValueError) as exc:
+                    raise ValueError("电压上限需要有效的 kV 数值。") from exc
+                if not math.isfinite(value) or value <= 0 or isinstance(threshold["value"], bool):
+                    raise ValueError("电压上限需要大于零的 kV 数值。")
+                if threshold.get("operator", ">") != ">" or threshold.get("unit", "kV") != "kV":
+                    raise ValueError("当前专项排查仅支持以 kV 表示的严格电压上限。")
+        return threshold
+
+
+class MemoryPatchRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    enabled: bool | None = None
+    content: MemoryContent | None = None
+
+
+class DeepResearchRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    goal: str = Field(min_length=1, max_length=1200, pattern=r"\S")
+    mode: Literal["auto", "local", "deepseek"] = "auto"
 
 
 class SessionIdRequest(BaseModel):

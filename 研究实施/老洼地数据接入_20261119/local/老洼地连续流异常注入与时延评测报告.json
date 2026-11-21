@@ -4,10 +4,10 @@
     "frames_count": 168,
     "points_total": 16800,
     "p50_ms": 0.0024,
-    "p95_ms": 0.0033,
-    "p99_ms": 0.0056,
-    "max_ms": 0.0104,
-    "mean_ms": 0.0024
+    "p95_ms": 0.0039,
+    "p99_ms": 0.0062,
+    "max_ms": 0.0116,
+    "mean_ms": 0.0025
   },
   "baseline_alerts_total": 323,
   "total_tests": 4,

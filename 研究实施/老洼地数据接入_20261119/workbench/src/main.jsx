@@ -4,6 +4,7 @@ import {
   Activity,
   ArrowLeft,
   BarChart3,
+  BookOpen,
   ChevronDown,
   ClipboardCheck,
   Cpu,
@@ -13,6 +14,7 @@ import {
   Moon,
   PanelLeftClose,
   PanelLeftOpen,
+  Search,
   ShieldCheck,
   Sun,
 } from "lucide-react";
@@ -32,6 +34,8 @@ import {apiRequest} from "./api.js";
 import {CabinetDrawer} from "./CabinetDrawer.jsx";
 
 const CabinetView = lazy(() => import("./CabinetView.jsx").then(module => ({default: module.CabinetView})));
+const DeepInvestigationView = lazy(() => import("./DeepInvestigationView.jsx").then(module => ({default: module.DeepInvestigationView})));
+const MemoryPlaybookDrawer = lazy(() => import("./MemoryPlaybookDrawer.jsx").then(module => ({default: module.MemoryPlaybookDrawer})));
 const GovernanceMultiAgentPanel = lazy(() => import("./GovernanceMultiAgentPanel.jsx").then(module => ({default: module.GovernanceMultiAgentPanel})));
 const HealthView = lazy(() => import("./HealthView.jsx").then(module => ({default: module.HealthView})));
 const IncidentTicketPanel = lazy(() => import("./IncidentTicketPanel.jsx").then(module => ({default: module.IncidentTicketPanel})));
@@ -43,6 +47,7 @@ const DUTY_TABS = [
   {id: "topology", Icon: Layers, label: "主接线巡检"},
   {id: "tickets", Icon: ClipboardCheck, label: "事件工单"},
   {id: "cabinet", Icon: Activity, label: "柜级档案"},
+  {id: "deep-research", Icon: Search, label: "深度排查"},
 ];
 
 const RESEARCH_TABS = [
@@ -71,6 +76,8 @@ function App() {
   const [drawerCabinet, setDrawerCabinet] = useState(null);
   const [agentReplayIndex, setAgentReplayIndex] = useState(null);
   const [pendingQuestion, setPendingQuestion] = useState("");
+  const [memoryPlaybook, setMemoryPlaybook] = useState(null);
+  const [researchVisited, setResearchVisited] = useState(false);
 
   useEffect(() => {
     document.documentElement.dataset.theme = darkMode ? "dark" : "light";
@@ -150,6 +157,7 @@ function App() {
       }));
     }
     if (hint.canvas && ALL_TABS.some(t => t.id === hint.canvas)) {
+      if (hint.canvas === "deep-research") setResearchVisited(true);
       setCanvasTab(hint.canvas);
       finishNavigation();
       if (hint.canvas === "cabinet") setCabinetSubTab("profile");
@@ -177,6 +185,7 @@ function App() {
       className="duty-side-link"
       aria-current={canvasTab === id ? "page" : undefined}
       onClick={() => {
+        if (id === "deep-research") setResearchVisited(true);
         setCanvasTab(id);
         finishNavigation();
       }}
@@ -207,6 +216,8 @@ function App() {
         </div>
         <div className="duty-topbar-trailing">
           <span className="duty-source-mode"><span aria-hidden="true" />历史回放</span>
+          <button type="button" className="duty-back-link" aria-label="长期记忆管理"
+            onClick={() => setMemoryPlaybook({draft: null})}><BookOpen size={16} /> 长期记忆</button>
           <button
             type="button"
             className="duty-icon-button"
@@ -227,6 +238,7 @@ function App() {
         onSyncCanvas={syncCanvasFromAgent}
         onOpenCabinet={openCabinetDrawer}
         onReviewsUpdate={handleReviewsUpdate}
+        onOpenMemory={draft => setMemoryPlaybook({draft})}
         sidebarOpen={sidebarOpen}
         chatVisible={!activeTab}
         onShowChat={showChat}
@@ -250,7 +262,7 @@ function App() {
         </>}
       />
 
-      {activeTab && <main className="agent-artifact-canvas duty-workspace" aria-label={activeTab.label}>
+      {activeTab && canvasTab !== "deep-research" && <main className="agent-artifact-canvas duty-workspace" aria-label={activeTab.label}>
         {error ? (
           <Card padding={24} className="center-state">
             <p role="alert">{error}</p>
@@ -323,6 +335,17 @@ function App() {
           {canvasTab === "eval" && <SupplementEvalView section="eval" />}
         </Suspense>}
       </main>}
+
+      {researchVisited && <main className="agent-artifact-canvas duty-workspace" aria-label="深度排查"
+        style={canvasTab === "deep-research" ? undefined : {display: "none"}}>
+        <Suspense fallback={<div className="duty-loading" role="status"><Spinner size="sm" />正在打开深度排查</div>}>
+          <DeepInvestigationView hasModel={Boolean(catalog?.model)} />
+        </Suspense>
+      </main>}
+
+      {memoryPlaybook && <Suspense fallback={null}>
+        <MemoryPlaybookDrawer draft={memoryPlaybook.draft} onClose={() => setMemoryPlaybook(null)} />
+      </Suspense>}
 
       <CabinetDrawer
         cabinet={drawerCabinet}

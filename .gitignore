@@ -48,6 +48,10 @@ yarn-error.log*
 研究实施/老洼地数据接入_20261119/local/laowadi_checkpoints.sqlite3*
 研究实施/老洼地数据接入_20261119/local/dag_checkpoints.sqlite3*
 研究实施/老洼地数据接入_20261119/local/laowadi_enterprise.sqlite3*
+研究实施/老洼地数据接入_20261119/local/laowadi_memory.sqlite3*
+研究实施/老洼地数据接入_20261119/local/laowadi_live.sqlite3*
+研究实施/老洼地数据接入_20261119/local/laowadi_actions.sqlite3*
+研究实施/老洼地数据接入_20261119/local/deep_reports/
 研究实施/老洼地数据接入_20261119/local/backups/
 研究实施/老洼地数据接入_20261119/local/logs/
 *.sqlite3-wal

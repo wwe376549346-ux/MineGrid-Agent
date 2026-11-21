@@ -17,6 +17,7 @@ from laowadi.context import DiagnosisSession, compress_tool_result, extract_quer
 from laowadi.diag_tools import AUTONOMOUS_TOOL_SCHEMAS, DiagnosticToolbox
 from laowadi.llm import ChatClient, LLMError
 from laowadi.local_router import _infer_ui_artifact_hint, _summarize_tool_result
+from laowadi.memory_store import format_memories_for_prompt, retrieve_relevant_memories
 from laowadi.security import inspect_prompt_security
 from laowadi.verifier import _lookup_cell_db_record
 
@@ -587,6 +588,7 @@ def run_autonomous_agent(
     client: ChatClient | None = None,
     session: DiagnosisSession | None = None,
     max_steps: int = 8,
+    memory_db_path=None,
     on_event=None,
 ) -> dict[str, Any]:
     """Run the LLM-First Autonomous Investigation Agent with live SSE callbacks."""
@@ -594,6 +596,12 @@ def run_autonomous_agent(
     toolbox = DiagnosticToolbox(archive)
     known_cabs = {num for _, num in archive.devices}
     anchors = extract_query_anchors(question, known_cabs)
+    applied_memories = retrieve_relevant_memories(
+        question,
+        cabinets=anchors.get("cabinets"),
+        limit=6,
+        db_path=memory_db_path,
+    )
 
     def emit(ev_type: str, **payload):
         if on_event is not None:
@@ -632,16 +640,24 @@ def run_autonomous_agent(
     # 2. Offline / local autonomous mode
     if client is None:
         local_out = _run_local_autonomous(archive, toolbox, question, anchors, emit)
-        badge = _compute_verification_badge(archive, local_out["answer_markdown"], local_out["tool_trace"], local_out["code_runs"])
+        answer_md = local_out["answer_markdown"]
+        if applied_memories:
+            mem_note = "\n\n### 已参考生效长期记忆\n" + "\n".join(
+                f"- **[{m['category']}] {m['title']}**：{m['content']}" for m in applied_memories[:4]
+            )
+            answer_md += mem_note
+            emit("content_delta", delta=mem_note, text=answer_md)
+        badge = _compute_verification_badge(archive, answer_md, local_out["tool_trace"], local_out["code_runs"])
         emit("verification_badge", **badge)
         hint = _infer_ui_artifact_hint(question, anchors, local_out["tool_trace"])
         res = {
             "status": "ok",
             "mode": "autonomous_local",
             "model": None,
-            "answer_markdown": local_out["answer_markdown"],
+            "answer_markdown": answer_md,
             "plan": local_out["plan"],
             "artifacts": local_out["artifacts"],
+            "applied_memories": applied_memories,
             "tool_trace": [
                 {"tool": t["tool"], "arguments": t["arguments"], "summary": _summarize_tool_result(t["tool"], t["result"]) if t["tool"] != "run_python_analysis" else f"沙盒 {t['result'].get('status')}"}
                 for t in local_out["tool_trace"]
@@ -654,7 +670,11 @@ def run_autonomous_agent(
         return res
 
     # 3. Real LLM-First ReAct + Dynamic Plan + Sandbox Streaming Loop
-    messages: list[dict[str, Any]] = [{"role": "system", "content": AUTONOMOUS_SYSTEM_PROMPT}]
+    sys_prompt = AUTONOMOUS_SYSTEM_PROMPT
+    mem_block = format_memories_for_prompt(applied_memories)
+    if mem_block:
+        sys_prompt = f"{sys_prompt}\n\n{mem_block}"
+    messages: list[dict[str, Any]] = [{"role": "system", "content": sys_prompt}]
     if session is not None:
         for m in session.format_history_messages(question, max_turns=4):
             messages.append(m)
@@ -829,6 +849,7 @@ def run_autonomous_agent(
         "answer_markdown": final_answer,
         "plan": plan_steps,
         "artifacts": artifacts,
+        "applied_memories": applied_memories,
         "tool_trace": [
             {
                 "tool": t["tool"],
