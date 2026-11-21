@@ -1,0 +1,10 @@
+# Slim Enterprise Database Image: PostgreSQL 16 + TimescaleDB 2.x + pgvector v0.8.0 (Alpine)
+FROM timescale/timescaledb:latest-pg16
+
+RUN set -eux; \
+    apk add --no-cache --virtual .build-deps git build-base; \
+    git clone --branch v0.8.0 --depth 1 https://github.com/pgvector/pgvector.git /tmp/pgvector; \
+    make -C /tmp/pgvector OPTFLAGS="" with_llvm=no PG_CONFIG=/usr/local/bin/pg_config; \
+    make -C /tmp/pgvector install with_llvm=no PG_CONFIG=/usr/local/bin/pg_config; \
+    rm -rf /tmp/pgvector; \
+    apk del .build-deps

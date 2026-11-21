@@ -1,0 +1,19 @@
+# Build context hygiene for Laowadi Enterprise Agent
+.git
+.gitignore
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.venv*
+venv/
+workbench/node_modules
+workbench/.vite
+*.log
+.DS_Store
+local/
+.env
+.env.*

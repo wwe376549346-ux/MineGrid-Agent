@@ -1,0 +1,564 @@
+{
+  "baseline_v1": {
+    "run_id": "LWS-v1-49db117d0676",
+    "version": 1,
+    "parent_run_id": null,
+    "mine_id": "laowadi",
+    "station": "S35",
+    "snapshot": {
+      "reports": [
+        {
+          "day": "2026-11-10",
+          "filename": "1110.xls",
+          "sheet": "New Sheet1",
+          "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea"
+        },
+        {
+          "day": "2026-11-11",
+          "filename": "1111.xls",
+          "sheet": "New Sheet1",
+          "sha256": "ce801bf35f36d893d24469673b6dbdba21d63b3b3b0e06f222f4a0817a21e6f9"
+        },
+        {
+          "day": "2026-11-12",
+          "filename": "1112.xls",
+          "sheet": "New Sheet1",
+          "sha256": "2ddbb12a5f5fdbe16b0132bb0bc0599c98278277734249a687c6dd41122698b2"
+        },
+        {
+          "day": "2026-11-13",
+          "filename": "1113.xls",
+          "sheet": "New Sheet1",
+          "sha256": "2ea50206fd5ac4d071046eb35e4023955920b520fafa4c8ccd668843cf652acc"
+        },
+        {
+          "day": "2026-11-14",
+          "filename": "1114.xls",
+          "sheet": "New Sheet1",
+          "sha256": "6f057a094fb1ca57476ae7c1e407a5089b71d702ecb56e826e57a2f1b792b630"
+        },
+        {
+          "day": "2026-11-15",
+          "filename": "1115.xls",
+          "sheet": "New Sheet1",
+          "sha256": "f54f8d0eb4e64cb0758fd4c6113f10ba55a6597bb354ee08663f8b2998a95349"
+        },
+        {
+          "day": "2026-11-16",
+          "filename": "1116.xls",
+          "sheet": "New Sheet1",
+          "sha256": "1a50c071c9d2bf88ad383578bad1c431584ad227a4b12a380c6ab2f9657689b4"
+        }
+      ],
+      "diagrams": [
+        {
+          "filename": "35KV变电所.png",
+          "captured_at": "2026-11-17 20:29:01",
+          "sha256": "cfbf052ae1068b299e4462c953ad9a628a183f22672794d6abf1ac13fc6dcab5"
+        },
+        {
+          "filename": "中央变电所.png",
+          "captured_at": "2026-11-17 20:29:25",
+          "sha256": "8cebfebf7b3bcfbfe9508f0e9fe8dca7691fe987216b2e93bba111de1a7454e2"
+        }
+      ],
+      "catalog_sha256": "0cce954f18be70a1834c503f2120aac6584647df51f1396c1cd7cfc9ab135d6f",
+      "snapshot_sha256": "d4c7fec30b335d89101da716722836439468d1791e241f8b61a8bbcec0bbc5b0"
+    },
+    "supplement_applied": null,
+    "items": [
+      {
+        "id": "V01",
+        "item_kind": "single_incomer_thermal",
+        "title": "35 kV 单进线带双主变期间（2026-11-13 07:00–19:00）303 柜与主变热稳定裕度核验",
+        "target_objects": [
+          "S35.303",
+          "S35.306",
+          "S35.311",
+          "S35.312"
+        ],
+        "time_window": "2026-11-13 07:00:00 至 2026-11-13 19:00:00",
+        "status": "needs_supplement",
+        "recalculated": false,
+        "reused_from_run": null,
+        "param_bindings": {
+          "active_incomer": "303",
+          "transformer_name": "1号主变（311 → 1005）",
+          "rated_current_key": "303_rated_current_a",
+          "transformer_kva_key": "main_transformer_rated_kva",
+          "derating_key": "ambient_derating_factor",
+          "switch_log_key": "switch_log_20261113"
+        },
+        "confirmed_local_facts": {
+          "single_incomer_hours": 13,
+          "active_incomer": "303",
+          "zero_incomer": "306",
+          "peak_p_kw": 5710.12,
+          "peak_i_a": 100.06,
+          "s_peak_kva": 6270.27,
+          "tr_peak_est_kva": 4722.31,
+          "p303_peak_kw": 5710.12,
+          "i303_peak_a": 100.06,
+          "s303_15h_kva": 6270.27,
+          "p311_07h_kw": 4391.75,
+          "s311_07h_est_kva": 4722.31,
+          "evidence_cells": [
+            "1113.xls / New Sheet1!H11",
+            "1113.xls / New Sheet1!D19",
+            "1113.xls / New Sheet1!C22",
+            "1113.xls / New Sheet1!L11"
+          ]
+        },
+        "required_dependencies": [
+          "303_rated_current_a",
+          "main_transformer_rated_kva",
+          "ambient_derating_factor",
+          "switch_log_20261113"
+        ],
+        "missing_dependencies": [
+          "303_rated_current_a",
+          "main_transformer_rated_kva",
+          "ambient_derating_factor",
+          "switch_log_20261113"
+        ],
+        "conditional_judgment": null,
+        "explanation": "已证实 303 柜在 2026-11-13 窗口期峰值电流 100.06 A、峰值有功 5710.12 kW；因缺少 303 额定载流量、主变额定容量、环境降容系数及同期母联开关日志，暂不出具是否越限的结论。"
+      },
+      {
+        "id": "V02",
+        "item_kind": "dual_feeder_n1",
+        "title": "1009/1010 下井双回路供电结构与 N-1 备用载流能力核验（GB/T 50417-2017 3.0.3）",
+        "target_objects": [
+          "S35.1009",
+          "S35.1010",
+          "C1535.1101",
+          "C1535.1201"
+        ],
+        "time_window": "2026-11-10 至 2026-11-16（联合峰值时刻 2026-11-10 06:00:00）",
+        "status": "needs_supplement",
+        "recalculated": false,
+        "reused_from_run": null,
+        "param_bindings": {
+          "feeder_a": "1009",
+          "feeder_b": "1010",
+          "down_station": "C1535",
+          "rated_current_key": "1009_1010_rated_current_a",
+          "derating_key": "ambient_derating_factor",
+          "tie_switch_key": "c1535_tie_switch_mode"
+        },
+        "confirmed_local_facts": {
+          "diagram_links_confirmed": [
+            "S35.1009 -> C1535.1101",
+            "S35.1010 -> C1535.1201"
+          ],
+          "different_bus_segments_confirmed": true,
+          "peak_combined_time": "2026-11-10 06:00:00",
+          "i_feeder_a_at_peak_a": 14.48,
+          "i_feeder_b_at_peak_a": 145.21,
+          "i1009_at_peak_a": 14.48,
+          "i1010_at_peak_a": 145.21,
+          "combined_current_a": 159.69,
+          "combined_power_kw": 1495.89,
+          "evidence_cells": [
+            "1110.xls / New Sheet1!BC10",
+            "1110.xls / New Sheet1!BK10",
+            "35KV变电所.png",
+            "中央变电所.png"
+          ]
+        },
+        "required_dependencies": [
+          "1009_1010_rated_current_a",
+          "ambient_derating_factor",
+          "c1535_tie_switch_mode"
+        ],
+        "missing_dependencies": [
+          "1009_1010_rated_current_a",
+          "ambient_derating_factor",
+          "c1535_tie_switch_mode"
+        ],
+        "conditional_judgment": null,
+        "explanation": "已由图模拓扑证实 1009 与 1010 接至 C1535 1101/1201，同期联合最大电流 159.69 A（2026-11-10 06:00:00）；但缺下井电缆额定载流量、降容系数与井下 1200 联络开关状态，暂不出具 N-1 载流合格结论。"
+      },
+      {
+        "id": "V03",
+        "item_kind": "polarity_metering",
+        "title": "1018 二采区II回持续负有功与负功率因数二次接线核验",
+        "target_objects": [
+          "S35.1018"
+        ],
+        "time_window": "2026-11-10 至 2026-11-16（负有功 168 整点）",
+        "status": "needs_supplement",
+        "recalculated": false,
+        "reused_from_run": null,
+        "param_bindings": {
+          "cabinet": "1018",
+          "wiring_audit_key": "1018_wiring_audit"
+        },
+        "confirmed_local_facts": {
+          "cabinet": "1018",
+          "negative_p_hours": 168,
+          "negative_cos_hours": 168,
+          "min_p_kw": -104.88,
+          "min_cos": -0.52,
+          "three_phase_ratio_median": 0.367,
+          "evidence_cells": [
+            "1116.xls / New Sheet1!BX25",
+            "1112.xls / New Sheet1!BY23"
+          ]
+        },
+        "required_dependencies": [
+          "1018_wiring_audit"
+        ],
+        "missing_dependencies": [
+          "1018_wiring_audit"
+        ],
+        "conditional_judgment": null,
+        "explanation": "已证实 1018 柜共有 168 小时有功为负、168 小时功率因数为负且比例系数中位数 0.367；待现场补齐二次接线与 CT 极性实测记录后方可确诊。"
+      },
+      {
+        "id": "V04",
+        "item_kind": "lv_bus_conservation",
+        "title": "10 kV 母线进出线功率未闭合差额（54.0%）与未列回路核验",
+        "target_objects": [
+          "S35.1005",
+          "S35.1006"
+        ],
+        "time_window": "2026-11-10 至 2026-11-16",
+        "status": "needs_supplement",
+        "recalculated": false,
+        "reused_from_run": null,
+        "param_bindings": {
+          "lv_kv": 10,
+          "unlisted_key": "10kv_unlisted_feeders_kw",
+          "scale_key": "10kv_feeder_scale_factor"
+        },
+        "confirmed_local_facts": {
+          "lv_avg_kw": 5533.38,
+          "reported_feeders_avg_kw": 2547.78,
+          "unaccounted_avg_kw": 2985.6,
+          "unaccounted_pct": 54.0,
+          "sample_time": "2026-11-10 15:00:00",
+          "sample_1005_p_kw": 5780.68,
+          "sample_1006_p_kw": 4058.45,
+          "evidence_cells": [
+            "1110.xls / New Sheet1!X19",
+            "1110.xls / New Sheet1!AB19"
+          ]
+        },
+        "required_dependencies": [
+          "10kv_unlisted_feeders_kw",
+          "10kv_feeder_scale_factor"
+        ],
+        "missing_dependencies": [
+          "10kv_unlisted_feeders_kw",
+          "10kv_feeder_scale_factor"
+        ],
+        "conditional_judgment": null,
+        "explanation": "依据图模自动生成的 10 kV 母线守恒方程，主变低压侧（均值 5533.38 kW）与已列 10 kV 出线（均值 2547.78 kW）间存在 54.0% 平均差额；待补齐未列回路台账与 CT 倍率核实表后方可闭合母线守恒。"
+      }
+    ],
+    "summary": {
+      "total_items": 4,
+      "needs_supplement": 4,
+      "conditionally_satisfied": 0,
+      "conditionally_violated": 0,
+      "recalculated_items": 0,
+      "reused_items": 0
+    }
+  },
+  "supplemented_v2": {
+    "run_id": "LWS-v2-7a4ce891a1c7",
+    "version": 2,
+    "parent_run_id": "LWS-v1-49db117d0676",
+    "mine_id": "laowadi",
+    "station": "S35",
+    "snapshot": {
+      "reports": [
+        {
+          "day": "2026-11-10",
+          "filename": "1110.xls",
+          "sheet": "New Sheet1",
+          "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea"
+        },
+        {
+          "day": "2026-11-11",
+          "filename": "1111.xls",
+          "sheet": "New Sheet1",
+          "sha256": "ce801bf35f36d893d24469673b6dbdba21d63b3b3b0e06f222f4a0817a21e6f9"
+        },
+        {
+          "day": "2026-11-12",
+          "filename": "1112.xls",
+          "sheet": "New Sheet1",
+          "sha256": "2ddbb12a5f5fdbe16b0132bb0bc0599c98278277734249a687c6dd41122698b2"
+        },
+        {
+          "day": "2026-11-13",
+          "filename": "1113.xls",
+          "sheet": "New Sheet1",
+          "sha256": "2ea50206fd5ac4d071046eb35e4023955920b520fafa4c8ccd668843cf652acc"
+        },
+        {
+          "day": "2026-11-14",
+          "filename": "1114.xls",
+          "sheet": "New Sheet1",
+          "sha256": "6f057a094fb1ca57476ae7c1e407a5089b71d702ecb56e826e57a2f1b792b630"
+        },
+        {
+          "day": "2026-11-15",
+          "filename": "1115.xls",
+          "sheet": "New Sheet1",
+          "sha256": "f54f8d0eb4e64cb0758fd4c6113f10ba55a6597bb354ee08663f8b2998a95349"
+        },
+        {
+          "day": "2026-11-16",
+          "filename": "1116.xls",
+          "sheet": "New Sheet1",
+          "sha256": "1a50c071c9d2bf88ad383578bad1c431584ad227a4b12a380c6ab2f9657689b4"
+        }
+      ],
+      "diagrams": [
+        {
+          "filename": "35KV变电所.png",
+          "captured_at": "2026-11-17 20:29:01",
+          "sha256": "cfbf052ae1068b299e4462c953ad9a628a183f22672794d6abf1ac13fc6dcab5"
+        },
+        {
+          "filename": "中央变电所.png",
+          "captured_at": "2026-11-17 20:29:25",
+          "sha256": "8cebfebf7b3bcfbfe9508f0e9fe8dca7691fe987216b2e93bba111de1a7454e2"
+        }
+      ],
+      "catalog_sha256": "0cce954f18be70a1834c503f2120aac6584647df51f1396c1cd7cfc9ab135d6f",
+      "snapshot_sha256": "d4c7fec30b335d89101da716722836439468d1791e241f8b61a8bbcec0bbc5b0"
+    },
+    "supplement_applied": {
+      "source_doc": "老洼地机电科参数与操作核实单-20261119（示例核验批次）",
+      "target_object": "S35",
+      "effective_window": "",
+      "archive_version": "d4c7fec30b335d89",
+      "parameters": {
+        "303_rated_current_a": 200.0,
+        "main_transformer_rated_kva": 6300.0,
+        "ambient_derating_factor": 0.9,
+        "switch_log_20261113": "35kV母联300开关合位，306柜07:00-19:00计划停电检修",
+        "1009_1010_rated_current_a": 300.0,
+        "c1535_tie_switch_mode": "1535中央变电所1200联络开关热备用可自动切换"
+      },
+      "packet_sha256": "4554bd8451dac722044c75ca20005e35f4267c4a647cb95fd31fd8d86df7157f"
+    },
+    "items": [
+      {
+        "id": "V01",
+        "item_kind": "single_incomer_thermal",
+        "title": "35 kV 单进线带双主变期间（2026-11-13 07:00–19:00）303 柜与主变热稳定裕度核验",
+        "target_objects": [
+          "S35.303",
+          "S35.306",
+          "S35.311",
+          "S35.312"
+        ],
+        "time_window": "2026-11-13 07:00:00 至 2026-11-13 19:00:00",
+        "status": "conditionally_satisfied",
+        "recalculated": true,
+        "reused_from_run": null,
+        "param_bindings": {
+          "active_incomer": "303",
+          "transformer_name": "1号主变（311 → 1005）",
+          "rated_current_key": "303_rated_current_a",
+          "transformer_kva_key": "main_transformer_rated_kva",
+          "derating_key": "ambient_derating_factor",
+          "switch_log_key": "switch_log_20261113"
+        },
+        "confirmed_local_facts": {
+          "single_incomer_hours": 13,
+          "active_incomer": "303",
+          "zero_incomer": "306",
+          "peak_p_kw": 5710.12,
+          "peak_i_a": 100.06,
+          "s_peak_kva": 6270.27,
+          "tr_peak_est_kva": 4722.31,
+          "p303_peak_kw": 5710.12,
+          "i303_peak_a": 100.06,
+          "s303_15h_kva": 6270.27,
+          "p311_07h_kw": 4391.75,
+          "s311_07h_est_kva": 4722.31,
+          "evidence_cells": [
+            "1113.xls / New Sheet1!H11",
+            "1113.xls / New Sheet1!D19",
+            "1113.xls / New Sheet1!C22",
+            "1113.xls / New Sheet1!L11"
+          ]
+        },
+        "required_dependencies": [
+          "303_rated_current_a",
+          "main_transformer_rated_kva",
+          "ambient_derating_factor",
+          "switch_log_20261113"
+        ],
+        "missing_dependencies": [],
+        "conditional_judgment": {
+          "source_doc": "老洼地机电科参数与操作核实单-20261119（示例核验批次）",
+          "switch_log_verified": "35kV母联300开关合位，306柜07:00-19:00计划停电检修",
+          "effective_current_limit_a": 180.0,
+          "peak_current_a": 100.06,
+          "current_load_ratio_pct": 55.59,
+          "current_margin_pct": 44.41,
+          "transformer_rated_kva": 6300.0,
+          "transformer_peak_kva": 4722.31,
+          "transformer_load_ratio_pct": 74.96,
+          "transformer_margin_pct": 25.04
+        },
+        "explanation": "依据补证（老洼地机电科参数与操作核实单-20261119（示例核验批次）：35kV母联300开关合位，306柜07:00-19:00计划停电检修；303 额定 200.0 A × 降容 0.9 = 有效限值 180.0 A；主变额定 6300.0 kVA）局部复算：单进线窗口期 303 峰值电流 100.06 A（负载率 55.59%，裕度 +44.41%），主变峰值视在功率约 4722.31 kVA（负载率 74.96%，裕度 +25.04%），判定为【条件满足】。"
+      },
+      {
+        "id": "V02",
+        "item_kind": "dual_feeder_n1",
+        "title": "1009/1010 下井双回路供电结构与 N-1 备用载流能力核验（GB/T 50417-2017 3.0.3）",
+        "target_objects": [
+          "S35.1009",
+          "S35.1010",
+          "C1535.1101",
+          "C1535.1201"
+        ],
+        "time_window": "2026-11-10 至 2026-11-16（联合峰值时刻 2026-11-10 06:00:00）",
+        "status": "conditionally_satisfied",
+        "recalculated": true,
+        "reused_from_run": null,
+        "param_bindings": {
+          "feeder_a": "1009",
+          "feeder_b": "1010",
+          "down_station": "C1535",
+          "rated_current_key": "1009_1010_rated_current_a",
+          "derating_key": "ambient_derating_factor",
+          "tie_switch_key": "c1535_tie_switch_mode"
+        },
+        "confirmed_local_facts": {
+          "diagram_links_confirmed": [
+            "S35.1009 -> C1535.1101",
+            "S35.1010 -> C1535.1201"
+          ],
+          "different_bus_segments_confirmed": true,
+          "peak_combined_time": "2026-11-10 06:00:00",
+          "i_feeder_a_at_peak_a": 14.48,
+          "i_feeder_b_at_peak_a": 145.21,
+          "i1009_at_peak_a": 14.48,
+          "i1010_at_peak_a": 145.21,
+          "combined_current_a": 159.69,
+          "combined_power_kw": 1495.89,
+          "evidence_cells": [
+            "1110.xls / New Sheet1!BC10",
+            "1110.xls / New Sheet1!BK10",
+            "35KV变电所.png",
+            "中央变电所.png"
+          ]
+        },
+        "required_dependencies": [
+          "1009_1010_rated_current_a",
+          "ambient_derating_factor",
+          "c1535_tie_switch_mode"
+        ],
+        "missing_dependencies": [],
+        "conditional_judgment": {
+          "source_doc": "老洼地机电科参数与操作核实单-20261119（示例核验批次）",
+          "tie_switch_mode": "1535中央变电所1200联络开关热备用可自动切换",
+          "tie_blocked": false,
+          "thermal_calc_passed": true,
+          "transfer_prerequisite_passed": true,
+          "conflict_preserved": false,
+          "effective_single_cable_limit_a": 270.0,
+          "n_minus_1_combined_peak_a": 159.69,
+          "n_minus_1_load_ratio_pct": 59.14,
+          "n_minus_1_margin_pct": 40.86
+        },
+        "explanation": "依据补证（老洼地机电科参数与操作核实单-20261119（示例核验批次）：下井电缆额定 300.0 A × 降容 0.9 = 单回有效限值 270.0 A；联络方式：1535中央变电所1200联络开关热备用可自动切换）按 GB/T 50417-2017 3.0.3 复算 N-1 工况：任一回退出时另一回承担联合最大电流 159.69 A（热稳定载流计算成立，负载率 59.14%，裕度 +40.86%）；且联络转供前提满足，判定为【条件满足】。"
+      },
+      {
+        "id": "V03",
+        "item_kind": "polarity_metering",
+        "title": "1018 二采区II回持续负有功与负功率因数二次接线核验",
+        "target_objects": [
+          "S35.1018"
+        ],
+        "time_window": "2026-11-10 至 2026-11-16（负有功 168 整点）",
+        "status": "needs_supplement",
+        "recalculated": false,
+        "reused_from_run": "LWS-v1-49db117d0676",
+        "param_bindings": {
+          "cabinet": "1018",
+          "wiring_audit_key": "1018_wiring_audit"
+        },
+        "confirmed_local_facts": {
+          "cabinet": "1018",
+          "negative_p_hours": 168,
+          "negative_cos_hours": 168,
+          "min_p_kw": -104.88,
+          "min_cos": -0.52,
+          "three_phase_ratio_median": 0.367,
+          "evidence_cells": [
+            "1116.xls / New Sheet1!BX25",
+            "1112.xls / New Sheet1!BY23"
+          ]
+        },
+        "required_dependencies": [
+          "1018_wiring_audit"
+        ],
+        "missing_dependencies": [
+          "1018_wiring_audit"
+        ],
+        "conditional_judgment": null,
+        "explanation": "已证实 1018 柜共有 168 小时有功为负、168 小时功率因数为负且比例系数中位数 0.367；待现场补齐二次接线与 CT 极性实测记录后方可确诊。"
+      },
+      {
+        "id": "V04",
+        "item_kind": "lv_bus_conservation",
+        "title": "10 kV 母线进出线功率未闭合差额（54.0%）与未列回路核验",
+        "target_objects": [
+          "S35.1005",
+          "S35.1006"
+        ],
+        "time_window": "2026-11-10 至 2026-11-16",
+        "status": "needs_supplement",
+        "recalculated": false,
+        "reused_from_run": "LWS-v1-49db117d0676",
+        "param_bindings": {
+          "lv_kv": 10,
+          "unlisted_key": "10kv_unlisted_feeders_kw",
+          "scale_key": "10kv_feeder_scale_factor"
+        },
+        "confirmed_local_facts": {
+          "lv_avg_kw": 5533.38,
+          "reported_feeders_avg_kw": 2547.78,
+          "unaccounted_avg_kw": 2985.6,
+          "unaccounted_pct": 54.0,
+          "sample_time": "2026-11-10 15:00:00",
+          "sample_1005_p_kw": 5780.68,
+          "sample_1006_p_kw": 4058.45,
+          "evidence_cells": [
+            "1110.xls / New Sheet1!X19",
+            "1110.xls / New Sheet1!AB19"
+          ]
+        },
+        "required_dependencies": [
+          "10kv_unlisted_feeders_kw",
+          "10kv_feeder_scale_factor"
+        ],
+        "missing_dependencies": [
+          "10kv_unlisted_feeders_kw",
+          "10kv_feeder_scale_factor"
+        ],
+        "conditional_judgment": null,
+        "explanation": "依据图模自动生成的 10 kV 母线守恒方程，主变低压侧（均值 5533.38 kW）与已列 10 kV 出线（均值 2547.78 kW）间存在 54.0% 平均差额；待补齐未列回路台账与 CT 倍率核实表后方可闭合母线守恒。"
+      }
+    ],
+    "summary": {
+      "total_items": 4,
+      "needs_supplement": 2,
+      "conditionally_satisfied": 2,
+      "conditionally_violated": 0,
+      "evidence_conflict": 0,
+      "recalculated_items": 2,
+      "reused_items": 2
+    }
+  }
+}

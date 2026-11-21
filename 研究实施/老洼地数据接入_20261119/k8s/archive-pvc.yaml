@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: laowadi-archive-pvc
+  namespace: laowadi-power
+spec:
+  accessModes: ["ReadWriteMany"]
+  resources:
+    requests:
+      storage: 2Gi
+

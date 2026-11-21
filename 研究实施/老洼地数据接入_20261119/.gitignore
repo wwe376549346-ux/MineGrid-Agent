@@ -1,0 +1,21 @@
+# Ignore mutable runtime SQLite DBs, secrets, backups, and logs in local/
+local/.db.env
+local/.auth_secret
+local/backups/
+local/logs/
+local/laowadi_jobs.sqlite3*
+local/laowadi_audit.sqlite3*
+local/laowadi_sessions.sqlite3*
+local/laowadi_reviews.sqlite3*
+local/laowadi_proactive.sqlite3*
+local/laowadi_checkpoints.sqlite3*
+local/dag_checkpoints.sqlite3*
+local/laowadi_enterprise.sqlite3*
+local/*.sqlite3-wal
+local/*.sqlite3-shm
+
+# Keep read-only golden archives & benchmark reports tracked for team collaboration
+!local/laowadi.sqlite3
+!local/laowadi_events.sqlite3
+
+__pycache__/

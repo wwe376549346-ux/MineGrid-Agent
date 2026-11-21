@@ -1,0 +1,3953 @@
+{
+  "run_id": "LWR-e0c6b18a0d5023d4",
+  "max_tool_calls": 4,
+  "model": "deepseek-v4-pro",
+  "source_hashes": {
+    "laowadi.sqlite3": "37946d8abb40bd34295b7787c3426cc3e19a0ece9c9df70e45481f2253fb573a",
+    "laowadi_events.sqlite3": "99373c36ce28939905d12a93714e05ca886ea8068cd31690fd33ea2d2a5c8d05"
+  },
+  "archives_unchanged": true,
+  "passed": {
+    "local": 10,
+    "model": 11
+  },
+  "cases": [
+    {
+      "case": {
+        "id": "Q01",
+        "question": "LW-000010，306柜同期有功也变化了吗？再查1009柜下游。",
+        "reason": "completed",
+        "calls": 4,
+        "comparison": [
+          "306",
+          -204.41,
+          [
+            "2026-11-10 11:00:00",
+            "1110.xls",
+            "H15"
+          ],
+          [
+            "2026-11-10 12:00:00",
+            "1110.xls",
+            "H16"
+          ]
+        ],
+        "link": [
+          "1009",
+          "1101"
+        ]
+      },
+      "results": {
+        "local": {
+          "passed": true,
+          "checks": {
+            "stop_and_budget": true,
+            "aligned_evidence": true,
+            "topology": true,
+            "pending": true,
+            "event_lookup": true
+          },
+          "elapsed_seconds": 0.003,
+          "request_seconds": [],
+          "answer": {
+            "kind": "agent_review",
+            "decision_mode": "local",
+            "max_tool_calls": 4,
+            "steps": [
+              {
+                "tool": "get_monitor_event",
+                "arguments": {
+                  "event_id": "LW-000010"
+                },
+                "result": {
+                  "kind": "monitor_event",
+                  "status": "ok",
+                  "event": {
+                    "id": "LW-000010",
+                    "run_id": "LWR-e0c6b18a0d5023d4",
+                    "mode": "historical",
+                    "time": "2026-11-10 12:00:00",
+                    "type": "power_change",
+                    "cabinet": "303",
+                    "evidence": {
+                      "after": {
+                        "source": {
+                          "cell": "D16",
+                          "file": "1110.xls",
+                          "row": 16,
+                          "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea",
+                          "sheet": "New Sheet1"
+                        },
+                        "time": "2026-11-10 12:00:00",
+                        "value_kw": 4479.96
+                      },
+                      "before": {
+                        "source": {
+                          "cell": "D15",
+                          "file": "1110.xls",
+                          "row": 15,
+                          "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea",
+                          "sheet": "New Sheet1"
+                        },
+                        "time": "2026-11-10 11:00:00",
+                        "value_kw": 1071.84
+                      },
+                      "change_kw": 3408.12,
+                      "rule": "absolute_change_in_consecutive_hourly_power",
+                      "threshold_kw": 1000.0
+                    }
+                  }
+                }
+              },
+              {
+                "tool": "get_hourly_reading",
+                "arguments": {
+                  "station": "S35",
+                  "cabinet": "306",
+                  "metric": "P",
+                  "at": "2026-11-10 11:00:00"
+                },
+                "result": {
+                  "device": {
+                    "station": "S35",
+                    "number": "306",
+                    "label": "二回进线",
+                    "aliases": [
+                      "二回进线",
+                      "二号进线",
+                      "II回进线",
+                      "第二回进线"
+                    ],
+                    "station_name": "地面35/10 kV变电站"
+                  },
+                  "metric": "P",
+                  "metric_name": "有功功率 P",
+                  "unit": "kW",
+                  "kind": "reading",
+                  "basis": "hourly",
+                  "status": "ok",
+                  "time": "2026-11-10 11:00:00",
+                  "value": 427.54,
+                  "source": {
+                    "file": "1110.xls",
+                    "sheet": "New Sheet1",
+                    "cell": "H15",
+                    "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea"
+                  },
+                  "marker": null,
+                  "latest": false
+                }
+              },
+              {
+                "tool": "get_hourly_reading",
+                "arguments": {
+                  "station": "S35",
+                  "cabinet": "306",
+                  "metric": "P",
+                  "at": "2026-11-10 12:00:00"
+                },
+                "result": {
+                  "device": {
+                    "station": "S35",
+                    "number": "306",
+                    "label": "二回进线",
+                    "aliases": [
+                      "二回进线",
+                      "二号进线",
+                      "II回进线",
+                      "第二回进线"
+                    ],
+                    "station_name": "地面35/10 kV变电站"
+                  },
+                  "metric": "P",
+                  "metric_name": "有功功率 P",
+                  "unit": "kW",
+                  "kind": "reading",
+                  "basis": "hourly",
+                  "status": "ok",
+                  "time": "2026-11-10 12:00:00",
+                  "value": 223.13,
+                  "source": {
+                    "file": "1110.xls",
+                    "sheet": "New Sheet1",
+                    "cell": "H16",
+                    "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea"
+                  },
+                  "marker": null,
+                  "latest": false
+                }
+              },
+              {
+                "tool": "get_supply_link",
+                "arguments": {
+                  "station": "S35",
+                  "cabinet": "1009",
+                  "direction": "downstream"
+                },
+                "result": {
+                  "kind": "supply",
+                  "device": {
+                    "station": "S35",
+                    "number": "1009",
+                    "label": "I回井下1535",
+                    "aliases": [
+                      "I回井下1535",
+                      "井下1535一回",
+                      "下井一回"
+                    ],
+                    "station_name": "地面35/10 kV变电站"
+                  },
+                  "status": "ok",
+                  "links": [
+                    {
+                      "from": {
+                        "station": "S35",
+                        "number": "1009",
+                        "label": "I回井下1535",
+                        "aliases": [
+                          "I回井下1535",
+                          "井下1535一回",
+                          "下井一回"
+                        ],
+                        "station_name": "地面35/10 kV变电站"
+                      },
+                      "to": {
+                        "station": "C1535",
+                        "number": "1101",
+                        "label": "一回进线",
+                        "aliases": [
+                          "一回进线",
+                          "一号进线",
+                          "I回进线",
+                          "第一回进线"
+                        ],
+                        "station_name": "1535中央变电所"
+                      },
+                      "label": "地面站10 kV I段供电线路",
+                      "sources": [
+                        {
+                          "filename": "35KV变电所.png",
+                          "captured_at": "2026-11-17 20:29:01",
+                          "sha256": "cfbf052ae1068b299e4462c953ad9a628a183f22672794d6abf1ac13fc6dcab5"
+                        },
+                        {
+                          "filename": "中央变电所.png",
+                          "captured_at": "2026-11-17 20:29:25",
+                          "sha256": "8cebfebf7b3bcfbfe9508f0e9fe8dca7691fe987216b2e93bba111de1a7454e2"
+                        }
+                      ]
+                    }
+                  ],
+                  "basis": "single_line_diagram_labels"
+                }
+              }
+            ],
+            "comparisons": [
+              {
+                "cabinet": "306",
+                "before": {
+                  "device": {
+                    "station": "S35",
+                    "number": "306",
+                    "label": "二回进线",
+                    "aliases": [
+                      "二回进线",
+                      "二号进线",
+                      "II回进线",
+                      "第二回进线"
+                    ],
+                    "station_name": "地面35/10 kV变电站"
+                  },
+                  "metric": "P",
+                  "metric_name": "有功功率 P",
+                  "unit": "kW",
+                  "kind": "reading",
+                  "basis": "hourly",
+                  "status": "ok",
+                  "time": "2026-11-10 11:00:00",
+                  "value": 427.54,
+                  "source": {
+                    "file": "1110.xls",
+                    "sheet": "New Sheet1",
+                    "cell": "H15",
+                    "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea"
+                  },
+                  "marker": null,
+                  "latest": false
+                },
+                "after": {
+                  "device": {
+                    "station": "S35",
+                    "number": "306",
+                    "label": "二回进线",
+                    "aliases": [
+                      "二回进线",
+                      "二号进线",
+                      "II回进线",
+                      "第二回进线"
+                    ],
+                    "station_name": "地面35/10 kV变电站"
+                  },
+                  "metric": "P",
+                  "metric_name": "有功功率 P",
+                  "unit": "kW",
+                  "kind": "reading",
+                  "basis": "hourly",
+                  "status": "ok",
+                  "time": "2026-11-10 12:00:00",
+                  "value": 223.13,
+                  "source": {
+                    "file": "1110.xls",
+                    "sheet": "New Sheet1",
+                    "cell": "H16",
+                    "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea"
+                  },
+                  "marker": null,
+                  "latest": false
+                },
+                "change_kw": -204.41
+              }
+            ],
+            "pending": [],
+            "status": "ok",
+            "stop_reason": "completed",
+            "tool_calls": 4
+          },
+          "text": "LW-000010 历史整点回放。有功功率变化。303 柜在 2026-11-10 11:00:00 的有功为 1,071.84 kW（1110.xls / New Sheet1!D15），在 2026-11-10 12:00:00 为 4,479.96 kW（1110.xls / New Sheet1!D16）。变化 +3,408.12 kW，达到相邻整点变化绝对值 ≥ 1000 kW 的回放筛查门槛。待复核，物理原因需结合运行记录。\n地面35/10 kV变电站二回进线（306 柜）日报整点 2026-11-10 11:00:00 的有功功率 P为 427.54 kW。来源 1110.xls / New Sheet1!H15。\n地面35/10 kV变电站二回进线（306 柜）日报整点 2026-11-10 12:00:00 的有功功率 P为 223.13 kW。来源 1110.xls / New Sheet1!H16。\n地面35/10 kV变电站I回井下1535（1009 柜）通过地面站10 kV I段供电线路接入1535中央变电所一回进线（1101 柜）。依据 35KV变电所.png（2026-11-17 20:29:01）、中央变电所.png（2026-11-17 20:29:25） 的线路标注。\n306 柜在该事件的同一对整点之间，有功变化 -204.41 kW。"
+        },
+        "model": {
+          "passed": true,
+          "checks": {
+            "stop_and_budget": true,
+            "aligned_evidence": true,
+            "topology": true,
+            "pending": true,
+            "event_lookup": true
+          },
+          "elapsed_seconds": 30.76,
+          "request_seconds": [
+            3.159,
+            7.313,
+            11.109,
+            9.177
+          ],
+          "answer": {
+            "kind": "agent_review",
+            "decision_mode": "model",
+            "max_tool_calls": 4,
+            "steps": [
+              {
+                "tool": "get_monitor_event",
+                "arguments": {
+                  "event_id": "LW-000010"
+                },
+                "result": {
+                  "kind": "monitor_event",
+                  "status": "ok",
+                  "event": {
+                    "id": "LW-000010",
+                    "run_id": "LWR-e0c6b18a0d5023d4",
+                    "mode": "historical",
+                    "time": "2026-11-10 12:00:00",
+                    "type": "power_change",
+                    "cabinet": "303",
+                    "evidence": {
+                      "after": {
+                        "source": {
+                          "cell": "D16",
+                          "file": "1110.xls",
+                          "row": 16,
+                          "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea",
+                          "sheet": "New Sheet1"
+                        },
+                        "time": "2026-11-10 12:00:00",
+                        "value_kw": 4479.96
+                      },
+                      "before": {
+                        "source": {
+                          "cell": "D15",
+                          "file": "1110.xls",
+                          "row": 15,
+                          "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea",
+                          "sheet": "New Sheet1"
+                        },
+                        "time": "2026-11-10 11:00:00",
+                        "value_kw": 1071.84
+                      },
+                      "change_kw": 3408.12,
+                      "rule": "absolute_change_in_consecutive_hourly_power",
+                      "threshold_kw": 1000.0
+                    }
+                  }
+                }
+              },
+              {
+                "tool": "get_hourly_reading",
+                "arguments": {
+                  "at": "2026-11-10 11:00:00",
+                  "cabinet": "306",
+                  "metric": "P",
+                  "station": "S35"
+                },
+                "result": {
+                  "device": {
+                    "station": "S35",
+                    "number": "306",
+                    "label": "二回进线",
+                    "aliases": [
+                      "二回进线",
+                      "二号进线",
+                      "II回进线",
+                      "第二回进线"
+                    ],
+                    "station_name": "地面35/10 kV变电站"
+                  },
+                  "metric": "P",
+                  "metric_name": "有功功率 P",
+                  "unit": "kW",
+                  "kind": "reading",
+                  "basis": "hourly",
+                  "status": "ok",
+                  "time": "2026-11-10 11:00:00",
+                  "value": 427.54,
+                  "source": {
+                    "file": "1110.xls",
+                    "sheet": "New Sheet1",
+                    "cell": "H15",
+                    "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea"
+                  },
+                  "marker": null,
+                  "latest": false
+                }
+              },
+              {
+                "tool": "get_hourly_reading",
+                "arguments": {
+                  "at": "2026-11-10 12:00:00",
+                  "cabinet": "306",
+                  "metric": "P",
+                  "station": "S35"
+                },
+                "result": {
+                  "device": {
+                    "station": "S35",
+                    "number": "306",
+                    "label": "二回进线",
+                    "aliases": [
+                      "二回进线",
+                      "二号进线",
+                      "II回进线",
+                      "第二回进线"
+                    ],
+                    "station_name": "地面35/10 kV变电站"
+                  },
+                  "metric": "P",
+                  "metric_name": "有功功率 P",
+                  "unit": "kW",
+                  "kind": "reading",
+                  "basis": "hourly",
+                  "status": "ok",
+                  "time": "2026-11-10 12:00:00",
+                  "value": 223.13,
+                  "source": {
+                    "file": "1110.xls",
+                    "sheet": "New Sheet1",
+                    "cell": "H16",
+                    "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea"
+                  },
+                  "marker": null,
+                  "latest": false
+                }
+              },
+              {
+                "tool": "get_supply_link",
+                "arguments": {
+                  "cabinet": "1009",
+                  "direction": "downstream",
+                  "station": "S35"
+                },
+                "result": {
+                  "kind": "supply",
+                  "device": {
+                    "station": "S35",
+                    "number": "1009",
+                    "label": "I回井下1535",
+                    "aliases": [
+                      "I回井下1535",
+                      "井下1535一回",
+                      "下井一回"
+                    ],
+                    "station_name": "地面35/10 kV变电站"
+                  },
+                  "status": "ok",
+                  "links": [
+                    {
+                      "from": {
+                        "station": "S35",
+                        "number": "1009",
+                        "label": "I回井下1535",
+                        "aliases": [
+                          "I回井下1535",
+                          "井下1535一回",
+                          "下井一回"
+                        ],
+                        "station_name": "地面35/10 kV变电站"
+                      },
+                      "to": {
+                        "station": "C1535",
+                        "number": "1101",
+                        "label": "一回进线",
+                        "aliases": [
+                          "一回进线",
+                          "一号进线",
+                          "I回进线",
+                          "第一回进线"
+                        ],
+                        "station_name": "1535中央变电所"
+                      },
+                      "label": "地面站10 kV I段供电线路",
+                      "sources": [
+                        {
+                          "filename": "35KV变电所.png",
+                          "captured_at": "2026-11-17 20:29:01",
+                          "sha256": "cfbf052ae1068b299e4462c953ad9a628a183f22672794d6abf1ac13fc6dcab5"
+                        },
+                        {
+                          "filename": "中央变电所.png",
+                          "captured_at": "2026-11-17 20:29:25",
+                          "sha256": "8cebfebf7b3bcfbfe9508f0e9fe8dca7691fe987216b2e93bba111de1a7454e2"
+                        }
+                      ]
+                    }
+                  ],
+                  "basis": "single_line_diagram_labels"
+                }
+              }
+            ],
+            "comparisons": [
+              {
+                "cabinet": "306",
+                "before": {
+                  "device": {
+                    "station": "S35",
+                    "number": "306",
+                    "label": "二回进线",
+                    "aliases": [
+                      "二回进线",
+                      "二号进线",
+                      "II回进线",
+                      "第二回进线"
+                    ],
+                    "station_name": "地面35/10 kV变电站"
+                  },
+                  "metric": "P",
+                  "metric_name": "有功功率 P",
+                  "unit": "kW",
+                  "kind": "reading",
+                  "basis": "hourly",
+                  "status": "ok",
+                  "time": "2026-11-10 11:00:00",
+                  "value": 427.54,
+                  "source": {
+                    "file": "1110.xls",
+                    "sheet": "New Sheet1",
+                    "cell": "H15",
+                    "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea"
+                  },
+                  "marker": null,
+                  "latest": false
+                },
+                "after": {
+                  "device": {
+                    "station": "S35",
+                    "number": "306",
+                    "label": "二回进线",
+                    "aliases": [
+                      "二回进线",
+                      "二号进线",
+                      "II回进线",
+                      "第二回进线"
+                    ],
+                    "station_name": "地面35/10 kV变电站"
+                  },
+                  "metric": "P",
+                  "metric_name": "有功功率 P",
+                  "unit": "kW",
+                  "kind": "reading",
+                  "basis": "hourly",
+                  "status": "ok",
+                  "time": "2026-11-10 12:00:00",
+                  "value": 223.13,
+                  "source": {
+                    "file": "1110.xls",
+                    "sheet": "New Sheet1",
+                    "cell": "H16",
+                    "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea"
+                  },
+                  "marker": null,
+                  "latest": false
+                },
+                "change_kw": -204.41
+              }
+            ],
+            "pending": [],
+            "status": "ok",
+            "stop_reason": "completed",
+            "tool_calls": 4
+          },
+          "text": "LW-000010 历史整点回放。有功功率变化。303 柜在 2026-11-10 11:00:00 的有功为 1,071.84 kW（1110.xls / New Sheet1!D15），在 2026-11-10 12:00:00 为 4,479.96 kW（1110.xls / New Sheet1!D16）。变化 +3,408.12 kW，达到相邻整点变化绝对值 ≥ 1000 kW 的回放筛查门槛。待复核，物理原因需结合运行记录。\n地面35/10 kV变电站二回进线（306 柜）日报整点 2026-11-10 11:00:00 的有功功率 P为 427.54 kW。来源 1110.xls / New Sheet1!H15。\n地面35/10 kV变电站二回进线（306 柜）日报整点 2026-11-10 12:00:00 的有功功率 P为 223.13 kW。来源 1110.xls / New Sheet1!H16。\n地面35/10 kV变电站I回井下1535（1009 柜）通过地面站10 kV I段供电线路接入1535中央变电所一回进线（1101 柜）。依据 35KV变电所.png（2026-11-17 20:29:01）、中央变电所.png（2026-11-17 20:29:25） 的线路标注。\n306 柜在该事件的同一对整点之间，有功变化 -204.41 kW。"
+        }
+      }
+    },
+    {
+      "case": {
+        "id": "Q02",
+        "question": "11月16日303柜有功最大值是多少？按整点。",
+        "reason": "ok",
+        "calls": 0,
+        "statistic": [
+          4969.78,
+          "1116.xls",
+          "D19"
+        ]
+      },
+      "results": {
+        "local": {
+          "passed": true,
+          "checks": {
+            "stop_and_budget": true,
+            "aligned_evidence": true,
+            "topology": true,
+            "pending": true,
+            "hourly_peak": true
+          },
+          "elapsed_seconds": 0.003,
+          "request_seconds": [],
+          "answer": {
+            "device": {
+              "station": "S35",
+              "number": "303",
+              "label": "一回进线",
+              "aliases": [
+                "一回进线",
+                "一号进线",
+                "I回进线",
+                "第一回进线"
+              ],
+              "station_name": "地面35/10 kV变电站"
+            },
+            "metric": "P",
+            "metric_name": "有功功率 P",
+            "unit": "kW",
+            "kind": "statistic",
+            "basis": "hourly",
+            "status": "ok",
+            "day": "2026-11-16",
+            "statistic": "max",
+            "valid_samples": 24,
+            "planned_samples": 24,
+            "value": 4969.78,
+            "time": "2026-11-16 15:00:00",
+            "source": {
+              "file": "1116.xls",
+              "sheet": "New Sheet1",
+              "cell": "D19",
+              "sha256": "1a50c071c9d2bf88ad383578bad1c431584ad227a4b12a380c6ab2f9657689b4"
+            },
+            "tool": "get_daily_statistic",
+            "arguments": {
+              "station": "S35",
+              "cabinet": "303",
+              "metric": "P",
+              "day": "2026-11-16",
+              "statistic": "max",
+              "basis": "hourly"
+            }
+          },
+          "text": "地面35/10 kV变电站一回进线（303 柜） 2026-11-16 的有功功率 P整点样本最大值为 4,969.78 kW，出现在 15:00:00。有效样本 24/24。来源 1116.xls / New Sheet1!D19。"
+        },
+        "model": {
+          "passed": true,
+          "checks": {
+            "stop_and_budget": true,
+            "aligned_evidence": true,
+            "topology": true,
+            "pending": true,
+            "hourly_peak": true
+          },
+          "elapsed_seconds": 0.001,
+          "request_seconds": [],
+          "answer": {
+            "device": {
+              "station": "S35",
+              "number": "303",
+              "label": "一回进线",
+              "aliases": [
+                "一回进线",
+                "一号进线",
+                "I回进线",
+                "第一回进线"
+              ],
+              "station_name": "地面35/10 kV变电站"
+            },
+            "metric": "P",
+            "metric_name": "有功功率 P",
+            "unit": "kW",
+            "kind": "statistic",
+            "basis": "hourly",
+            "status": "ok",
+            "day": "2026-11-16",
+            "statistic": "max",
+            "valid_samples": 24,
+            "planned_samples": 24,
+            "value": 4969.78,
+            "time": "2026-11-16 15:00:00",
+            "source": {
+              "file": "1116.xls",
+              "sheet": "New Sheet1",
+              "cell": "D19",
+              "sha256": "1a50c071c9d2bf88ad383578bad1c431584ad227a4b12a380c6ab2f9657689b4"
+            },
+            "tool": "get_daily_statistic",
+            "arguments": {
+              "station": "S35",
+              "cabinet": "303",
+              "metric": "P",
+              "day": "2026-11-16",
+              "statistic": "max",
+              "basis": "hourly"
+            }
+          },
+          "text": "地面35/10 kV变电站一回进线（303 柜） 2026-11-16 的有功功率 P整点样本最大值为 4,969.78 kW，出现在 15:00:00。有效样本 24/24。来源 1116.xls / New Sheet1!D19。"
+        }
+      }
+    },
+    {
+      "case": {
+        "id": "Q03",
+        "question": "LW-000010，比较306柜同期有功。是不是跳闸导致的？",
+        "reason": "needs_evidence",
+        "calls": 3,
+        "comparison": [
+          "306",
+          -204.41,
+          [
+            "2026-11-10 11:00:00",
+            "1110.xls",
+            "H15"
+          ],
+          [
+            "2026-11-10 12:00:00",
+            "1110.xls",
+            "H16"
+          ]
+        ],
+        "pending": [
+          "运行日志",
+          "开关变位",
+          "保护动作"
+        ]
+      },
+      "results": {
+        "local": {
+          "passed": true,
+          "checks": {
+            "stop_and_budget": true,
+            "aligned_evidence": true,
+            "topology": true,
+            "pending": true,
+            "event_lookup": true
+          },
+          "elapsed_seconds": 0.003,
+          "request_seconds": [],
+          "answer": {
+            "kind": "agent_review",
+            "decision_mode": "local",
+            "max_tool_calls": 4,
+            "steps": [
+              {
+                "tool": "get_monitor_event",
+                "arguments": {
+                  "event_id": "LW-000010"
+                },
+                "result": {
+                  "kind": "monitor_event",
+                  "status": "ok",
+                  "event": {
+                    "id": "LW-000010",
+                    "run_id": "LWR-e0c6b18a0d5023d4",
+                    "mode": "historical",
+                    "time": "2026-11-10 12:00:00",
+                    "type": "power_change",
+                    "cabinet": "303",
+                    "evidence": {
+                      "after": {
+                        "source": {
+                          "cell": "D16",
+                          "file": "1110.xls",
+                          "row": 16,
+                          "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea",
+                          "sheet": "New Sheet1"
+                        },
+                        "time": "2026-11-10 12:00:00",
+                        "value_kw": 4479.96
+                      },
+                      "before": {
+                        "source": {
+                          "cell": "D15",
+                          "file": "1110.xls",
+                          "row": 15,
+                          "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea",
+                          "sheet": "New Sheet1"
+                        },
+                        "time": "2026-11-10 11:00:00",
+                        "value_kw": 1071.84
+                      },
+                      "change_kw": 3408.12,
+                      "rule": "absolute_change_in_consecutive_hourly_power",
+                      "threshold_kw": 1000.0
+                    }
+                  }
+                }
+              },
+              {
+                "tool": "get_hourly_reading",
+                "arguments": {
+                  "station": "S35",
+                  "cabinet": "306",
+                  "metric": "P",
+                  "at": "2026-11-10 11:00:00"
+                },
+                "result": {
+                  "device": {
+                    "station": "S35",
+                    "number": "306",
+                    "label": "二回进线",
+                    "aliases": [
+                      "二回进线",
+                      "二号进线",
+                      "II回进线",
+                      "第二回进线"
+                    ],
+                    "station_name": "地面35/10 kV变电站"
+                  },
+                  "metric": "P",
+                  "metric_name": "有功功率 P",
+                  "unit": "kW",
+                  "kind": "reading",
+                  "basis": "hourly",
+                  "status": "ok",
+                  "time": "2026-11-10 11:00:00",
+                  "value": 427.54,
+                  "source": {
+                    "file": "1110.xls",
+                    "sheet": "New Sheet1",
+                    "cell": "H15",
+                    "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea"
+                  },
+                  "marker": null,
+                  "latest": false
+                }
+              },
+              {
+                "tool": "get_hourly_reading",
+                "arguments": {
+                  "station": "S35",
+                  "cabinet": "306",
+                  "metric": "P",
+                  "at": "2026-11-10 12:00:00"
+                },
+                "result": {
+                  "device": {
+                    "station": "S35",
+                    "number": "306",
+                    "label": "二回进线",
+                    "aliases": [
+                      "二回进线",
+                      "二号进线",
+                      "II回进线",
+                      "第二回进线"
+                    ],
+                    "station_name": "地面35/10 kV变电站"
+                  },
+                  "metric": "P",
+                  "metric_name": "有功功率 P",
+                  "unit": "kW",
+                  "kind": "reading",
+                  "basis": "hourly",
+                  "status": "ok",
+                  "time": "2026-11-10 12:00:00",
+                  "value": 223.13,
+                  "source": {
+                    "file": "1110.xls",
+                    "sheet": "New Sheet1",
+                    "cell": "H16",
+                    "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea"
+                  },
+                  "marker": null,
+                  "latest": false
+                }
+              }
+            ],
+            "comparisons": [
+              {
+                "cabinet": "306",
+                "before": {
+                  "device": {
+                    "station": "S35",
+                    "number": "306",
+                    "label": "二回进线",
+                    "aliases": [
+                      "二回进线",
+                      "二号进线",
+                      "II回进线",
+                      "第二回进线"
+                    ],
+                    "station_name": "地面35/10 kV变电站"
+                  },
+                  "metric": "P",
+                  "metric_name": "有功功率 P",
+                  "unit": "kW",
+                  "kind": "reading",
+                  "basis": "hourly",
+                  "status": "ok",
+                  "time": "2026-11-10 11:00:00",
+                  "value": 427.54,
+                  "source": {
+                    "file": "1110.xls",
+                    "sheet": "New Sheet1",
+                    "cell": "H15",
+                    "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea"
+                  },
+                  "marker": null,
+                  "latest": false
+                },
+                "after": {
+                  "device": {
+                    "station": "S35",
+                    "number": "306",
+                    "label": "二回进线",
+                    "aliases": [
+                      "二回进线",
+                      "二号进线",
+                      "II回进线",
+                      "第二回进线"
+                    ],
+                    "station_name": "地面35/10 kV变电站"
+                  },
+                  "metric": "P",
+                  "metric_name": "有功功率 P",
+                  "unit": "kW",
+                  "kind": "reading",
+                  "basis": "hourly",
+                  "status": "ok",
+                  "time": "2026-11-10 12:00:00",
+                  "value": 223.13,
+                  "source": {
+                    "file": "1110.xls",
+                    "sheet": "New Sheet1",
+                    "cell": "H16",
+                    "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea"
+                  },
+                  "marker": null,
+                  "latest": false
+                },
+                "change_kw": -204.41
+              }
+            ],
+            "pending": [
+              "需核对同期运行日志和开关变位记录（SOE），才能判断现场原因或设备联动。",
+              "需补充同期保护动作记录。"
+            ],
+            "status": "partial",
+            "stop_reason": "needs_evidence",
+            "tool_calls": 3
+          },
+          "text": "LW-000010 历史整点回放。有功功率变化。303 柜在 2026-11-10 11:00:00 的有功为 1,071.84 kW（1110.xls / New Sheet1!D15），在 2026-11-10 12:00:00 为 4,479.96 kW（1110.xls / New Sheet1!D16）。变化 +3,408.12 kW，达到相邻整点变化绝对值 ≥ 1000 kW 的回放筛查门槛。待复核，物理原因需结合运行记录。\n地面35/10 kV变电站二回进线（306 柜）日报整点 2026-11-10 11:00:00 的有功功率 P为 427.54 kW。来源 1110.xls / New Sheet1!H15。\n地面35/10 kV变电站二回进线（306 柜）日报整点 2026-11-10 12:00:00 的有功功率 P为 223.13 kW。来源 1110.xls / New Sheet1!H16。\n306 柜在该事件的同一对整点之间，有功变化 -204.41 kW。\n需核对同期运行日志和开关变位记录（SOE），才能判断现场原因或设备联动。\n需补充同期保护动作记录。"
+        },
+        "model": {
+          "passed": true,
+          "checks": {
+            "stop_and_budget": true,
+            "aligned_evidence": true,
+            "topology": true,
+            "pending": true,
+            "event_lookup": true
+          },
+          "elapsed_seconds": 12.748,
+          "request_seconds": [
+            2.318,
+            6.129,
+            4.3
+          ],
+          "answer": {
+            "kind": "agent_review",
+            "decision_mode": "model",
+            "max_tool_calls": 4,
+            "steps": [
+              {
+                "tool": "get_monitor_event",
+                "arguments": {
+                  "event_id": "LW-000010"
+                },
+                "result": {
+                  "kind": "monitor_event",
+                  "status": "ok",
+                  "event": {
+                    "id": "LW-000010",
+                    "run_id": "LWR-e0c6b18a0d5023d4",
+                    "mode": "historical",
+                    "time": "2026-11-10 12:00:00",
+                    "type": "power_change",
+                    "cabinet": "303",
+                    "evidence": {
+                      "after": {
+                        "source": {
+                          "cell": "D16",
+                          "file": "1110.xls",
+                          "row": 16,
+                          "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea",
+                          "sheet": "New Sheet1"
+                        },
+                        "time": "2026-11-10 12:00:00",
+                        "value_kw": 4479.96
+                      },
+                      "before": {
+                        "source": {
+                          "cell": "D15",
+                          "file": "1110.xls",
+                          "row": 15,
+                          "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea",
+                          "sheet": "New Sheet1"
+                        },
+                        "time": "2026-11-10 11:00:00",
+                        "value_kw": 1071.84
+                      },
+                      "change_kw": 3408.12,
+                      "rule": "absolute_change_in_consecutive_hourly_power",
+                      "threshold_kw": 1000.0
+                    }
+                  }
+                }
+              },
+              {
+                "tool": "get_hourly_reading",
+                "arguments": {
+                  "at": "2026-11-10 11:00:00",
+                  "cabinet": "306",
+                  "metric": "P",
+                  "station": "S35"
+                },
+                "result": {
+                  "device": {
+                    "station": "S35",
+                    "number": "306",
+                    "label": "二回进线",
+                    "aliases": [
+                      "二回进线",
+                      "二号进线",
+                      "II回进线",
+                      "第二回进线"
+                    ],
+                    "station_name": "地面35/10 kV变电站"
+                  },
+                  "metric": "P",
+                  "metric_name": "有功功率 P",
+                  "unit": "kW",
+                  "kind": "reading",
+                  "basis": "hourly",
+                  "status": "ok",
+                  "time": "2026-11-10 11:00:00",
+                  "value": 427.54,
+                  "source": {
+                    "file": "1110.xls",
+                    "sheet": "New Sheet1",
+                    "cell": "H15",
+                    "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea"
+                  },
+                  "marker": null,
+                  "latest": false
+                }
+              },
+              {
+                "tool": "get_hourly_reading",
+                "arguments": {
+                  "at": "2026-11-10 12:00:00",
+                  "cabinet": "306",
+                  "metric": "P",
+                  "station": "S35"
+                },
+                "result": {
+                  "device": {
+                    "station": "S35",
+                    "number": "306",
+                    "label": "二回进线",
+                    "aliases": [
+                      "二回进线",
+                      "二号进线",
+                      "II回进线",
+                      "第二回进线"
+                    ],
+                    "station_name": "地面35/10 kV变电站"
+                  },
+                  "metric": "P",
+                  "metric_name": "有功功率 P",
+                  "unit": "kW",
+                  "kind": "reading",
+                  "basis": "hourly",
+                  "status": "ok",
+                  "time": "2026-11-10 12:00:00",
+                  "value": 223.13,
+                  "source": {
+                    "file": "1110.xls",
+                    "sheet": "New Sheet1",
+                    "cell": "H16",
+                    "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea"
+                  },
+                  "marker": null,
+                  "latest": false
+                }
+              }
+            ],
+            "comparisons": [
+              {
+                "cabinet": "306",
+                "before": {
+                  "device": {
+                    "station": "S35",
+                    "number": "306",
+                    "label": "二回进线",
+                    "aliases": [
+                      "二回进线",
+                      "二号进线",
+                      "II回进线",
+                      "第二回进线"
+                    ],
+                    "station_name": "地面35/10 kV变电站"
+                  },
+                  "metric": "P",
+                  "metric_name": "有功功率 P",
+                  "unit": "kW",
+                  "kind": "reading",
+                  "basis": "hourly",
+                  "status": "ok",
+                  "time": "2026-11-10 11:00:00",
+                  "value": 427.54,
+                  "source": {
+                    "file": "1110.xls",
+                    "sheet": "New Sheet1",
+                    "cell": "H15",
+                    "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea"
+                  },
+                  "marker": null,
+                  "latest": false
+                },
+                "after": {
+                  "device": {
+                    "station": "S35",
+                    "number": "306",
+                    "label": "二回进线",
+                    "aliases": [
+                      "二回进线",
+                      "二号进线",
+                      "II回进线",
+                      "第二回进线"
+                    ],
+                    "station_name": "地面35/10 kV变电站"
+                  },
+                  "metric": "P",
+                  "metric_name": "有功功率 P",
+                  "unit": "kW",
+                  "kind": "reading",
+                  "basis": "hourly",
+                  "status": "ok",
+                  "time": "2026-11-10 12:00:00",
+                  "value": 223.13,
+                  "source": {
+                    "file": "1110.xls",
+                    "sheet": "New Sheet1",
+                    "cell": "H16",
+                    "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea"
+                  },
+                  "marker": null,
+                  "latest": false
+                },
+                "change_kw": -204.41
+              }
+            ],
+            "pending": [
+              "需核对同期运行日志和开关变位记录（SOE），才能判断现场原因或设备联动。",
+              "需补充同期保护动作记录。"
+            ],
+            "status": "partial",
+            "stop_reason": "needs_evidence",
+            "tool_calls": 3
+          },
+          "text": "LW-000010 历史整点回放。有功功率变化。303 柜在 2026-11-10 11:00:00 的有功为 1,071.84 kW（1110.xls / New Sheet1!D15），在 2026-11-10 12:00:00 为 4,479.96 kW（1110.xls / New Sheet1!D16）。变化 +3,408.12 kW，达到相邻整点变化绝对值 ≥ 1000 kW 的回放筛查门槛。待复核，物理原因需结合运行记录。\n地面35/10 kV变电站二回进线（306 柜）日报整点 2026-11-10 11:00:00 的有功功率 P为 427.54 kW。来源 1110.xls / New Sheet1!H15。\n地面35/10 kV变电站二回进线（306 柜）日报整点 2026-11-10 12:00:00 的有功功率 P为 223.13 kW。来源 1110.xls / New Sheet1!H16。\n306 柜在该事件的同一对整点之间，有功变化 -204.41 kW。\n需核对同期运行日志和开关变位记录（SOE），才能判断现场原因或设备联动。\n需补充同期保护动作记录。"
+        }
+      }
+    },
+    {
+      "case": {
+        "id": "Q04",
+        "question": "LW-000010，比较306柜13点的有功。",
+        "reason": "time_alignment",
+        "calls": 1
+      },
+      "results": {
+        "local": {
+          "passed": true,
+          "checks": {
+            "stop_and_budget": true,
+            "aligned_evidence": true,
+            "topology": true,
+            "pending": true,
+            "event_lookup": true
+          },
+          "elapsed_seconds": 0.001,
+          "request_seconds": [],
+          "answer": {
+            "kind": "agent_review",
+            "decision_mode": "local",
+            "max_tool_calls": 4,
+            "steps": [
+              {
+                "tool": "get_monitor_event",
+                "arguments": {
+                  "event_id": "LW-000010"
+                },
+                "result": {
+                  "kind": "monitor_event",
+                  "status": "ok",
+                  "event": {
+                    "id": "LW-000010",
+                    "run_id": "LWR-e0c6b18a0d5023d4",
+                    "mode": "historical",
+                    "time": "2026-11-10 12:00:00",
+                    "type": "power_change",
+                    "cabinet": "303",
+                    "evidence": {
+                      "after": {
+                        "source": {
+                          "cell": "D16",
+                          "file": "1110.xls",
+                          "row": 16,
+                          "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea",
+                          "sheet": "New Sheet1"
+                        },
+                        "time": "2026-11-10 12:00:00",
+                        "value_kw": 4479.96
+                      },
+                      "before": {
+                        "source": {
+                          "cell": "D15",
+                          "file": "1110.xls",
+                          "row": 15,
+                          "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea",
+                          "sheet": "New Sheet1"
+                        },
+                        "time": "2026-11-10 11:00:00",
+                        "value_kw": 1071.84
+                      },
+                      "change_kw": 3408.12,
+                      "rule": "absolute_change_in_consecutive_hourly_power",
+                      "threshold_kw": 1000.0
+                    }
+                  }
+                }
+              }
+            ],
+            "comparisons": [],
+            "pending": [
+              "问题中的时段与事件的 2026-11-10 11:00:00 至 2026-11-10 12:00:00 未对齐。请确认要比较的整点。"
+            ],
+            "status": "clarify",
+            "stop_reason": "time_alignment",
+            "tool_calls": 1
+          },
+          "text": "LW-000010 历史整点回放。有功功率变化。303 柜在 2026-11-10 11:00:00 的有功为 1,071.84 kW（1110.xls / New Sheet1!D15），在 2026-11-10 12:00:00 为 4,479.96 kW（1110.xls / New Sheet1!D16）。变化 +3,408.12 kW，达到相邻整点变化绝对值 ≥ 1000 kW 的回放筛查门槛。待复核，物理原因需结合运行记录。\n问题中的时段与事件的 2026-11-10 11:00:00 至 2026-11-10 12:00:00 未对齐。请确认要比较的整点。"
+        },
+        "model": {
+          "passed": true,
+          "checks": {
+            "stop_and_budget": true,
+            "aligned_evidence": true,
+            "topology": true,
+            "pending": true,
+            "event_lookup": true
+          },
+          "elapsed_seconds": 3.063,
+          "request_seconds": [
+            3.063
+          ],
+          "answer": {
+            "kind": "agent_review",
+            "decision_mode": "model",
+            "max_tool_calls": 4,
+            "steps": [
+              {
+                "tool": "get_monitor_event",
+                "arguments": {
+                  "event_id": "LW-000010"
+                },
+                "result": {
+                  "kind": "monitor_event",
+                  "status": "ok",
+                  "event": {
+                    "id": "LW-000010",
+                    "run_id": "LWR-e0c6b18a0d5023d4",
+                    "mode": "historical",
+                    "time": "2026-11-10 12:00:00",
+                    "type": "power_change",
+                    "cabinet": "303",
+                    "evidence": {
+                      "after": {
+                        "source": {
+                          "cell": "D16",
+                          "file": "1110.xls",
+                          "row": 16,
+                          "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea",
+                          "sheet": "New Sheet1"
+                        },
+                        "time": "2026-11-10 12:00:00",
+                        "value_kw": 4479.96
+                      },
+                      "before": {
+                        "source": {
+                          "cell": "D15",
+                          "file": "1110.xls",
+                          "row": 15,
+                          "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea",
+                          "sheet": "New Sheet1"
+                        },
+                        "time": "2026-11-10 11:00:00",
+                        "value_kw": 1071.84
+                      },
+                      "change_kw": 3408.12,
+                      "rule": "absolute_change_in_consecutive_hourly_power",
+                      "threshold_kw": 1000.0
+                    }
+                  }
+                }
+              }
+            ],
+            "comparisons": [],
+            "pending": [
+              "问题中的时段与事件的 2026-11-10 11:00:00 至 2026-11-10 12:00:00 未对齐。请确认要比较的整点。"
+            ],
+            "status": "clarify",
+            "stop_reason": "time_alignment",
+            "tool_calls": 1
+          },
+          "text": "LW-000010 历史整点回放。有功功率变化。303 柜在 2026-11-10 11:00:00 的有功为 1,071.84 kW（1110.xls / New Sheet1!D15），在 2026-11-10 12:00:00 为 4,479.96 kW（1110.xls / New Sheet1!D16）。变化 +3,408.12 kW，达到相邻整点变化绝对值 ≥ 1000 kW 的回放筛查门槛。待复核，物理原因需结合运行记录。\n问题中的时段与事件的 2026-11-10 11:00:00 至 2026-11-10 12:00:00 未对齐。请确认要比较的整点。"
+        }
+      }
+    },
+    {
+      "case": {
+        "id": "Q05",
+        "question": "LW-000010，比较306柜11月11日12点的有功。",
+        "reason": "time_alignment",
+        "calls": 1
+      },
+      "results": {
+        "local": {
+          "passed": true,
+          "checks": {
+            "stop_and_budget": true,
+            "aligned_evidence": true,
+            "topology": true,
+            "pending": true,
+            "event_lookup": true
+          },
+          "elapsed_seconds": 0.001,
+          "request_seconds": [],
+          "answer": {
+            "kind": "agent_review",
+            "decision_mode": "local",
+            "max_tool_calls": 4,
+            "steps": [
+              {
+                "tool": "get_monitor_event",
+                "arguments": {
+                  "event_id": "LW-000010"
+                },
+                "result": {
+                  "kind": "monitor_event",
+                  "status": "ok",
+                  "event": {
+                    "id": "LW-000010",
+                    "run_id": "LWR-e0c6b18a0d5023d4",
+                    "mode": "historical",
+                    "time": "2026-11-10 12:00:00",
+                    "type": "power_change",
+                    "cabinet": "303",
+                    "evidence": {
+                      "after": {
+                        "source": {
+                          "cell": "D16",
+                          "file": "1110.xls",
+                          "row": 16,
+                          "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea",
+                          "sheet": "New Sheet1"
+                        },
+                        "time": "2026-11-10 12:00:00",
+                        "value_kw": 4479.96
+                      },
+                      "before": {
+                        "source": {
+                          "cell": "D15",
+                          "file": "1110.xls",
+                          "row": 15,
+                          "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea",
+                          "sheet": "New Sheet1"
+                        },
+                        "time": "2026-11-10 11:00:00",
+                        "value_kw": 1071.84
+                      },
+                      "change_kw": 3408.12,
+                      "rule": "absolute_change_in_consecutive_hourly_power",
+                      "threshold_kw": 1000.0
+                    }
+                  }
+                }
+              }
+            ],
+            "comparisons": [],
+            "pending": [
+              "问题中的时段与事件的 2026-11-10 11:00:00 至 2026-11-10 12:00:00 未对齐。请确认要比较的整点。"
+            ],
+            "status": "clarify",
+            "stop_reason": "time_alignment",
+            "tool_calls": 1
+          },
+          "text": "LW-000010 历史整点回放。有功功率变化。303 柜在 2026-11-10 11:00:00 的有功为 1,071.84 kW（1110.xls / New Sheet1!D15），在 2026-11-10 12:00:00 为 4,479.96 kW（1110.xls / New Sheet1!D16）。变化 +3,408.12 kW，达到相邻整点变化绝对值 ≥ 1000 kW 的回放筛查门槛。待复核，物理原因需结合运行记录。\n问题中的时段与事件的 2026-11-10 11:00:00 至 2026-11-10 12:00:00 未对齐。请确认要比较的整点。"
+        },
+        "model": {
+          "passed": true,
+          "checks": {
+            "stop_and_budget": true,
+            "aligned_evidence": true,
+            "topology": true,
+            "pending": true,
+            "event_lookup": true
+          },
+          "elapsed_seconds": 1.945,
+          "request_seconds": [
+            1.944
+          ],
+          "answer": {
+            "kind": "agent_review",
+            "decision_mode": "model",
+            "max_tool_calls": 4,
+            "steps": [
+              {
+                "tool": "get_monitor_event",
+                "arguments": {
+                  "event_id": "LW-000010"
+                },
+                "result": {
+                  "kind": "monitor_event",
+                  "status": "ok",
+                  "event": {
+                    "id": "LW-000010",
+                    "run_id": "LWR-e0c6b18a0d5023d4",
+                    "mode": "historical",
+                    "time": "2026-11-10 12:00:00",
+                    "type": "power_change",
+                    "cabinet": "303",
+                    "evidence": {
+                      "after": {
+                        "source": {
+                          "cell": "D16",
+                          "file": "1110.xls",
+                          "row": 16,
+                          "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea",
+                          "sheet": "New Sheet1"
+                        },
+                        "time": "2026-11-10 12:00:00",
+                        "value_kw": 4479.96
+                      },
+                      "before": {
+                        "source": {
+                          "cell": "D15",
+                          "file": "1110.xls",
+                          "row": 15,
+                          "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea",
+                          "sheet": "New Sheet1"
+                        },
+                        "time": "2026-11-10 11:00:00",
+                        "value_kw": 1071.84
+                      },
+                      "change_kw": 3408.12,
+                      "rule": "absolute_change_in_consecutive_hourly_power",
+                      "threshold_kw": 1000.0
+                    }
+                  }
+                }
+              }
+            ],
+            "comparisons": [],
+            "pending": [
+              "问题中的时段与事件的 2026-11-10 11:00:00 至 2026-11-10 12:00:00 未对齐。请确认要比较的整点。"
+            ],
+            "status": "clarify",
+            "stop_reason": "time_alignment",
+            "tool_calls": 1
+          },
+          "text": "LW-000010 历史整点回放。有功功率变化。303 柜在 2026-11-10 11:00:00 的有功为 1,071.84 kW（1110.xls / New Sheet1!D15），在 2026-11-10 12:00:00 为 4,479.96 kW（1110.xls / New Sheet1!D16）。变化 +3,408.12 kW，达到相邻整点变化绝对值 ≥ 1000 kW 的回放筛查门槛。待复核，物理原因需结合运行记录。\n问题中的时段与事件的 2026-11-10 11:00:00 至 2026-11-10 12:00:00 未对齐。请确认要比较的整点。"
+        }
+      }
+    },
+    {
+      "case": {
+        "id": "Q06",
+        "question": "11月11日0点306柜提示变化，比较303柜23点和0点。",
+        "reason": "completed",
+        "calls": 3,
+        "comparison": [
+          "303",
+          -652.33,
+          [
+            "2026-11-10 23:00:00",
+            "1110.xls",
+            "D27"
+          ],
+          [
+            "2026-11-11 00:00:00",
+            "1111.xls",
+            "D4"
+          ]
+        ],
+        "event": {
+          "cabinet": "306",
+          "event_type": "power_change",
+          "at": "2026-11-11 00:00:00"
+        }
+      },
+      "results": {
+        "local": {
+          "passed": true,
+          "checks": {
+            "stop_and_budget": true,
+            "aligned_evidence": true,
+            "topology": true,
+            "pending": true,
+            "event_lookup": true
+          },
+          "elapsed_seconds": 0.001,
+          "request_seconds": [],
+          "answer": {
+            "kind": "agent_review",
+            "decision_mode": "local",
+            "max_tool_calls": 4,
+            "steps": [
+              {
+                "tool": "get_monitor_event",
+                "arguments": {
+                  "cabinet": "306",
+                  "event_type": "power_change",
+                  "at": "2026-11-11 00:00:00"
+                },
+                "result": {
+                  "kind": "monitor_event",
+                  "status": "ok",
+                  "event": {
+                    "id": "LW-000019",
+                    "run_id": "LWR-e0c6b18a0d5023d4",
+                    "mode": "historical",
+                    "time": "2026-11-11 00:00:00",
+                    "type": "power_change",
+                    "cabinet": "306",
+                    "evidence": {
+                      "after": {
+                        "source": {
+                          "cell": "H4",
+                          "file": "1111.xls",
+                          "row": 4,
+                          "sha256": "ce801bf35f36d893d24469673b6dbdba21d63b3b3b0e06f222f4a0817a21e6f9",
+                          "sheet": "New Sheet1"
+                        },
+                        "time": "2026-11-11 00:00:00",
+                        "value_kw": 1698.75
+                      },
+                      "before": {
+                        "source": {
+                          "cell": "H27",
+                          "file": "1110.xls",
+                          "row": 27,
+                          "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea",
+                          "sheet": "New Sheet1"
+                        },
+                        "time": "2026-11-10 23:00:00",
+                        "value_kw": 2994.13
+                      },
+                      "change_kw": -1295.38,
+                      "rule": "absolute_change_in_consecutive_hourly_power",
+                      "threshold_kw": 1000.0
+                    }
+                  }
+                }
+              },
+              {
+                "tool": "get_hourly_reading",
+                "arguments": {
+                  "station": "S35",
+                  "cabinet": "303",
+                  "metric": "P",
+                  "at": "2026-11-10 23:00:00"
+                },
+                "result": {
+                  "device": {
+                    "station": "S35",
+                    "number": "303",
+                    "label": "一回进线",
+                    "aliases": [
+                      "一回进线",
+                      "一号进线",
+                      "I回进线",
+                      "第一回进线"
+                    ],
+                    "station_name": "地面35/10 kV变电站"
+                  },
+                  "metric": "P",
+                  "metric_name": "有功功率 P",
+                  "unit": "kW",
+                  "kind": "reading",
+                  "basis": "hourly",
+                  "status": "ok",
+                  "time": "2026-11-10 23:00:00",
+                  "value": 3882.09,
+                  "source": {
+                    "file": "1110.xls",
+                    "sheet": "New Sheet1",
+                    "cell": "D27",
+                    "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea"
+                  },
+                  "marker": null,
+                  "latest": false
+                }
+              },
+              {
+                "tool": "get_hourly_reading",
+                "arguments": {
+                  "station": "S35",
+                  "cabinet": "303",
+                  "metric": "P",
+                  "at": "2026-11-11 00:00:00"
+                },
+                "result": {
+                  "device": {
+                    "station": "S35",
+                    "number": "303",
+                    "label": "一回进线",
+                    "aliases": [
+                      "一回进线",
+                      "一号进线",
+                      "I回进线",
+                      "第一回进线"
+                    ],
+                    "station_name": "地面35/10 kV变电站"
+                  },
+                  "metric": "P",
+                  "metric_name": "有功功率 P",
+                  "unit": "kW",
+                  "kind": "reading",
+                  "basis": "hourly",
+                  "status": "ok",
+                  "time": "2026-11-11 00:00:00",
+                  "value": 3229.76,
+                  "source": {
+                    "file": "1111.xls",
+                    "sheet": "New Sheet1",
+                    "cell": "D4",
+                    "sha256": "ce801bf35f36d893d24469673b6dbdba21d63b3b3b0e06f222f4a0817a21e6f9"
+                  },
+                  "marker": null,
+                  "latest": false
+                }
+              }
+            ],
+            "comparisons": [
+              {
+                "cabinet": "303",
+                "before": {
+                  "device": {
+                    "station": "S35",
+                    "number": "303",
+                    "label": "一回进线",
+                    "aliases": [
+                      "一回进线",
+                      "一号进线",
+                      "I回进线",
+                      "第一回进线"
+                    ],
+                    "station_name": "地面35/10 kV变电站"
+                  },
+                  "metric": "P",
+                  "metric_name": "有功功率 P",
+                  "unit": "kW",
+                  "kind": "reading",
+                  "basis": "hourly",
+                  "status": "ok",
+                  "time": "2026-11-10 23:00:00",
+                  "value": 3882.09,
+                  "source": {
+                    "file": "1110.xls",
+                    "sheet": "New Sheet1",
+                    "cell": "D27",
+                    "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea"
+                  },
+                  "marker": null,
+                  "latest": false
+                },
+                "after": {
+                  "device": {
+                    "station": "S35",
+                    "number": "303",
+                    "label": "一回进线",
+                    "aliases": [
+                      "一回进线",
+                      "一号进线",
+                      "I回进线",
+                      "第一回进线"
+                    ],
+                    "station_name": "地面35/10 kV变电站"
+                  },
+                  "metric": "P",
+                  "metric_name": "有功功率 P",
+                  "unit": "kW",
+                  "kind": "reading",
+                  "basis": "hourly",
+                  "status": "ok",
+                  "time": "2026-11-11 00:00:00",
+                  "value": 3229.76,
+                  "source": {
+                    "file": "1111.xls",
+                    "sheet": "New Sheet1",
+                    "cell": "D4",
+                    "sha256": "ce801bf35f36d893d24469673b6dbdba21d63b3b3b0e06f222f4a0817a21e6f9"
+                  },
+                  "marker": null,
+                  "latest": false
+                },
+                "change_kw": -652.33
+              }
+            ],
+            "pending": [],
+            "status": "ok",
+            "stop_reason": "completed",
+            "tool_calls": 3
+          },
+          "text": "LW-000019 历史整点回放。有功功率变化。306 柜在 2026-11-10 23:00:00 的有功为 2,994.13 kW（1110.xls / New Sheet1!H27），在 2026-11-11 00:00:00 为 1,698.75 kW（1111.xls / New Sheet1!H4）。变化 -1,295.38 kW，达到相邻整点变化绝对值 ≥ 1000 kW 的回放筛查门槛。待复核，物理原因需结合运行记录。\n地面35/10 kV变电站一回进线（303 柜）日报整点 2026-11-10 23:00:00 的有功功率 P为 3,882.09 kW。来源 1110.xls / New Sheet1!D27。\n地面35/10 kV变电站一回进线（303 柜）日报整点 2026-11-11 00:00:00 的有功功率 P为 3,229.76 kW。来源 1111.xls / New Sheet1!D4。\n303 柜在该事件的同一对整点之间，有功变化 -652.33 kW。"
+        },
+        "model": {
+          "passed": true,
+          "checks": {
+            "stop_and_budget": true,
+            "aligned_evidence": true,
+            "topology": true,
+            "pending": true,
+            "event_lookup": true
+          },
+          "elapsed_seconds": 26.303,
+          "request_seconds": [
+            14.382,
+            4.673,
+            7.247
+          ],
+          "answer": {
+            "kind": "agent_review",
+            "decision_mode": "model",
+            "max_tool_calls": 4,
+            "steps": [
+              {
+                "tool": "get_monitor_event",
+                "arguments": {
+                  "at": "2026-11-11 00:00:00",
+                  "cabinet": "306",
+                  "event_type": "power_change"
+                },
+                "result": {
+                  "kind": "monitor_event",
+                  "status": "ok",
+                  "event": {
+                    "id": "LW-000019",
+                    "run_id": "LWR-e0c6b18a0d5023d4",
+                    "mode": "historical",
+                    "time": "2026-11-11 00:00:00",
+                    "type": "power_change",
+                    "cabinet": "306",
+                    "evidence": {
+                      "after": {
+                        "source": {
+                          "cell": "H4",
+                          "file": "1111.xls",
+                          "row": 4,
+                          "sha256": "ce801bf35f36d893d24469673b6dbdba21d63b3b3b0e06f222f4a0817a21e6f9",
+                          "sheet": "New Sheet1"
+                        },
+                        "time": "2026-11-11 00:00:00",
+                        "value_kw": 1698.75
+                      },
+                      "before": {
+                        "source": {
+                          "cell": "H27",
+                          "file": "1110.xls",
+                          "row": 27,
+                          "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea",
+                          "sheet": "New Sheet1"
+                        },
+                        "time": "2026-11-10 23:00:00",
+                        "value_kw": 2994.13
+                      },
+                      "change_kw": -1295.38,
+                      "rule": "absolute_change_in_consecutive_hourly_power",
+                      "threshold_kw": 1000.0
+                    }
+                  }
+                }
+              },
+              {
+                "tool": "get_hourly_reading",
+                "arguments": {
+                  "at": "2026-11-10 23:00:00",
+                  "cabinet": "303",
+                  "metric": "P",
+                  "station": "S35"
+                },
+                "result": {
+                  "device": {
+                    "station": "S35",
+                    "number": "303",
+                    "label": "一回进线",
+                    "aliases": [
+                      "一回进线",
+                      "一号进线",
+                      "I回进线",
+                      "第一回进线"
+                    ],
+                    "station_name": "地面35/10 kV变电站"
+                  },
+                  "metric": "P",
+                  "metric_name": "有功功率 P",
+                  "unit": "kW",
+                  "kind": "reading",
+                  "basis": "hourly",
+                  "status": "ok",
+                  "time": "2026-11-10 23:00:00",
+                  "value": 3882.09,
+                  "source": {
+                    "file": "1110.xls",
+                    "sheet": "New Sheet1",
+                    "cell": "D27",
+                    "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea"
+                  },
+                  "marker": null,
+                  "latest": false
+                }
+              },
+              {
+                "tool": "get_hourly_reading",
+                "arguments": {
+                  "at": "2026-11-11 00:00:00",
+                  "cabinet": "303",
+                  "metric": "P",
+                  "station": "S35"
+                },
+                "result": {
+                  "device": {
+                    "station": "S35",
+                    "number": "303",
+                    "label": "一回进线",
+                    "aliases": [
+                      "一回进线",
+                      "一号进线",
+                      "I回进线",
+                      "第一回进线"
+                    ],
+                    "station_name": "地面35/10 kV变电站"
+                  },
+                  "metric": "P",
+                  "metric_name": "有功功率 P",
+                  "unit": "kW",
+                  "kind": "reading",
+                  "basis": "hourly",
+                  "status": "ok",
+                  "time": "2026-11-11 00:00:00",
+                  "value": 3229.76,
+                  "source": {
+                    "file": "1111.xls",
+                    "sheet": "New Sheet1",
+                    "cell": "D4",
+                    "sha256": "ce801bf35f36d893d24469673b6dbdba21d63b3b3b0e06f222f4a0817a21e6f9"
+                  },
+                  "marker": null,
+                  "latest": false
+                }
+              }
+            ],
+            "comparisons": [
+              {
+                "cabinet": "303",
+                "before": {
+                  "device": {
+                    "station": "S35",
+                    "number": "303",
+                    "label": "一回进线",
+                    "aliases": [
+                      "一回进线",
+                      "一号进线",
+                      "I回进线",
+                      "第一回进线"
+                    ],
+                    "station_name": "地面35/10 kV变电站"
+                  },
+                  "metric": "P",
+                  "metric_name": "有功功率 P",
+                  "unit": "kW",
+                  "kind": "reading",
+                  "basis": "hourly",
+                  "status": "ok",
+                  "time": "2026-11-10 23:00:00",
+                  "value": 3882.09,
+                  "source": {
+                    "file": "1110.xls",
+                    "sheet": "New Sheet1",
+                    "cell": "D27",
+                    "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea"
+                  },
+                  "marker": null,
+                  "latest": false
+                },
+                "after": {
+                  "device": {
+                    "station": "S35",
+                    "number": "303",
+                    "label": "一回进线",
+                    "aliases": [
+                      "一回进线",
+                      "一号进线",
+                      "I回进线",
+                      "第一回进线"
+                    ],
+                    "station_name": "地面35/10 kV变电站"
+                  },
+                  "metric": "P",
+                  "metric_name": "有功功率 P",
+                  "unit": "kW",
+                  "kind": "reading",
+                  "basis": "hourly",
+                  "status": "ok",
+                  "time": "2026-11-11 00:00:00",
+                  "value": 3229.76,
+                  "source": {
+                    "file": "1111.xls",
+                    "sheet": "New Sheet1",
+                    "cell": "D4",
+                    "sha256": "ce801bf35f36d893d24469673b6dbdba21d63b3b3b0e06f222f4a0817a21e6f9"
+                  },
+                  "marker": null,
+                  "latest": false
+                },
+                "change_kw": -652.33
+              }
+            ],
+            "pending": [],
+            "status": "ok",
+            "stop_reason": "completed",
+            "tool_calls": 3
+          },
+          "text": "LW-000019 历史整点回放。有功功率变化。306 柜在 2026-11-10 23:00:00 的有功为 2,994.13 kW（1110.xls / New Sheet1!H27），在 2026-11-11 00:00:00 为 1,698.75 kW（1111.xls / New Sheet1!H4）。变化 -1,295.38 kW，达到相邻整点变化绝对值 ≥ 1000 kW 的回放筛查门槛。待复核，物理原因需结合运行记录。\n地面35/10 kV变电站一回进线（303 柜）日报整点 2026-11-10 23:00:00 的有功功率 P为 3,882.09 kW。来源 1110.xls / New Sheet1!D27。\n地面35/10 kV变电站一回进线（303 柜）日报整点 2026-11-11 00:00:00 的有功功率 P为 3,229.76 kW。来源 1111.xls / New Sheet1!D4。\n303 柜在该事件的同一对整点之间，有功变化 -652.33 kW。"
+        }
+      }
+    },
+    {
+      "case": {
+        "id": "Q07",
+        "question": "LW-999999，比较306柜同期有功。",
+        "reason": "needs_evidence",
+        "calls": 1,
+        "event": {
+          "event_id": "LW-999999"
+        },
+        "event_status": "missing"
+      },
+      "results": {
+        "local": {
+          "passed": true,
+          "checks": {
+            "stop_and_budget": true,
+            "aligned_evidence": true,
+            "topology": true,
+            "pending": true,
+            "event_lookup": true
+          },
+          "elapsed_seconds": 0.001,
+          "request_seconds": [],
+          "answer": {
+            "kind": "agent_review",
+            "decision_mode": "local",
+            "max_tool_calls": 4,
+            "steps": [
+              {
+                "tool": "get_monitor_event",
+                "arguments": {
+                  "event_id": "LW-999999"
+                },
+                "result": {
+                  "kind": "monitor_event",
+                  "status": "missing"
+                }
+              }
+            ],
+            "comparisons": [],
+            "pending": [
+              "请核对事件编号及回放范围，或先完成对应日期的回放归档。"
+            ],
+            "status": "partial",
+            "stop_reason": "needs_evidence",
+            "tool_calls": 1
+          },
+          "text": "指定回放和条件下未找到这类事件。\n请核对事件编号及回放范围，或先完成对应日期的回放归档。"
+        },
+        "model": {
+          "passed": true,
+          "checks": {
+            "stop_and_budget": true,
+            "aligned_evidence": true,
+            "topology": true,
+            "pending": true,
+            "event_lookup": true
+          },
+          "elapsed_seconds": 2.83,
+          "request_seconds": [
+            2.83
+          ],
+          "answer": {
+            "kind": "agent_review",
+            "decision_mode": "model",
+            "max_tool_calls": 4,
+            "steps": [
+              {
+                "tool": "get_monitor_event",
+                "arguments": {
+                  "event_id": "LW-999999"
+                },
+                "result": {
+                  "kind": "monitor_event",
+                  "status": "missing"
+                }
+              }
+            ],
+            "comparisons": [],
+            "pending": [
+              "请核对事件编号及回放范围，或先完成对应日期的回放归档。"
+            ],
+            "status": "partial",
+            "stop_reason": "needs_evidence",
+            "tool_calls": 1
+          },
+          "text": "指定回放和条件下未找到这类事件。\n请核对事件编号及回放范围，或先完成对应日期的回放归档。"
+        }
+      }
+    },
+    {
+      "case": {
+        "id": "Q08",
+        "question": "LW-000010，比较306柜同期有功。再查1010柜下游。",
+        "reason": "completed",
+        "calls": 4,
+        "comparison": [
+          "306",
+          -204.41,
+          [
+            "2026-11-10 11:00:00",
+            "1110.xls",
+            "H15"
+          ],
+          [
+            "2026-11-10 12:00:00",
+            "1110.xls",
+            "H16"
+          ]
+        ],
+        "link": [
+          "1010",
+          "1201"
+        ]
+      },
+      "results": {
+        "local": {
+          "passed": true,
+          "checks": {
+            "stop_and_budget": true,
+            "aligned_evidence": true,
+            "topology": true,
+            "pending": true,
+            "event_lookup": true
+          },
+          "elapsed_seconds": 0.001,
+          "request_seconds": [],
+          "answer": {
+            "kind": "agent_review",
+            "decision_mode": "local",
+            "max_tool_calls": 4,
+            "steps": [
+              {
+                "tool": "get_monitor_event",
+                "arguments": {
+                  "event_id": "LW-000010"
+                },
+                "result": {
+                  "kind": "monitor_event",
+                  "status": "ok",
+                  "event": {
+                    "id": "LW-000010",
+                    "run_id": "LWR-e0c6b18a0d5023d4",
+                    "mode": "historical",
+                    "time": "2026-11-10 12:00:00",
+                    "type": "power_change",
+                    "cabinet": "303",
+                    "evidence": {
+                      "after": {
+                        "source": {
+                          "cell": "D16",
+                          "file": "1110.xls",
+                          "row": 16,
+                          "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea",
+                          "sheet": "New Sheet1"
+                        },
+                        "time": "2026-11-10 12:00:00",
+                        "value_kw": 4479.96
+                      },
+                      "before": {
+                        "source": {
+                          "cell": "D15",
+                          "file": "1110.xls",
+                          "row": 15,
+                          "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea",
+                          "sheet": "New Sheet1"
+                        },
+                        "time": "2026-11-10 11:00:00",
+                        "value_kw": 1071.84
+                      },
+                      "change_kw": 3408.12,
+                      "rule": "absolute_change_in_consecutive_hourly_power",
+                      "threshold_kw": 1000.0
+                    }
+                  }
+                }
+              },
+              {
+                "tool": "get_hourly_reading",
+                "arguments": {
+                  "station": "S35",
+                  "cabinet": "306",
+                  "metric": "P",
+                  "at": "2026-11-10 11:00:00"
+                },
+                "result": {
+                  "device": {
+                    "station": "S35",
+                    "number": "306",
+                    "label": "二回进线",
+                    "aliases": [
+                      "二回进线",
+                      "二号进线",
+                      "II回进线",
+                      "第二回进线"
+                    ],
+                    "station_name": "地面35/10 kV变电站"
+                  },
+                  "metric": "P",
+                  "metric_name": "有功功率 P",
+                  "unit": "kW",
+                  "kind": "reading",
+                  "basis": "hourly",
+                  "status": "ok",
+                  "time": "2026-11-10 11:00:00",
+                  "value": 427.54,
+                  "source": {
+                    "file": "1110.xls",
+                    "sheet": "New Sheet1",
+                    "cell": "H15",
+                    "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea"
+                  },
+                  "marker": null,
+                  "latest": false
+                }
+              },
+              {
+                "tool": "get_hourly_reading",
+                "arguments": {
+                  "station": "S35",
+                  "cabinet": "306",
+                  "metric": "P",
+                  "at": "2026-11-10 12:00:00"
+                },
+                "result": {
+                  "device": {
+                    "station": "S35",
+                    "number": "306",
+                    "label": "二回进线",
+                    "aliases": [
+                      "二回进线",
+                      "二号进线",
+                      "II回进线",
+                      "第二回进线"
+                    ],
+                    "station_name": "地面35/10 kV变电站"
+                  },
+                  "metric": "P",
+                  "metric_name": "有功功率 P",
+                  "unit": "kW",
+                  "kind": "reading",
+                  "basis": "hourly",
+                  "status": "ok",
+                  "time": "2026-11-10 12:00:00",
+                  "value": 223.13,
+                  "source": {
+                    "file": "1110.xls",
+                    "sheet": "New Sheet1",
+                    "cell": "H16",
+                    "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea"
+                  },
+                  "marker": null,
+                  "latest": false
+                }
+              },
+              {
+                "tool": "get_supply_link",
+                "arguments": {
+                  "station": "S35",
+                  "cabinet": "1010",
+                  "direction": "downstream"
+                },
+                "result": {
+                  "kind": "supply",
+                  "device": {
+                    "station": "S35",
+                    "number": "1010",
+                    "label": "II回井下1535",
+                    "aliases": [
+                      "II回井下1535",
+                      "井下1535二回",
+                      "下井二回"
+                    ],
+                    "station_name": "地面35/10 kV变电站"
+                  },
+                  "status": "ok",
+                  "links": [
+                    {
+                      "from": {
+                        "station": "S35",
+                        "number": "1010",
+                        "label": "II回井下1535",
+                        "aliases": [
+                          "II回井下1535",
+                          "井下1535二回",
+                          "下井二回"
+                        ],
+                        "station_name": "地面35/10 kV变电站"
+                      },
+                      "to": {
+                        "station": "C1535",
+                        "number": "1201",
+                        "label": "二回进线",
+                        "aliases": [
+                          "二回进线",
+                          "二号进线",
+                          "II回进线",
+                          "第二回进线"
+                        ],
+                        "station_name": "1535中央变电所"
+                      },
+                      "label": "地面站10 kV II段供电线路",
+                      "sources": [
+                        {
+                          "filename": "35KV变电所.png",
+                          "captured_at": "2026-11-17 20:29:01",
+                          "sha256": "cfbf052ae1068b299e4462c953ad9a628a183f22672794d6abf1ac13fc6dcab5"
+                        },
+                        {
+                          "filename": "中央变电所.png",
+                          "captured_at": "2026-11-17 20:29:25",
+                          "sha256": "8cebfebf7b3bcfbfe9508f0e9fe8dca7691fe987216b2e93bba111de1a7454e2"
+                        }
+                      ]
+                    }
+                  ],
+                  "basis": "single_line_diagram_labels"
+                }
+              }
+            ],
+            "comparisons": [
+              {
+                "cabinet": "306",
+                "before": {
+                  "device": {
+                    "station": "S35",
+                    "number": "306",
+                    "label": "二回进线",
+                    "aliases": [
+                      "二回进线",
+                      "二号进线",
+                      "II回进线",
+                      "第二回进线"
+                    ],
+                    "station_name": "地面35/10 kV变电站"
+                  },
+                  "metric": "P",
+                  "metric_name": "有功功率 P",
+                  "unit": "kW",
+                  "kind": "reading",
+                  "basis": "hourly",
+                  "status": "ok",
+                  "time": "2026-11-10 11:00:00",
+                  "value": 427.54,
+                  "source": {
+                    "file": "1110.xls",
+                    "sheet": "New Sheet1",
+                    "cell": "H15",
+                    "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea"
+                  },
+                  "marker": null,
+                  "latest": false
+                },
+                "after": {
+                  "device": {
+                    "station": "S35",
+                    "number": "306",
+                    "label": "二回进线",
+                    "aliases": [
+                      "二回进线",
+                      "二号进线",
+                      "II回进线",
+                      "第二回进线"
+                    ],
+                    "station_name": "地面35/10 kV变电站"
+                  },
+                  "metric": "P",
+                  "metric_name": "有功功率 P",
+                  "unit": "kW",
+                  "kind": "reading",
+                  "basis": "hourly",
+                  "status": "ok",
+                  "time": "2026-11-10 12:00:00",
+                  "value": 223.13,
+                  "source": {
+                    "file": "1110.xls",
+                    "sheet": "New Sheet1",
+                    "cell": "H16",
+                    "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea"
+                  },
+                  "marker": null,
+                  "latest": false
+                },
+                "change_kw": -204.41
+              }
+            ],
+            "pending": [],
+            "status": "ok",
+            "stop_reason": "completed",
+            "tool_calls": 4
+          },
+          "text": "LW-000010 历史整点回放。有功功率变化。303 柜在 2026-11-10 11:00:00 的有功为 1,071.84 kW（1110.xls / New Sheet1!D15），在 2026-11-10 12:00:00 为 4,479.96 kW（1110.xls / New Sheet1!D16）。变化 +3,408.12 kW，达到相邻整点变化绝对值 ≥ 1000 kW 的回放筛查门槛。待复核，物理原因需结合运行记录。\n地面35/10 kV变电站二回进线（306 柜）日报整点 2026-11-10 11:00:00 的有功功率 P为 427.54 kW。来源 1110.xls / New Sheet1!H15。\n地面35/10 kV变电站二回进线（306 柜）日报整点 2026-11-10 12:00:00 的有功功率 P为 223.13 kW。来源 1110.xls / New Sheet1!H16。\n地面35/10 kV变电站II回井下1535（1010 柜）通过地面站10 kV II段供电线路接入1535中央变电所二回进线（1201 柜）。依据 35KV变电所.png（2026-11-17 20:29:01）、中央变电所.png（2026-11-17 20:29:25） 的线路标注。\n306 柜在该事件的同一对整点之间，有功变化 -204.41 kW。"
+        },
+        "model": {
+          "passed": false,
+          "checks": {
+            "stop_and_budget": false,
+            "aligned_evidence": false,
+            "topology": false,
+            "pending": true,
+            "event_lookup": false
+          },
+          "elapsed_seconds": 30.467,
+          "request_seconds": [
+            30.467
+          ],
+          "answer": {
+            "kind": "agent_review",
+            "decision_mode": "model",
+            "max_tool_calls": 4,
+            "steps": [],
+            "comparisons": [],
+            "pending": [
+              "模型端点返回 HTTP 400。"
+            ],
+            "status": "partial",
+            "stop_reason": "model_error",
+            "tool_calls": 0
+          },
+          "text": "模型端点返回 HTTP 400。"
+        }
+      }
+    },
+    {
+      "case": {
+        "id": "Q09",
+        "question": "LW-000010，比较1009柜同期有功。",
+        "reason": "completed",
+        "calls": 3,
+        "comparison": [
+          "1009",
+          459.92,
+          [
+            "2026-11-10 11:00:00",
+            "1110.xls",
+            "BD15"
+          ],
+          [
+            "2026-11-10 12:00:00",
+            "1110.xls",
+            "BD16"
+          ]
+        ]
+      },
+      "results": {
+        "local": {
+          "passed": true,
+          "checks": {
+            "stop_and_budget": true,
+            "aligned_evidence": true,
+            "topology": true,
+            "pending": true,
+            "event_lookup": true
+          },
+          "elapsed_seconds": 0.001,
+          "request_seconds": [],
+          "answer": {
+            "kind": "agent_review",
+            "decision_mode": "local",
+            "max_tool_calls": 4,
+            "steps": [
+              {
+                "tool": "get_monitor_event",
+                "arguments": {
+                  "event_id": "LW-000010"
+                },
+                "result": {
+                  "kind": "monitor_event",
+                  "status": "ok",
+                  "event": {
+                    "id": "LW-000010",
+                    "run_id": "LWR-e0c6b18a0d5023d4",
+                    "mode": "historical",
+                    "time": "2026-11-10 12:00:00",
+                    "type": "power_change",
+                    "cabinet": "303",
+                    "evidence": {
+                      "after": {
+                        "source": {
+                          "cell": "D16",
+                          "file": "1110.xls",
+                          "row": 16,
+                          "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea",
+                          "sheet": "New Sheet1"
+                        },
+                        "time": "2026-11-10 12:00:00",
+                        "value_kw": 4479.96
+                      },
+                      "before": {
+                        "source": {
+                          "cell": "D15",
+                          "file": "1110.xls",
+                          "row": 15,
+                          "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea",
+                          "sheet": "New Sheet1"
+                        },
+                        "time": "2026-11-10 11:00:00",
+                        "value_kw": 1071.84
+                      },
+                      "change_kw": 3408.12,
+                      "rule": "absolute_change_in_consecutive_hourly_power",
+                      "threshold_kw": 1000.0
+                    }
+                  }
+                }
+              },
+              {
+                "tool": "get_hourly_reading",
+                "arguments": {
+                  "station": "S35",
+                  "cabinet": "1009",
+                  "metric": "P",
+                  "at": "2026-11-10 11:00:00"
+                },
+                "result": {
+                  "device": {
+                    "station": "S35",
+                    "number": "1009",
+                    "label": "I回井下1535",
+                    "aliases": [
+                      "I回井下1535",
+                      "井下1535一回",
+                      "下井一回"
+                    ],
+                    "station_name": "地面35/10 kV变电站"
+                  },
+                  "metric": "P",
+                  "metric_name": "有功功率 P",
+                  "unit": "kW",
+                  "kind": "reading",
+                  "basis": "hourly",
+                  "status": "ok",
+                  "time": "2026-11-10 11:00:00",
+                  "value": 133.13,
+                  "source": {
+                    "file": "1110.xls",
+                    "sheet": "New Sheet1",
+                    "cell": "BD15",
+                    "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea"
+                  },
+                  "marker": null,
+                  "latest": false
+                }
+              },
+              {
+                "tool": "get_hourly_reading",
+                "arguments": {
+                  "station": "S35",
+                  "cabinet": "1009",
+                  "metric": "P",
+                  "at": "2026-11-10 12:00:00"
+                },
+                "result": {
+                  "device": {
+                    "station": "S35",
+                    "number": "1009",
+                    "label": "I回井下1535",
+                    "aliases": [
+                      "I回井下1535",
+                      "井下1535一回",
+                      "下井一回"
+                    ],
+                    "station_name": "地面35/10 kV变电站"
+                  },
+                  "metric": "P",
+                  "metric_name": "有功功率 P",
+                  "unit": "kW",
+                  "kind": "reading",
+                  "basis": "hourly",
+                  "status": "ok",
+                  "time": "2026-11-10 12:00:00",
+                  "value": 593.05,
+                  "source": {
+                    "file": "1110.xls",
+                    "sheet": "New Sheet1",
+                    "cell": "BD16",
+                    "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea"
+                  },
+                  "marker": null,
+                  "latest": false
+                }
+              }
+            ],
+            "comparisons": [
+              {
+                "cabinet": "1009",
+                "before": {
+                  "device": {
+                    "station": "S35",
+                    "number": "1009",
+                    "label": "I回井下1535",
+                    "aliases": [
+                      "I回井下1535",
+                      "井下1535一回",
+                      "下井一回"
+                    ],
+                    "station_name": "地面35/10 kV变电站"
+                  },
+                  "metric": "P",
+                  "metric_name": "有功功率 P",
+                  "unit": "kW",
+                  "kind": "reading",
+                  "basis": "hourly",
+                  "status": "ok",
+                  "time": "2026-11-10 11:00:00",
+                  "value": 133.13,
+                  "source": {
+                    "file": "1110.xls",
+                    "sheet": "New Sheet1",
+                    "cell": "BD15",
+                    "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea"
+                  },
+                  "marker": null,
+                  "latest": false
+                },
+                "after": {
+                  "device": {
+                    "station": "S35",
+                    "number": "1009",
+                    "label": "I回井下1535",
+                    "aliases": [
+                      "I回井下1535",
+                      "井下1535一回",
+                      "下井一回"
+                    ],
+                    "station_name": "地面35/10 kV变电站"
+                  },
+                  "metric": "P",
+                  "metric_name": "有功功率 P",
+                  "unit": "kW",
+                  "kind": "reading",
+                  "basis": "hourly",
+                  "status": "ok",
+                  "time": "2026-11-10 12:00:00",
+                  "value": 593.05,
+                  "source": {
+                    "file": "1110.xls",
+                    "sheet": "New Sheet1",
+                    "cell": "BD16",
+                    "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea"
+                  },
+                  "marker": null,
+                  "latest": false
+                },
+                "change_kw": 459.92
+              }
+            ],
+            "pending": [],
+            "status": "ok",
+            "stop_reason": "completed",
+            "tool_calls": 3
+          },
+          "text": "LW-000010 历史整点回放。有功功率变化。303 柜在 2026-11-10 11:00:00 的有功为 1,071.84 kW（1110.xls / New Sheet1!D15），在 2026-11-10 12:00:00 为 4,479.96 kW（1110.xls / New Sheet1!D16）。变化 +3,408.12 kW，达到相邻整点变化绝对值 ≥ 1000 kW 的回放筛查门槛。待复核，物理原因需结合运行记录。\n地面35/10 kV变电站I回井下1535（1009 柜）日报整点 2026-11-10 11:00:00 的有功功率 P为 133.13 kW。来源 1110.xls / New Sheet1!BD15。\n地面35/10 kV变电站I回井下1535（1009 柜）日报整点 2026-11-10 12:00:00 的有功功率 P为 593.05 kW。来源 1110.xls / New Sheet1!BD16。\n1009 柜在该事件的同一对整点之间，有功变化 +459.92 kW。"
+        },
+        "model": {
+          "passed": true,
+          "checks": {
+            "stop_and_budget": true,
+            "aligned_evidence": true,
+            "topology": true,
+            "pending": true,
+            "event_lookup": true
+          },
+          "elapsed_seconds": 10.959,
+          "request_seconds": [
+            2.625,
+            4.638,
+            3.695
+          ],
+          "answer": {
+            "kind": "agent_review",
+            "decision_mode": "model",
+            "max_tool_calls": 4,
+            "steps": [
+              {
+                "tool": "get_monitor_event",
+                "arguments": {
+                  "event_id": "LW-000010"
+                },
+                "result": {
+                  "kind": "monitor_event",
+                  "status": "ok",
+                  "event": {
+                    "id": "LW-000010",
+                    "run_id": "LWR-e0c6b18a0d5023d4",
+                    "mode": "historical",
+                    "time": "2026-11-10 12:00:00",
+                    "type": "power_change",
+                    "cabinet": "303",
+                    "evidence": {
+                      "after": {
+                        "source": {
+                          "cell": "D16",
+                          "file": "1110.xls",
+                          "row": 16,
+                          "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea",
+                          "sheet": "New Sheet1"
+                        },
+                        "time": "2026-11-10 12:00:00",
+                        "value_kw": 4479.96
+                      },
+                      "before": {
+                        "source": {
+                          "cell": "D15",
+                          "file": "1110.xls",
+                          "row": 15,
+                          "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea",
+                          "sheet": "New Sheet1"
+                        },
+                        "time": "2026-11-10 11:00:00",
+                        "value_kw": 1071.84
+                      },
+                      "change_kw": 3408.12,
+                      "rule": "absolute_change_in_consecutive_hourly_power",
+                      "threshold_kw": 1000.0
+                    }
+                  }
+                }
+              },
+              {
+                "tool": "get_hourly_reading",
+                "arguments": {
+                  "at": "2026-11-10 11:00:00",
+                  "cabinet": "1009",
+                  "metric": "P",
+                  "station": "S35"
+                },
+                "result": {
+                  "device": {
+                    "station": "S35",
+                    "number": "1009",
+                    "label": "I回井下1535",
+                    "aliases": [
+                      "I回井下1535",
+                      "井下1535一回",
+                      "下井一回"
+                    ],
+                    "station_name": "地面35/10 kV变电站"
+                  },
+                  "metric": "P",
+                  "metric_name": "有功功率 P",
+                  "unit": "kW",
+                  "kind": "reading",
+                  "basis": "hourly",
+                  "status": "ok",
+                  "time": "2026-11-10 11:00:00",
+                  "value": 133.13,
+                  "source": {
+                    "file": "1110.xls",
+                    "sheet": "New Sheet1",
+                    "cell": "BD15",
+                    "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea"
+                  },
+                  "marker": null,
+                  "latest": false
+                }
+              },
+              {
+                "tool": "get_hourly_reading",
+                "arguments": {
+                  "at": "2026-11-10 12:00:00",
+                  "cabinet": "1009",
+                  "metric": "P",
+                  "station": "S35"
+                },
+                "result": {
+                  "device": {
+                    "station": "S35",
+                    "number": "1009",
+                    "label": "I回井下1535",
+                    "aliases": [
+                      "I回井下1535",
+                      "井下1535一回",
+                      "下井一回"
+                    ],
+                    "station_name": "地面35/10 kV变电站"
+                  },
+                  "metric": "P",
+                  "metric_name": "有功功率 P",
+                  "unit": "kW",
+                  "kind": "reading",
+                  "basis": "hourly",
+                  "status": "ok",
+                  "time": "2026-11-10 12:00:00",
+                  "value": 593.05,
+                  "source": {
+                    "file": "1110.xls",
+                    "sheet": "New Sheet1",
+                    "cell": "BD16",
+                    "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea"
+                  },
+                  "marker": null,
+                  "latest": false
+                }
+              }
+            ],
+            "comparisons": [
+              {
+                "cabinet": "1009",
+                "before": {
+                  "device": {
+                    "station": "S35",
+                    "number": "1009",
+                    "label": "I回井下1535",
+                    "aliases": [
+                      "I回井下1535",
+                      "井下1535一回",
+                      "下井一回"
+                    ],
+                    "station_name": "地面35/10 kV变电站"
+                  },
+                  "metric": "P",
+                  "metric_name": "有功功率 P",
+                  "unit": "kW",
+                  "kind": "reading",
+                  "basis": "hourly",
+                  "status": "ok",
+                  "time": "2026-11-10 11:00:00",
+                  "value": 133.13,
+                  "source": {
+                    "file": "1110.xls",
+                    "sheet": "New Sheet1",
+                    "cell": "BD15",
+                    "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea"
+                  },
+                  "marker": null,
+                  "latest": false
+                },
+                "after": {
+                  "device": {
+                    "station": "S35",
+                    "number": "1009",
+                    "label": "I回井下1535",
+                    "aliases": [
+                      "I回井下1535",
+                      "井下1535一回",
+                      "下井一回"
+                    ],
+                    "station_name": "地面35/10 kV变电站"
+                  },
+                  "metric": "P",
+                  "metric_name": "有功功率 P",
+                  "unit": "kW",
+                  "kind": "reading",
+                  "basis": "hourly",
+                  "status": "ok",
+                  "time": "2026-11-10 12:00:00",
+                  "value": 593.05,
+                  "source": {
+                    "file": "1110.xls",
+                    "sheet": "New Sheet1",
+                    "cell": "BD16",
+                    "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea"
+                  },
+                  "marker": null,
+                  "latest": false
+                },
+                "change_kw": 459.92
+              }
+            ],
+            "pending": [],
+            "status": "ok",
+            "stop_reason": "completed",
+            "tool_calls": 3
+          },
+          "text": "LW-000010 历史整点回放。有功功率变化。303 柜在 2026-11-10 11:00:00 的有功为 1,071.84 kW（1110.xls / New Sheet1!D15），在 2026-11-10 12:00:00 为 4,479.96 kW（1110.xls / New Sheet1!D16）。变化 +3,408.12 kW，达到相邻整点变化绝对值 ≥ 1000 kW 的回放筛查门槛。待复核，物理原因需结合运行记录。\n地面35/10 kV变电站I回井下1535（1009 柜）日报整点 2026-11-10 11:00:00 的有功功率 P为 133.13 kW。来源 1110.xls / New Sheet1!BD15。\n地面35/10 kV变电站I回井下1535（1009 柜）日报整点 2026-11-10 12:00:00 的有功功率 P为 593.05 kW。来源 1110.xls / New Sheet1!BD16。\n1009 柜在该事件的同一对整点之间，有功变化 +459.92 kW。"
+        }
+      }
+    },
+    {
+      "case": {
+        "id": "Q10",
+        "question": "LW-000010，306柜12:30同期有功？",
+        "reason": "clarify",
+        "calls": 0
+      },
+      "results": {
+        "local": {
+          "passed": true,
+          "checks": {
+            "stop_and_budget": true,
+            "aligned_evidence": true,
+            "topology": true,
+            "pending": true
+          },
+          "elapsed_seconds": 0.0,
+          "request_seconds": [],
+          "answer": {
+            "kind": "clarify",
+            "status": "clarify",
+            "message": "请用整点进行对照，例如 11:00 或 12:00。"
+          },
+          "text": "请用整点进行对照，例如 11:00 或 12:00。"
+        },
+        "model": {
+          "passed": true,
+          "checks": {
+            "stop_and_budget": true,
+            "aligned_evidence": true,
+            "topology": true,
+            "pending": true
+          },
+          "elapsed_seconds": 0.0,
+          "request_seconds": [],
+          "answer": {
+            "kind": "clarify",
+            "status": "clarify",
+            "message": "请用整点进行对照，例如 11:00 或 12:00。"
+          },
+          "text": "请用整点进行对照，例如 11:00 或 12:00。"
+        }
+      }
+    },
+    {
+      "case": {
+        "id": "Q11",
+        "question": "LW-000010，比较306柜和1009柜同期有功，请优先查齐1009柜两个整点。",
+        "reason": "budget_exhausted",
+        "calls": 4,
+        "comparison": [
+          "1009",
+          459.92,
+          [
+            "2026-11-10 11:00:00",
+            "1110.xls",
+            "BD15"
+          ],
+          [
+            "2026-11-10 12:00:00",
+            "1110.xls",
+            "BD16"
+          ]
+        ],
+        "pending": [
+          "尚待查询 306 柜"
+        ]
+      },
+      "results": {
+        "local": {
+          "passed": false,
+          "checks": {
+            "stop_and_budget": true,
+            "aligned_evidence": false,
+            "topology": true,
+            "pending": false,
+            "event_lookup": true
+          },
+          "elapsed_seconds": 0.001,
+          "request_seconds": [],
+          "answer": {
+            "kind": "agent_review",
+            "decision_mode": "local",
+            "max_tool_calls": 4,
+            "steps": [
+              {
+                "tool": "get_monitor_event",
+                "arguments": {
+                  "event_id": "LW-000010"
+                },
+                "result": {
+                  "kind": "monitor_event",
+                  "status": "ok",
+                  "event": {
+                    "id": "LW-000010",
+                    "run_id": "LWR-e0c6b18a0d5023d4",
+                    "mode": "historical",
+                    "time": "2026-11-10 12:00:00",
+                    "type": "power_change",
+                    "cabinet": "303",
+                    "evidence": {
+                      "after": {
+                        "source": {
+                          "cell": "D16",
+                          "file": "1110.xls",
+                          "row": 16,
+                          "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea",
+                          "sheet": "New Sheet1"
+                        },
+                        "time": "2026-11-10 12:00:00",
+                        "value_kw": 4479.96
+                      },
+                      "before": {
+                        "source": {
+                          "cell": "D15",
+                          "file": "1110.xls",
+                          "row": 15,
+                          "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea",
+                          "sheet": "New Sheet1"
+                        },
+                        "time": "2026-11-10 11:00:00",
+                        "value_kw": 1071.84
+                      },
+                      "change_kw": 3408.12,
+                      "rule": "absolute_change_in_consecutive_hourly_power",
+                      "threshold_kw": 1000.0
+                    }
+                  }
+                }
+              },
+              {
+                "tool": "get_hourly_reading",
+                "arguments": {
+                  "station": "S35",
+                  "cabinet": "306",
+                  "metric": "P",
+                  "at": "2026-11-10 11:00:00"
+                },
+                "result": {
+                  "device": {
+                    "station": "S35",
+                    "number": "306",
+                    "label": "二回进线",
+                    "aliases": [
+                      "二回进线",
+                      "二号进线",
+                      "II回进线",
+                      "第二回进线"
+                    ],
+                    "station_name": "地面35/10 kV变电站"
+                  },
+                  "metric": "P",
+                  "metric_name": "有功功率 P",
+                  "unit": "kW",
+                  "kind": "reading",
+                  "basis": "hourly",
+                  "status": "ok",
+                  "time": "2026-11-10 11:00:00",
+                  "value": 427.54,
+                  "source": {
+                    "file": "1110.xls",
+                    "sheet": "New Sheet1",
+                    "cell": "H15",
+                    "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea"
+                  },
+                  "marker": null,
+                  "latest": false
+                }
+              },
+              {
+                "tool": "get_hourly_reading",
+                "arguments": {
+                  "station": "S35",
+                  "cabinet": "306",
+                  "metric": "P",
+                  "at": "2026-11-10 12:00:00"
+                },
+                "result": {
+                  "device": {
+                    "station": "S35",
+                    "number": "306",
+                    "label": "二回进线",
+                    "aliases": [
+                      "二回进线",
+                      "二号进线",
+                      "II回进线",
+                      "第二回进线"
+                    ],
+                    "station_name": "地面35/10 kV变电站"
+                  },
+                  "metric": "P",
+                  "metric_name": "有功功率 P",
+                  "unit": "kW",
+                  "kind": "reading",
+                  "basis": "hourly",
+                  "status": "ok",
+                  "time": "2026-11-10 12:00:00",
+                  "value": 223.13,
+                  "source": {
+                    "file": "1110.xls",
+                    "sheet": "New Sheet1",
+                    "cell": "H16",
+                    "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea"
+                  },
+                  "marker": null,
+                  "latest": false
+                }
+              },
+              {
+                "tool": "get_hourly_reading",
+                "arguments": {
+                  "station": "S35",
+                  "cabinet": "1009",
+                  "metric": "P",
+                  "at": "2026-11-10 11:00:00"
+                },
+                "result": {
+                  "device": {
+                    "station": "S35",
+                    "number": "1009",
+                    "label": "I回井下1535",
+                    "aliases": [
+                      "I回井下1535",
+                      "井下1535一回",
+                      "下井一回"
+                    ],
+                    "station_name": "地面35/10 kV变电站"
+                  },
+                  "metric": "P",
+                  "metric_name": "有功功率 P",
+                  "unit": "kW",
+                  "kind": "reading",
+                  "basis": "hourly",
+                  "status": "ok",
+                  "time": "2026-11-10 11:00:00",
+                  "value": 133.13,
+                  "source": {
+                    "file": "1110.xls",
+                    "sheet": "New Sheet1",
+                    "cell": "BD15",
+                    "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea"
+                  },
+                  "marker": null,
+                  "latest": false
+                }
+              }
+            ],
+            "comparisons": [
+              {
+                "cabinet": "306",
+                "before": {
+                  "device": {
+                    "station": "S35",
+                    "number": "306",
+                    "label": "二回进线",
+                    "aliases": [
+                      "二回进线",
+                      "二号进线",
+                      "II回进线",
+                      "第二回进线"
+                    ],
+                    "station_name": "地面35/10 kV变电站"
+                  },
+                  "metric": "P",
+                  "metric_name": "有功功率 P",
+                  "unit": "kW",
+                  "kind": "reading",
+                  "basis": "hourly",
+                  "status": "ok",
+                  "time": "2026-11-10 11:00:00",
+                  "value": 427.54,
+                  "source": {
+                    "file": "1110.xls",
+                    "sheet": "New Sheet1",
+                    "cell": "H15",
+                    "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea"
+                  },
+                  "marker": null,
+                  "latest": false
+                },
+                "after": {
+                  "device": {
+                    "station": "S35",
+                    "number": "306",
+                    "label": "二回进线",
+                    "aliases": [
+                      "二回进线",
+                      "二号进线",
+                      "II回进线",
+                      "第二回进线"
+                    ],
+                    "station_name": "地面35/10 kV变电站"
+                  },
+                  "metric": "P",
+                  "metric_name": "有功功率 P",
+                  "unit": "kW",
+                  "kind": "reading",
+                  "basis": "hourly",
+                  "status": "ok",
+                  "time": "2026-11-10 12:00:00",
+                  "value": 223.13,
+                  "source": {
+                    "file": "1110.xls",
+                    "sheet": "New Sheet1",
+                    "cell": "H16",
+                    "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea"
+                  },
+                  "marker": null,
+                  "latest": false
+                },
+                "change_kw": -204.41
+              }
+            ],
+            "pending": [
+              "尚待查询 1009 柜有功整点 2026-11-10 12:00:00。",
+              "调用预算已用完。请单独查询上面尚缺的整点读数或供电关系。"
+            ],
+            "status": "partial",
+            "stop_reason": "budget_exhausted",
+            "tool_calls": 4
+          },
+          "text": "LW-000010 历史整点回放。有功功率变化。303 柜在 2026-11-10 11:00:00 的有功为 1,071.84 kW（1110.xls / New Sheet1!D15），在 2026-11-10 12:00:00 为 4,479.96 kW（1110.xls / New Sheet1!D16）。变化 +3,408.12 kW，达到相邻整点变化绝对值 ≥ 1000 kW 的回放筛查门槛。待复核，物理原因需结合运行记录。\n地面35/10 kV变电站二回进线（306 柜）日报整点 2026-11-10 11:00:00 的有功功率 P为 427.54 kW。来源 1110.xls / New Sheet1!H15。\n地面35/10 kV变电站二回进线（306 柜）日报整点 2026-11-10 12:00:00 的有功功率 P为 223.13 kW。来源 1110.xls / New Sheet1!H16。\n地面35/10 kV变电站I回井下1535（1009 柜）日报整点 2026-11-10 11:00:00 的有功功率 P为 133.13 kW。来源 1110.xls / New Sheet1!BD15。\n306 柜在该事件的同一对整点之间，有功变化 -204.41 kW。\n尚待查询 1009 柜有功整点 2026-11-10 12:00:00。\n调用预算已用完。请单独查询上面尚缺的整点读数或供电关系。"
+        },
+        "model": {
+          "passed": true,
+          "checks": {
+            "stop_and_budget": true,
+            "aligned_evidence": true,
+            "topology": true,
+            "pending": true,
+            "event_lookup": true
+          },
+          "elapsed_seconds": 26.154,
+          "request_seconds": [
+            2.057,
+            16.375,
+            3.287,
+            4.434
+          ],
+          "answer": {
+            "kind": "agent_review",
+            "decision_mode": "model",
+            "max_tool_calls": 4,
+            "steps": [
+              {
+                "tool": "get_monitor_event",
+                "arguments": {
+                  "event_id": "LW-000010"
+                },
+                "result": {
+                  "kind": "monitor_event",
+                  "status": "ok",
+                  "event": {
+                    "id": "LW-000010",
+                    "run_id": "LWR-e0c6b18a0d5023d4",
+                    "mode": "historical",
+                    "time": "2026-11-10 12:00:00",
+                    "type": "power_change",
+                    "cabinet": "303",
+                    "evidence": {
+                      "after": {
+                        "source": {
+                          "cell": "D16",
+                          "file": "1110.xls",
+                          "row": 16,
+                          "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea",
+                          "sheet": "New Sheet1"
+                        },
+                        "time": "2026-11-10 12:00:00",
+                        "value_kw": 4479.96
+                      },
+                      "before": {
+                        "source": {
+                          "cell": "D15",
+                          "file": "1110.xls",
+                          "row": 15,
+                          "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea",
+                          "sheet": "New Sheet1"
+                        },
+                        "time": "2026-11-10 11:00:00",
+                        "value_kw": 1071.84
+                      },
+                      "change_kw": 3408.12,
+                      "rule": "absolute_change_in_consecutive_hourly_power",
+                      "threshold_kw": 1000.0
+                    }
+                  }
+                }
+              },
+              {
+                "tool": "get_hourly_reading",
+                "arguments": {
+                  "at": "2026-11-10 11:00:00",
+                  "cabinet": "1009",
+                  "metric": "P",
+                  "station": "S35"
+                },
+                "result": {
+                  "device": {
+                    "station": "S35",
+                    "number": "1009",
+                    "label": "I回井下1535",
+                    "aliases": [
+                      "I回井下1535",
+                      "井下1535一回",
+                      "下井一回"
+                    ],
+                    "station_name": "地面35/10 kV变电站"
+                  },
+                  "metric": "P",
+                  "metric_name": "有功功率 P",
+                  "unit": "kW",
+                  "kind": "reading",
+                  "basis": "hourly",
+                  "status": "ok",
+                  "time": "2026-11-10 11:00:00",
+                  "value": 133.13,
+                  "source": {
+                    "file": "1110.xls",
+                    "sheet": "New Sheet1",
+                    "cell": "BD15",
+                    "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea"
+                  },
+                  "marker": null,
+                  "latest": false
+                }
+              },
+              {
+                "tool": "get_hourly_reading",
+                "arguments": {
+                  "at": "2026-11-10 12:00:00",
+                  "cabinet": "1009",
+                  "metric": "P",
+                  "station": "S35"
+                },
+                "result": {
+                  "device": {
+                    "station": "S35",
+                    "number": "1009",
+                    "label": "I回井下1535",
+                    "aliases": [
+                      "I回井下1535",
+                      "井下1535一回",
+                      "下井一回"
+                    ],
+                    "station_name": "地面35/10 kV变电站"
+                  },
+                  "metric": "P",
+                  "metric_name": "有功功率 P",
+                  "unit": "kW",
+                  "kind": "reading",
+                  "basis": "hourly",
+                  "status": "ok",
+                  "time": "2026-11-10 12:00:00",
+                  "value": 593.05,
+                  "source": {
+                    "file": "1110.xls",
+                    "sheet": "New Sheet1",
+                    "cell": "BD16",
+                    "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea"
+                  },
+                  "marker": null,
+                  "latest": false
+                }
+              },
+              {
+                "tool": "get_hourly_reading",
+                "arguments": {
+                  "at": "2026-11-10 11:00:00",
+                  "cabinet": "306",
+                  "metric": "P",
+                  "station": "S35"
+                },
+                "result": {
+                  "device": {
+                    "station": "S35",
+                    "number": "306",
+                    "label": "二回进线",
+                    "aliases": [
+                      "二回进线",
+                      "二号进线",
+                      "II回进线",
+                      "第二回进线"
+                    ],
+                    "station_name": "地面35/10 kV变电站"
+                  },
+                  "metric": "P",
+                  "metric_name": "有功功率 P",
+                  "unit": "kW",
+                  "kind": "reading",
+                  "basis": "hourly",
+                  "status": "ok",
+                  "time": "2026-11-10 11:00:00",
+                  "value": 427.54,
+                  "source": {
+                    "file": "1110.xls",
+                    "sheet": "New Sheet1",
+                    "cell": "H15",
+                    "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea"
+                  },
+                  "marker": null,
+                  "latest": false
+                }
+              }
+            ],
+            "comparisons": [
+              {
+                "cabinet": "1009",
+                "before": {
+                  "device": {
+                    "station": "S35",
+                    "number": "1009",
+                    "label": "I回井下1535",
+                    "aliases": [
+                      "I回井下1535",
+                      "井下1535一回",
+                      "下井一回"
+                    ],
+                    "station_name": "地面35/10 kV变电站"
+                  },
+                  "metric": "P",
+                  "metric_name": "有功功率 P",
+                  "unit": "kW",
+                  "kind": "reading",
+                  "basis": "hourly",
+                  "status": "ok",
+                  "time": "2026-11-10 11:00:00",
+                  "value": 133.13,
+                  "source": {
+                    "file": "1110.xls",
+                    "sheet": "New Sheet1",
+                    "cell": "BD15",
+                    "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea"
+                  },
+                  "marker": null,
+                  "latest": false
+                },
+                "after": {
+                  "device": {
+                    "station": "S35",
+                    "number": "1009",
+                    "label": "I回井下1535",
+                    "aliases": [
+                      "I回井下1535",
+                      "井下1535一回",
+                      "下井一回"
+                    ],
+                    "station_name": "地面35/10 kV变电站"
+                  },
+                  "metric": "P",
+                  "metric_name": "有功功率 P",
+                  "unit": "kW",
+                  "kind": "reading",
+                  "basis": "hourly",
+                  "status": "ok",
+                  "time": "2026-11-10 12:00:00",
+                  "value": 593.05,
+                  "source": {
+                    "file": "1110.xls",
+                    "sheet": "New Sheet1",
+                    "cell": "BD16",
+                    "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea"
+                  },
+                  "marker": null,
+                  "latest": false
+                },
+                "change_kw": 459.92
+              }
+            ],
+            "pending": [
+              "尚待查询 306 柜有功整点 2026-11-10 12:00:00。",
+              "调用预算已用完。请单独查询上面尚缺的整点读数或供电关系。"
+            ],
+            "status": "partial",
+            "stop_reason": "budget_exhausted",
+            "tool_calls": 4
+          },
+          "text": "LW-000010 历史整点回放。有功功率变化。303 柜在 2026-11-10 11:00:00 的有功为 1,071.84 kW（1110.xls / New Sheet1!D15），在 2026-11-10 12:00:00 为 4,479.96 kW（1110.xls / New Sheet1!D16）。变化 +3,408.12 kW，达到相邻整点变化绝对值 ≥ 1000 kW 的回放筛查门槛。待复核，物理原因需结合运行记录。\n地面35/10 kV变电站I回井下1535（1009 柜）日报整点 2026-11-10 11:00:00 的有功功率 P为 133.13 kW。来源 1110.xls / New Sheet1!BD15。\n地面35/10 kV变电站I回井下1535（1009 柜）日报整点 2026-11-10 12:00:00 的有功功率 P为 593.05 kW。来源 1110.xls / New Sheet1!BD16。\n地面35/10 kV变电站二回进线（306 柜）日报整点 2026-11-10 11:00:00 的有功功率 P为 427.54 kW。来源 1110.xls / New Sheet1!H15。\n1009 柜在该事件的同一对整点之间，有功变化 +459.92 kW。\n尚待查询 306 柜有功整点 2026-11-10 12:00:00。\n调用预算已用完。请单独查询上面尚缺的整点读数或供电关系。"
+        }
+      }
+    },
+    {
+      "case": {
+        "id": "Q12",
+        "question": "LW-000010，比较1009柜和306柜同期有功，请优先查齐306柜两个整点。",
+        "reason": "budget_exhausted",
+        "calls": 4,
+        "comparison": [
+          "306",
+          -204.41,
+          [
+            "2026-11-10 11:00:00",
+            "1110.xls",
+            "H15"
+          ],
+          [
+            "2026-11-10 12:00:00",
+            "1110.xls",
+            "H16"
+          ]
+        ],
+        "pending": [
+          "尚待查询 1009 柜"
+        ]
+      },
+      "results": {
+        "local": {
+          "passed": false,
+          "checks": {
+            "stop_and_budget": true,
+            "aligned_evidence": false,
+            "topology": true,
+            "pending": false,
+            "event_lookup": true
+          },
+          "elapsed_seconds": 0.001,
+          "request_seconds": [],
+          "answer": {
+            "kind": "agent_review",
+            "decision_mode": "local",
+            "max_tool_calls": 4,
+            "steps": [
+              {
+                "tool": "get_monitor_event",
+                "arguments": {
+                  "event_id": "LW-000010"
+                },
+                "result": {
+                  "kind": "monitor_event",
+                  "status": "ok",
+                  "event": {
+                    "id": "LW-000010",
+                    "run_id": "LWR-e0c6b18a0d5023d4",
+                    "mode": "historical",
+                    "time": "2026-11-10 12:00:00",
+                    "type": "power_change",
+                    "cabinet": "303",
+                    "evidence": {
+                      "after": {
+                        "source": {
+                          "cell": "D16",
+                          "file": "1110.xls",
+                          "row": 16,
+                          "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea",
+                          "sheet": "New Sheet1"
+                        },
+                        "time": "2026-11-10 12:00:00",
+                        "value_kw": 4479.96
+                      },
+                      "before": {
+                        "source": {
+                          "cell": "D15",
+                          "file": "1110.xls",
+                          "row": 15,
+                          "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea",
+                          "sheet": "New Sheet1"
+                        },
+                        "time": "2026-11-10 11:00:00",
+                        "value_kw": 1071.84
+                      },
+                      "change_kw": 3408.12,
+                      "rule": "absolute_change_in_consecutive_hourly_power",
+                      "threshold_kw": 1000.0
+                    }
+                  }
+                }
+              },
+              {
+                "tool": "get_hourly_reading",
+                "arguments": {
+                  "station": "S35",
+                  "cabinet": "1009",
+                  "metric": "P",
+                  "at": "2026-11-10 11:00:00"
+                },
+                "result": {
+                  "device": {
+                    "station": "S35",
+                    "number": "1009",
+                    "label": "I回井下1535",
+                    "aliases": [
+                      "I回井下1535",
+                      "井下1535一回",
+                      "下井一回"
+                    ],
+                    "station_name": "地面35/10 kV变电站"
+                  },
+                  "metric": "P",
+                  "metric_name": "有功功率 P",
+                  "unit": "kW",
+                  "kind": "reading",
+                  "basis": "hourly",
+                  "status": "ok",
+                  "time": "2026-11-10 11:00:00",
+                  "value": 133.13,
+                  "source": {
+                    "file": "1110.xls",
+                    "sheet": "New Sheet1",
+                    "cell": "BD15",
+                    "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea"
+                  },
+                  "marker": null,
+                  "latest": false
+                }
+              },
+              {
+                "tool": "get_hourly_reading",
+                "arguments": {
+                  "station": "S35",
+                  "cabinet": "1009",
+                  "metric": "P",
+                  "at": "2026-11-10 12:00:00"
+                },
+                "result": {
+                  "device": {
+                    "station": "S35",
+                    "number": "1009",
+                    "label": "I回井下1535",
+                    "aliases": [
+                      "I回井下1535",
+                      "井下1535一回",
+                      "下井一回"
+                    ],
+                    "station_name": "地面35/10 kV变电站"
+                  },
+                  "metric": "P",
+                  "metric_name": "有功功率 P",
+                  "unit": "kW",
+                  "kind": "reading",
+                  "basis": "hourly",
+                  "status": "ok",
+                  "time": "2026-11-10 12:00:00",
+                  "value": 593.05,
+                  "source": {
+                    "file": "1110.xls",
+                    "sheet": "New Sheet1",
+                    "cell": "BD16",
+                    "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea"
+                  },
+                  "marker": null,
+                  "latest": false
+                }
+              },
+              {
+                "tool": "get_hourly_reading",
+                "arguments": {
+                  "station": "S35",
+                  "cabinet": "306",
+                  "metric": "P",
+                  "at": "2026-11-10 11:00:00"
+                },
+                "result": {
+                  "device": {
+                    "station": "S35",
+                    "number": "306",
+                    "label": "二回进线",
+                    "aliases": [
+                      "二回进线",
+                      "二号进线",
+                      "II回进线",
+                      "第二回进线"
+                    ],
+                    "station_name": "地面35/10 kV变电站"
+                  },
+                  "metric": "P",
+                  "metric_name": "有功功率 P",
+                  "unit": "kW",
+                  "kind": "reading",
+                  "basis": "hourly",
+                  "status": "ok",
+                  "time": "2026-11-10 11:00:00",
+                  "value": 427.54,
+                  "source": {
+                    "file": "1110.xls",
+                    "sheet": "New Sheet1",
+                    "cell": "H15",
+                    "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea"
+                  },
+                  "marker": null,
+                  "latest": false
+                }
+              }
+            ],
+            "comparisons": [
+              {
+                "cabinet": "1009",
+                "before": {
+                  "device": {
+                    "station": "S35",
+                    "number": "1009",
+                    "label": "I回井下1535",
+                    "aliases": [
+                      "I回井下1535",
+                      "井下1535一回",
+                      "下井一回"
+                    ],
+                    "station_name": "地面35/10 kV变电站"
+                  },
+                  "metric": "P",
+                  "metric_name": "有功功率 P",
+                  "unit": "kW",
+                  "kind": "reading",
+                  "basis": "hourly",
+                  "status": "ok",
+                  "time": "2026-11-10 11:00:00",
+                  "value": 133.13,
+                  "source": {
+                    "file": "1110.xls",
+                    "sheet": "New Sheet1",
+                    "cell": "BD15",
+                    "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea"
+                  },
+                  "marker": null,
+                  "latest": false
+                },
+                "after": {
+                  "device": {
+                    "station": "S35",
+                    "number": "1009",
+                    "label": "I回井下1535",
+                    "aliases": [
+                      "I回井下1535",
+                      "井下1535一回",
+                      "下井一回"
+                    ],
+                    "station_name": "地面35/10 kV变电站"
+                  },
+                  "metric": "P",
+                  "metric_name": "有功功率 P",
+                  "unit": "kW",
+                  "kind": "reading",
+                  "basis": "hourly",
+                  "status": "ok",
+                  "time": "2026-11-10 12:00:00",
+                  "value": 593.05,
+                  "source": {
+                    "file": "1110.xls",
+                    "sheet": "New Sheet1",
+                    "cell": "BD16",
+                    "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea"
+                  },
+                  "marker": null,
+                  "latest": false
+                },
+                "change_kw": 459.92
+              }
+            ],
+            "pending": [
+              "尚待查询 306 柜有功整点 2026-11-10 12:00:00。",
+              "调用预算已用完。请单独查询上面尚缺的整点读数或供电关系。"
+            ],
+            "status": "partial",
+            "stop_reason": "budget_exhausted",
+            "tool_calls": 4
+          },
+          "text": "LW-000010 历史整点回放。有功功率变化。303 柜在 2026-11-10 11:00:00 的有功为 1,071.84 kW（1110.xls / New Sheet1!D15），在 2026-11-10 12:00:00 为 4,479.96 kW（1110.xls / New Sheet1!D16）。变化 +3,408.12 kW，达到相邻整点变化绝对值 ≥ 1000 kW 的回放筛查门槛。待复核，物理原因需结合运行记录。\n地面35/10 kV变电站I回井下1535（1009 柜）日报整点 2026-11-10 11:00:00 的有功功率 P为 133.13 kW。来源 1110.xls / New Sheet1!BD15。\n地面35/10 kV变电站I回井下1535（1009 柜）日报整点 2026-11-10 12:00:00 的有功功率 P为 593.05 kW。来源 1110.xls / New Sheet1!BD16。\n地面35/10 kV变电站二回进线（306 柜）日报整点 2026-11-10 11:00:00 的有功功率 P为 427.54 kW。来源 1110.xls / New Sheet1!H15。\n1009 柜在该事件的同一对整点之间，有功变化 +459.92 kW。\n尚待查询 306 柜有功整点 2026-11-10 12:00:00。\n调用预算已用完。请单独查询上面尚缺的整点读数或供电关系。"
+        },
+        "model": {
+          "passed": true,
+          "checks": {
+            "stop_and_budget": true,
+            "aligned_evidence": true,
+            "topology": true,
+            "pending": true,
+            "event_lookup": true
+          },
+          "elapsed_seconds": 20.205,
+          "request_seconds": [
+            2.172,
+            9.269,
+            4.458,
+            4.304
+          ],
+          "answer": {
+            "kind": "agent_review",
+            "decision_mode": "model",
+            "max_tool_calls": 4,
+            "steps": [
+              {
+                "tool": "get_monitor_event",
+                "arguments": {
+                  "event_id": "LW-000010"
+                },
+                "result": {
+                  "kind": "monitor_event",
+                  "status": "ok",
+                  "event": {
+                    "id": "LW-000010",
+                    "run_id": "LWR-e0c6b18a0d5023d4",
+                    "mode": "historical",
+                    "time": "2026-11-10 12:00:00",
+                    "type": "power_change",
+                    "cabinet": "303",
+                    "evidence": {
+                      "after": {
+                        "source": {
+                          "cell": "D16",
+                          "file": "1110.xls",
+                          "row": 16,
+                          "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea",
+                          "sheet": "New Sheet1"
+                        },
+                        "time": "2026-11-10 12:00:00",
+                        "value_kw": 4479.96
+                      },
+                      "before": {
+                        "source": {
+                          "cell": "D15",
+                          "file": "1110.xls",
+                          "row": 15,
+                          "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea",
+                          "sheet": "New Sheet1"
+                        },
+                        "time": "2026-11-10 11:00:00",
+                        "value_kw": 1071.84
+                      },
+                      "change_kw": 3408.12,
+                      "rule": "absolute_change_in_consecutive_hourly_power",
+                      "threshold_kw": 1000.0
+                    }
+                  }
+                }
+              },
+              {
+                "tool": "get_hourly_reading",
+                "arguments": {
+                  "at": "2026-11-10 11:00:00",
+                  "cabinet": "306",
+                  "metric": "P",
+                  "station": "S35"
+                },
+                "result": {
+                  "device": {
+                    "station": "S35",
+                    "number": "306",
+                    "label": "二回进线",
+                    "aliases": [
+                      "二回进线",
+                      "二号进线",
+                      "II回进线",
+                      "第二回进线"
+                    ],
+                    "station_name": "地面35/10 kV变电站"
+                  },
+                  "metric": "P",
+                  "metric_name": "有功功率 P",
+                  "unit": "kW",
+                  "kind": "reading",
+                  "basis": "hourly",
+                  "status": "ok",
+                  "time": "2026-11-10 11:00:00",
+                  "value": 427.54,
+                  "source": {
+                    "file": "1110.xls",
+                    "sheet": "New Sheet1",
+                    "cell": "H15",
+                    "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea"
+                  },
+                  "marker": null,
+                  "latest": false
+                }
+              },
+              {
+                "tool": "get_hourly_reading",
+                "arguments": {
+                  "at": "2026-11-10 12:00:00",
+                  "cabinet": "306",
+                  "metric": "P",
+                  "station": "S35"
+                },
+                "result": {
+                  "device": {
+                    "station": "S35",
+                    "number": "306",
+                    "label": "二回进线",
+                    "aliases": [
+                      "二回进线",
+                      "二号进线",
+                      "II回进线",
+                      "第二回进线"
+                    ],
+                    "station_name": "地面35/10 kV变电站"
+                  },
+                  "metric": "P",
+                  "metric_name": "有功功率 P",
+                  "unit": "kW",
+                  "kind": "reading",
+                  "basis": "hourly",
+                  "status": "ok",
+                  "time": "2026-11-10 12:00:00",
+                  "value": 223.13,
+                  "source": {
+                    "file": "1110.xls",
+                    "sheet": "New Sheet1",
+                    "cell": "H16",
+                    "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea"
+                  },
+                  "marker": null,
+                  "latest": false
+                }
+              },
+              {
+                "tool": "get_hourly_reading",
+                "arguments": {
+                  "at": "2026-11-10 11:00:00",
+                  "cabinet": "1009",
+                  "metric": "P",
+                  "station": "S35"
+                },
+                "result": {
+                  "device": {
+                    "station": "S35",
+                    "number": "1009",
+                    "label": "I回井下1535",
+                    "aliases": [
+                      "I回井下1535",
+                      "井下1535一回",
+                      "下井一回"
+                    ],
+                    "station_name": "地面35/10 kV变电站"
+                  },
+                  "metric": "P",
+                  "metric_name": "有功功率 P",
+                  "unit": "kW",
+                  "kind": "reading",
+                  "basis": "hourly",
+                  "status": "ok",
+                  "time": "2026-11-10 11:00:00",
+                  "value": 133.13,
+                  "source": {
+                    "file": "1110.xls",
+                    "sheet": "New Sheet1",
+                    "cell": "BD15",
+                    "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea"
+                  },
+                  "marker": null,
+                  "latest": false
+                }
+              }
+            ],
+            "comparisons": [
+              {
+                "cabinet": "306",
+                "before": {
+                  "device": {
+                    "station": "S35",
+                    "number": "306",
+                    "label": "二回进线",
+                    "aliases": [
+                      "二回进线",
+                      "二号进线",
+                      "II回进线",
+                      "第二回进线"
+                    ],
+                    "station_name": "地面35/10 kV变电站"
+                  },
+                  "metric": "P",
+                  "metric_name": "有功功率 P",
+                  "unit": "kW",
+                  "kind": "reading",
+                  "basis": "hourly",
+                  "status": "ok",
+                  "time": "2026-11-10 11:00:00",
+                  "value": 427.54,
+                  "source": {
+                    "file": "1110.xls",
+                    "sheet": "New Sheet1",
+                    "cell": "H15",
+                    "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea"
+                  },
+                  "marker": null,
+                  "latest": false
+                },
+                "after": {
+                  "device": {
+                    "station": "S35",
+                    "number": "306",
+                    "label": "二回进线",
+                    "aliases": [
+                      "二回进线",
+                      "二号进线",
+                      "II回进线",
+                      "第二回进线"
+                    ],
+                    "station_name": "地面35/10 kV变电站"
+                  },
+                  "metric": "P",
+                  "metric_name": "有功功率 P",
+                  "unit": "kW",
+                  "kind": "reading",
+                  "basis": "hourly",
+                  "status": "ok",
+                  "time": "2026-11-10 12:00:00",
+                  "value": 223.13,
+                  "source": {
+                    "file": "1110.xls",
+                    "sheet": "New Sheet1",
+                    "cell": "H16",
+                    "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea"
+                  },
+                  "marker": null,
+                  "latest": false
+                },
+                "change_kw": -204.41
+              }
+            ],
+            "pending": [
+              "尚待查询 1009 柜有功整点 2026-11-10 12:00:00。",
+              "调用预算已用完。请单独查询上面尚缺的整点读数或供电关系。"
+            ],
+            "status": "partial",
+            "stop_reason": "budget_exhausted",
+            "tool_calls": 4
+          },
+          "text": "LW-000010 历史整点回放。有功功率变化。303 柜在 2026-11-10 11:00:00 的有功为 1,071.84 kW（1110.xls / New Sheet1!D15），在 2026-11-10 12:00:00 为 4,479.96 kW（1110.xls / New Sheet1!D16）。变化 +3,408.12 kW，达到相邻整点变化绝对值 ≥ 1000 kW 的回放筛查门槛。待复核，物理原因需结合运行记录。\n地面35/10 kV变电站二回进线（306 柜）日报整点 2026-11-10 11:00:00 的有功功率 P为 427.54 kW。来源 1110.xls / New Sheet1!H15。\n地面35/10 kV变电站二回进线（306 柜）日报整点 2026-11-10 12:00:00 的有功功率 P为 223.13 kW。来源 1110.xls / New Sheet1!H16。\n地面35/10 kV变电站I回井下1535（1009 柜）日报整点 2026-11-10 11:00:00 的有功功率 P为 133.13 kW。来源 1110.xls / New Sheet1!BD15。\n306 柜在该事件的同一对整点之间，有功变化 -204.41 kW。\n尚待查询 1009 柜有功整点 2026-11-10 12:00:00。\n调用预算已用完。请单独查询上面尚缺的整点读数或供电关系。"
+        }
+      }
+    }
+  ]
+}

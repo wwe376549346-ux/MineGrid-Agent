@@ -1,0 +1,93 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: laowadi-worker
+  namespace: laowadi-power
+  labels:
+    app.kubernetes.io/name: laowadi-worker
+spec:
+  replicas: 2
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: laowadi-worker
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: laowadi-worker
+    spec:
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+      initContainers:
+        - name: wait-for-archive
+          image: laowadi/power-agent:2.4.0
+          command: ["/app/scripts/wait-for-archive.sh"]
+          envFrom:
+            - configMapRef:
+                name: laowadi-config
+            - secretRef:
+                name: laowadi-secrets
+      containers:
+        - name: worker
+          image: laowadi/power-agent:2.4.0
+          imagePullPolicy: IfNotPresent
+          command: ["python", "-B", "-m", "laowadi", "worker"]
+          envFrom:
+            - configMapRef:
+                name: laowadi-config
+            - secretRef:
+                name: laowadi-secrets
+          volumeMounts:
+            - name: archive
+              mountPath: /archive
+              readOnly: true
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "512Mi"
+            limits:
+              cpu: "2000m"
+              memory: "2Gi"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+      volumes:
+        - name: archive
+          persistentVolumeClaim:
+            claimName: laowadi-archive-pvc
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: laowadi-worker-hpa
+  namespace: laowadi-power
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: laowadi-worker
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 75
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: laowadi-worker-pdb
+  namespace: laowadi-power
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: laowadi-worker

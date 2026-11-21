@@ -1,0 +1,110 @@
+{
+  "historical": {
+    "type": "monitor_completed",
+    "run_id": "LWR-e0c6b18a0d5023d4",
+    "mode": "historical",
+    "source_frames": 168,
+    "processed_frames": 168,
+    "event_counts": {
+      "power_change": 106,
+      "hourly_gap": 0,
+      "missing_power": 0
+    },
+    "new_notices": 106,
+    "threshold_kw": 1000.0,
+    "omitted_hour": null
+  },
+  "historical_answer": "LW-000010 历史整点回放。有功功率变化。303 柜在 2026-11-10 11:00:00 的有功为 1,071.84 kW（1110.xls / New Sheet1!D15），在 2026-11-10 12:00:00 为 4,479.96 kW（1110.xls / New Sheet1!D16）。变化 +3,408.12 kW，达到相邻整点变化绝对值 ≥ 1000 kW 的回放筛查门槛。待复核，物理原因需结合运行记录。",
+  "historical_event": {
+    "id": "LW-000010",
+    "run_id": "LWR-e0c6b18a0d5023d4",
+    "mode": "historical",
+    "time": "2026-11-10 12:00:00",
+    "type": "power_change",
+    "cabinet": "303",
+    "evidence": {
+      "after": {
+        "source": {
+          "cell": "D16",
+          "file": "1110.xls",
+          "row": 16,
+          "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea",
+          "sheet": "New Sheet1"
+        },
+        "time": "2026-11-10 12:00:00",
+        "value_kw": 4479.96
+      },
+      "before": {
+        "source": {
+          "cell": "D15",
+          "file": "1110.xls",
+          "row": 15,
+          "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea",
+          "sheet": "New Sheet1"
+        },
+        "time": "2026-11-10 11:00:00",
+        "value_kw": 1071.84
+      },
+      "change_kw": 3408.12,
+      "rule": "absolute_change_in_consecutive_hourly_power",
+      "threshold_kw": 1000.0
+    }
+  },
+  "simulation": {
+    "type": "monitor_completed",
+    "run_id": "LWR-9fdadb076288e8f9",
+    "mode": "simulated_gap",
+    "source_frames": 168,
+    "processed_frames": 167,
+    "event_counts": {
+      "power_change": 104,
+      "hourly_gap": 1,
+      "missing_power": 0
+    },
+    "new_notices": 105,
+    "threshold_kw": 1000.0,
+    "omitted_hour": "2026-11-10 10:00:00"
+  },
+  "simulation_answer": "LW-000114 模拟缺测回放。回放整点缺测。 缺测时段 2026-11-10 10:00:00，共缺 1 个整点。收到 2026-11-10 11:00:00 的帧时识别。相邻可用帧来源 1110.xls / New Sheet1!第 13 行 和 1110.xls / New Sheet1!第 15 行。",
+  "simulation_event": {
+    "id": "LW-000114",
+    "run_id": "LWR-9fdadb076288e8f9",
+    "mode": "simulated_gap",
+    "time": "2026-11-10 10:00:00",
+    "type": "hourly_gap",
+    "cabinet": null,
+    "evidence": {
+      "detected_at": "2026-11-10 11:00:00",
+      "last_frame": {
+        "source": {
+          "file": "1110.xls",
+          "row": 13,
+          "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea",
+          "sheet": "New Sheet1"
+        },
+        "time": "2026-11-10 09:00:00"
+      },
+      "missing_from": "2026-11-10 10:00:00",
+      "missing_hours": 1,
+      "missing_through": "2026-11-10 10:00:00",
+      "next_frame": {
+        "source": {
+          "file": "1110.xls",
+          "row": 15,
+          "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea",
+          "sheet": "New Sheet1"
+        },
+        "time": "2026-11-10 11:00:00"
+      },
+      "rule": "two_received_frames_separated_by_more_than_one_hour"
+    }
+  },
+  "retry_deduplicated": true,
+  "source_database_unchanged": true,
+  "package_check": {
+    "files": 13,
+    "fresh_import": true,
+    "cli_replay_and_query": true,
+    "previous_question_checks": 14
+  }
+}

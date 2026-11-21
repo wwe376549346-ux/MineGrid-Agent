@@ -1,0 +1,162 @@
+{
+  "stage": "10_state_graph_orchestration",
+  "nodes": [
+    "init_snapshot",
+    "guard_check",
+    "select_action",
+    "execute_tool",
+    "compile_evidence",
+    "evaluate_gate",
+    "finalize_terminal"
+  ],
+  "snapshot": {
+    "mine_id": "laowadi",
+    "station": "S35",
+    "reports_count": 7,
+    "diagrams_count": 2,
+    "reports": {
+      "2026-11-10": {
+        "filename": "1110.xls",
+        "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea"
+      },
+      "2026-11-11": {
+        "filename": "1111.xls",
+        "sha256": "ce801bf35f36d893d24469673b6dbdba21d63b3b3b0e06f222f4a0817a21e6f9"
+      },
+      "2026-11-12": {
+        "filename": "1112.xls",
+        "sha256": "2ddbb12a5f5fdbe16b0132bb0bc0599c98278277734249a687c6dd41122698b2"
+      },
+      "2026-11-13": {
+        "filename": "1113.xls",
+        "sha256": "2ea50206fd5ac4d071046eb35e4023955920b520fafa4c8ccd668843cf652acc"
+      },
+      "2026-11-14": {
+        "filename": "1114.xls",
+        "sha256": "6f057a094fb1ca57476ae7c1e407a5089b71d702ecb56e826e57a2f1b792b630"
+      },
+      "2026-11-15": {
+        "filename": "1115.xls",
+        "sha256": "f54f8d0eb4e64cb0758fd4c6113f10ba55a6597bb354ee08663f8b2998a95349"
+      },
+      "2026-11-16": {
+        "filename": "1116.xls",
+        "sha256": "1a50c071c9d2bf88ad383578bad1c431584ad227a4b12a380c6ab2f9657689b4"
+      }
+    },
+    "diagrams": {
+      "35KV变电所.png": "cfbf052ae1068b299e4462c953ad9a628a183f22672794d6abf1ac13fc6dcab5",
+      "中央变电所.png": "8cebfebf7b3bcfbfe9508f0e9fe8dca7691fe987216b2e93bba111de1a7454e2"
+    },
+    "snapshot_sha256": "819db596bac2677e4b733a8df1a1707c91fa900a3f1e76ff583fe5ce1e5c4a18"
+  },
+  "total_scenarios": 6,
+  "passed_scenarios": 6,
+  "scenarios": [
+    {
+      "id": "G01",
+      "title": "证据齐全直接完成态（completed）",
+      "terminal_status": "completed",
+      "stop_reason": "all_evidence_verified",
+      "executed_steps": 2,
+      "reused_steps": 0,
+      "passed": true
+    },
+    {
+      "id": "G02-Phase1",
+      "title": "缺额定参数与开关日志时挂起保存检查点（needs_supplement）",
+      "terminal_status": "needs_supplement",
+      "stop_reason": "awaiting_field_rating_and_switch_log",
+      "executed_steps": 3,
+      "reused_steps": 0,
+      "passed": true
+    },
+    {
+      "id": "G02-Phase2",
+      "title": "跨实例/跨进程从检查点恢复（0 重复查库 + 局部复算 -> completed）",
+      "terminal_status": "completed",
+      "stop_reason": "supplement_resolved:conditionally_satisfied",
+      "executed_steps": 0,
+      "reused_steps": 3,
+      "supplement_result": {
+        "target_item_id": "V01",
+        "parent_run_id": "LWS-v1-49db117d0676",
+        "v2_run_id": "LWS-v2-e27004b6aace",
+        "v01_status": "conditionally_satisfied",
+        "item_status": "conditionally_satisfied",
+        "conditional_judgment": {
+          "source_doc": "老洼地机电科参数与操作核实单-20261119",
+          "switch_log_verified": "35kV母联300开关合位，306柜07:00-19:00计划停电检修",
+          "effective_current_limit_a": 180.0,
+          "peak_current_a": 100.06,
+          "current_load_ratio_pct": 55.59,
+          "current_margin_pct": 44.41,
+          "transformer_rated_kva": 6300.0,
+          "transformer_peak_kva": 4722.31,
+          "transformer_load_ratio_pct": 74.96,
+          "transformer_margin_pct": 25.04
+        },
+        "explanation": "依据补证（老洼地机电科参数与操作核实单-20261119：35kV母联300开关合位，306柜07:00-19:00计划停电检修；303 额定 200.0 A × 降容 0.9 = 有效限值 180.0 A；主变额定 6300.0 kVA）局部复算：单进线窗口期 303 峰值电流 100.06 A（负载率 55.59%，裕度 +44.41%），主变峰值视在功率约 4722.31 kVA（负载率 74.96%，裕度 +25.04%），判定为【条件满足】。",
+        "accumulated_parameter_keys": [
+          "303_rated_current_a",
+          "ambient_derating_factor",
+          "main_transformer_rated_kva",
+          "switch_log_20261113"
+        ]
+      },
+      "passed": true
+    },
+    {
+      "id": "G03",
+      "title": "遥控分合闸/写操作指令安全拦截（restricted）",
+      "terminal_status": "restricted",
+      "stop_reason": "restricted_control_attempt",
+      "executed_steps": 0,
+      "reused_steps": 0,
+      "passed": true
+    },
+    {
+      "id": "G04",
+      "title": "恢复时档案 SHA-256 版本篡改自动拦截（restricted）",
+      "terminal_status": "restricted",
+      "stop_reason": "snapshot_version_mismatch",
+      "executed_steps": 0,
+      "reused_steps": 0,
+      "passed": true
+    },
+    {
+      "id": "G05-V02",
+      "title": "V02 下井双回 N-1 挂起 ➔ 残缺补证拦截 ➔ 完整补证 0 重复恢复",
+      "terminal_status": "completed",
+      "stop_reason": "supplement_resolved:conditionally_satisfied",
+      "executed_steps": 0,
+      "reused_steps": 3,
+      "supplement_result": {
+        "target_item_id": "V02",
+        "parent_run_id": "LWS-v1-49db117d0676",
+        "v2_run_id": "LWS-v2-dee5024fc054",
+        "v01_status": "conditionally_satisfied",
+        "item_status": "conditionally_satisfied",
+        "conditional_judgment": {
+          "source_doc": "老洼地下井电缆N-1核实单",
+          "tie_switch_mode": "1535中央变电所1200联络开关热备用可自动切换",
+          "tie_blocked": false,
+          "thermal_calc_passed": true,
+          "transfer_prerequisite_passed": true,
+          "conflict_preserved": false,
+          "effective_single_cable_limit_a": 270.0,
+          "n_minus_1_combined_peak_a": 159.69,
+          "n_minus_1_load_ratio_pct": 59.14,
+          "n_minus_1_margin_pct": 40.86
+        },
+        "explanation": "依据补证（老洼地下井电缆N-1核实单：下井电缆额定 300.0 A × 降容 0.9 = 单回有效限值 270.0 A；联络方式：1535中央变电所1200联络开关热备用可自动切换）按 GB/T 50417-2017 3.0.3 复算 N-1 工况：任一回退出时另一回承担联合最大电流 159.69 A（热稳定载流计算成立，负载率 59.14%，裕度 +40.86%）；且联络转供前提满足，判定为【条件满足】。",
+        "accumulated_parameter_keys": [
+          "1009_1010_rated_current_a",
+          "ambient_derating_factor",
+          "c1535_tie_switch_mode"
+        ]
+      },
+      "passed": true
+    }
+  ]
+}

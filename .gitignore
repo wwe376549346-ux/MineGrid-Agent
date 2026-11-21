@@ -1,0 +1,74 @@
+# === OS & Editor Artifacts ===
+.DS_Store
+Thumbs.db
+*.swp
+*~
+.idea/
+.vscode/
+
+# === Secrets, Local Credentials & Environment Variables (NEVER COMMIT) ===
+.env
+.env.*
+!.env.example
+*.env
+!*.env.example
+.auth_secret
+*secret*.json
+!secret_scan.json
+*api_key*
+local/.db.env
+local/.auth_secret
+
+# === Python Virtual Environments & Bytecode Caches ===
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+.venv-*/
+venv/
+env/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# === Node / Frontend Dependencies ===
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# === Mutable Runtime SQLite Databases, WAL/SHM & Backups (Per-Developer Local State) ===
+# Read-only golden source archives (`laowadi.sqlite3` and `laowadi_events.sqlite3`) ARE tracked!
+研究实施/老洼地数据接入_20261119/local/laowadi_jobs.sqlite3*
+研究实施/老洼地数据接入_20261119/local/laowadi_audit.sqlite3*
+研究实施/老洼地数据接入_20261119/local/laowadi_sessions.sqlite3*
+研究实施/老洼地数据接入_20261119/local/laowadi_reviews.sqlite3*
+研究实施/老洼地数据接入_20261119/local/laowadi_proactive.sqlite3*
+研究实施/老洼地数据接入_20261119/local/laowadi_checkpoints.sqlite3*
+研究实施/老洼地数据接入_20261119/local/dag_checkpoints.sqlite3*
+研究实施/老洼地数据接入_20261119/local/laowadi_enterprise.sqlite3*
+研究实施/老洼地数据接入_20261119/local/backups/
+研究实施/老洼地数据接入_20261119/local/logs/
+*.sqlite3-wal
+*.sqlite3-shm
+*.sqlite-wal
+*.sqlite-shm
+
+#Explicitly keep golden read-only Laowadi benchmark databases tracked
+!研究实施/老洼地数据接入_20261119/local/laowadi.sqlite3
+!研究实施/老洼地数据接入_20261119/local/laowadi_events.sqlite3
+
+# === Historical Large Third-Party Public Data & Early Experiment Scratch Binaries ===
+# Keep markdown notes, verification scripts, and extracted text; ignore >5MB raw zip/npz/sqlite/pdf scratch files
+公开数据与标准_20261113/数据样本/*.zip
+公开数据与标准_20261113/标准原文/*.pdf
+研究实施/**/artifacts/**/*.sqlite
+研究实施/**/*.sqlite
+!研究实施/老洼地数据接入_20261119/local/laowadi.sqlite3
+!研究实施/老洼地数据接入_20261119/local/laowadi_events.sqlite3
+研究实施/**/sources/*.pdf
+研究实施/**/evidence/standards/*.pdf
+研究实施/**/*.npz
+研究实施/**/*.joblib
+研究实施/**/*.zip

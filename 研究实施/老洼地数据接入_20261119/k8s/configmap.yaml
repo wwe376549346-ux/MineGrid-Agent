@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: laowadi-config
+  namespace: laowadi-power
+  labels:
+    app.kubernetes.io/name: laowadi-power-agent
+data:
+  LAOWADI_PORT: "8765"
+  LAOWADI_LOG_FORMAT: "json"
+  LAOWADI_LOG_LEVEL: "INFO"
+  LAOWADI_REQUIRE_AUTH: "1"
+  LAOWADI_RATE_LIMIT_PER_MIN: "120"
+  LAOWADI_BACKEND: "postgresql"
+  LAOWADI_ALLOWED_HOSTS: "laowadi-api,laowadi-api.laowadi-power,laowadi-api.laowadi-power.svc,laowadi-api.laowadi-power.svc.cluster.local"
+  LAOWADI_SOURCE_DIR: "/archive/sources"
+  LAOWADI_STANDARDS_DIR: "/archive/standards"
+  LAOWADI_DB: "/archive/seed/laowadi.sqlite3"
+  LAOWADI_EVENTS_DB: "/archive/seed/laowadi_events.sqlite3"
+  LAOWADI_BACKUP_DIR: "/backups"
+  LAOWADI_MAX_DATA_AGE_HOURS: "0"
+  POSTGRES_USER: "postgres"
+  POSTGRES_DB: "laowadi"

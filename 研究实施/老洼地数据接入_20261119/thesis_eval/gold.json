@@ -1,0 +1,1512 @@
+{
+  "S01": {
+    "turns": [
+      {
+        "decision": "answer",
+        "fields": {
+          "reading": {
+            "value": 55.71,
+            "unit": "A",
+            "tolerance": 0.005,
+            "citations": [
+              "1110.xls / New Sheet1!C12"
+            ]
+          }
+        }
+      }
+    ],
+    "reference_method": "独立 SQLite 读取/人工规则标注，原件哈希已核对"
+  },
+  "S02": {
+    "turns": [
+      {
+        "decision": "answer",
+        "fields": {
+          "reading": {
+            "value": 3517.63,
+            "unit": "kW",
+            "tolerance": 0.005,
+            "citations": [
+              "1111.xls / New Sheet1!H18"
+            ]
+          }
+        }
+      }
+    ],
+    "reference_method": "独立 SQLite 读取/人工规则标注，原件哈希已核对"
+  },
+  "S03": {
+    "turns": [
+      {
+        "decision": "answer",
+        "fields": {
+          "reading": {
+            "value": 37.15,
+            "unit": "kV",
+            "tolerance": 0.005,
+            "citations": [
+              "1112.xls / New Sheet1!J13"
+            ]
+          }
+        }
+      }
+    ],
+    "reference_method": "独立 SQLite 读取/人工规则标注，原件哈希已核对"
+  },
+  "S04": {
+    "turns": [
+      {
+        "decision": "answer",
+        "fields": {
+          "reading": {
+            "value": 0.92,
+            "unit": "",
+            "tolerance": 0.005,
+            "citations": [
+              "1113.xls / New Sheet1!Q24"
+            ]
+          }
+        }
+      }
+    ],
+    "reference_method": "独立 SQLite 读取/人工规则标注，原件哈希已核对"
+  },
+  "S05": {
+    "turns": [
+      {
+        "decision": "answer",
+        "fields": {
+          "reading": {
+            "value": 113.27,
+            "unit": "kW",
+            "tolerance": 0.005,
+            "citations": [
+              "1114.xls / New Sheet1!BD11"
+            ]
+          }
+        }
+      }
+    ],
+    "reference_method": "独立 SQLite 读取/人工规则标注，原件哈希已核对"
+  },
+  "S06": {
+    "turns": [
+      {
+        "decision": "answer",
+        "fields": {
+          "reading": {
+            "value": 17.9,
+            "unit": "A",
+            "tolerance": 0.005,
+            "citations": [
+              "1115.xls / New Sheet1!BK20"
+            ]
+          }
+        }
+      }
+    ],
+    "reference_method": "独立 SQLite 读取/人工规则标注，原件哈希已核对"
+  },
+  "S07": {
+    "turns": [
+      {
+        "decision": "answer",
+        "fields": {
+          "reading": {
+            "value": -104.88,
+            "unit": "kW",
+            "tolerance": 0.005,
+            "citations": [
+              "1116.xls / New Sheet1!BX25"
+            ]
+          }
+        }
+      }
+    ],
+    "reference_method": "独立 SQLite 读取/人工规则标注，原件哈希已核对"
+  },
+  "S08": {
+    "turns": [
+      {
+        "decision": "answer",
+        "fields": {
+          "reading": {
+            "value": 1.0,
+            "unit": "",
+            "tolerance": 0.005,
+            "citations": [
+              "1110.xls / New Sheet1!AG14"
+            ]
+          }
+        }
+      }
+    ],
+    "reference_method": "独立 SQLite 读取/人工规则标注，原件哈希已核对"
+  },
+  "M01": {
+    "turns": [
+      {
+        "decision": "answer",
+        "fields": {
+          "cab_303": {
+            "value": 5868.95,
+            "unit": "kW",
+            "tolerance": 0.011,
+            "citations": [
+              "1110.xls / New Sheet1!D19"
+            ]
+          },
+          "cab_306": {
+            "value": 4326.35,
+            "unit": "kW",
+            "tolerance": 0.011,
+            "citations": [
+              "1110.xls / New Sheet1!H18"
+            ]
+          }
+        }
+      }
+    ],
+    "reference_method": "独立 SQLite 读取/人工规则标注，原件哈希已核对"
+  },
+  "M02": {
+    "turns": [
+      {
+        "decision": "answer",
+        "fields": {
+          "cab_311": {
+            "value": 99.61,
+            "unit": "A",
+            "tolerance": 0.011,
+            "citations": [
+              "1111.xls / New Sheet1!K17"
+            ]
+          },
+          "cab_312": {
+            "value": 69.36,
+            "unit": "A",
+            "tolerance": 0.011,
+            "citations": [
+              "1111.xls / New Sheet1!O11"
+            ]
+          }
+        }
+      }
+    ],
+    "reference_method": "独立 SQLite 读取/人工规则标注，原件哈希已核对"
+  },
+  "M03": {
+    "turns": [
+      {
+        "decision": "answer",
+        "fields": {
+          "cab_1005": {
+            "value": 10.29,
+            "unit": "kV",
+            "tolerance": 0.011,
+            "citations": [
+              "1112.xls / New Sheet1!V18"
+            ]
+          },
+          "cab_1006": {
+            "value": 10.44,
+            "unit": "kV",
+            "tolerance": 0.011,
+            "citations": [
+              "1112.xls / New Sheet1!Z25"
+            ]
+          }
+        }
+      }
+    ],
+    "reference_method": "独立 SQLite 读取/人工规则标注，原件哈希已核对"
+  },
+  "M04": {
+    "turns": [
+      {
+        "decision": "answer",
+        "fields": {
+          "cab_303": {
+            "value": 69.403,
+            "unit": "A",
+            "tolerance": 0.011,
+            "citations": [
+              "1113.xls / New Sheet1!C25",
+              "1113.xls / New Sheet1!C22"
+            ]
+          },
+          "cab_306": {
+            "value": 14.759,
+            "unit": "A",
+            "tolerance": 0.011,
+            "citations": [
+              "1113.xls / New Sheet1!G11",
+              "1113.xls / New Sheet1!G7"
+            ]
+          }
+        }
+      }
+    ],
+    "reference_method": "独立 SQLite 读取/人工规则标注，原件哈希已核对"
+  },
+  "M05": {
+    "turns": [
+      {
+        "decision": "answer",
+        "fields": {
+          "cab_1009": {
+            "value": 4145.08,
+            "unit": "kWh",
+            "tolerance": 0.011,
+            "citations": [
+              "1114.xls / New Sheet1!BD20",
+              "1114.xls / New Sheet1!BD23"
+            ]
+          },
+          "cab_1010": {
+            "value": 4648.29,
+            "unit": "kWh",
+            "tolerance": 0.011,
+            "citations": [
+              "1114.xls / New Sheet1!BL25",
+              "1114.xls / New Sheet1!BL10"
+            ]
+          }
+        }
+      }
+    ],
+    "reference_method": "独立 SQLite 读取/人工规则标注，原件哈希已核对"
+  },
+  "M06": {
+    "turns": [
+      {
+        "decision": "answer",
+        "fields": {
+          "cab_1010": {
+            "value": 0.589,
+            "unit": "",
+            "tolerance": 0.011,
+            "citations": [
+              "1115.xls / New Sheet1!BM16",
+              "1115.xls / New Sheet1!BM21"
+            ]
+          },
+          "cab_1020": {
+            "value": 0.52,
+            "unit": "",
+            "tolerance": 0.011,
+            "citations": [
+              "1115.xls / New Sheet1!CC23",
+              "1115.xls / New Sheet1!CC19"
+            ]
+          }
+        }
+      }
+    ],
+    "reference_method": "独立 SQLite 读取/人工规则标注，原件哈希已核对"
+  },
+  "M07": {
+    "turns": [
+      {
+        "decision": "answer",
+        "fields": {
+          "cab_1012": {
+            "value": -16.88,
+            "unit": "kW",
+            "tolerance": 0.011,
+            "citations": [
+              "1116.xls / New Sheet1!BP22"
+            ]
+          },
+          "cab_1018": {
+            "value": -104.88,
+            "unit": "kW",
+            "tolerance": 0.011,
+            "citations": [
+              "1116.xls / New Sheet1!BX25"
+            ]
+          }
+        }
+      }
+    ],
+    "reference_method": "独立 SQLite 读取/人工规则标注，原件哈希已核对"
+  },
+  "M08": {
+    "turns": [
+      {
+        "decision": "answer",
+        "fields": {
+          "difference": {
+            "value": 16.840000000000146,
+            "unit": "kW",
+            "tolerance": 0.02,
+            "citations": [
+              "1113.xls / New Sheet1!D21",
+              "1113.xls / New Sheet1!H21",
+              "1113.xls / New Sheet1!L21",
+              "1113.xls / New Sheet1!P21"
+            ]
+          }
+        }
+      }
+    ],
+    "reference_method": "独立 SQLite 读取/人工规则标注，原件哈希已核对"
+  },
+  "N01": {
+    "turns": [
+      {
+        "decision": "insufficient",
+        "fields": {
+          "gap": {
+            "value": "underground_hourly",
+            "unit": "",
+            "tolerance": 0,
+            "citations": []
+          },
+          "upstream": {
+            "value": "1009",
+            "unit": "",
+            "tolerance": 0,
+            "citations": [
+              "35KV变电所.png",
+              "中央变电所.png"
+            ]
+          }
+        }
+      }
+    ],
+    "reference_method": "独立 SQLite 读取/人工规则标注，原件哈希已核对"
+  },
+  "N02": {
+    "turns": [
+      {
+        "decision": "insufficient",
+        "fields": {
+          "gap": {
+            "value": "underground_hourly",
+            "unit": "",
+            "tolerance": 0,
+            "citations": []
+          },
+          "upstream": {
+            "value": "1010",
+            "unit": "",
+            "tolerance": 0,
+            "citations": [
+              "35KV变电所.png",
+              "中央变电所.png"
+            ]
+          }
+        }
+      }
+    ],
+    "reference_method": "独立 SQLite 读取/人工规则标注，原件哈希已核对"
+  },
+  "N03": {
+    "turns": [
+      {
+        "decision": "insufficient",
+        "fields": {
+          "gap": {
+            "value": "underground_hourly",
+            "unit": "",
+            "tolerance": 0,
+            "citations": []
+          },
+          "upstream": {
+            "value": "1010",
+            "unit": "",
+            "tolerance": 0,
+            "citations": [
+              "35KV变电所.png",
+              "中央变电所.png"
+            ]
+          }
+        }
+      }
+    ],
+    "reference_method": "独立 SQLite 读取/人工规则标注，原件哈希已核对"
+  },
+  "N04": {
+    "turns": [
+      {
+        "decision": "insufficient",
+        "fields": {
+          "gap": {
+            "value": "outside_archive",
+            "unit": "",
+            "tolerance": 0,
+            "citations": []
+          }
+        }
+      }
+    ],
+    "reference_method": "独立 SQLite 读取/人工规则标注，原件哈希已核对"
+  },
+  "N05": {
+    "turns": [
+      {
+        "decision": "insufficient",
+        "fields": {
+          "gap": {
+            "value": "outside_archive",
+            "unit": "",
+            "tolerance": 0,
+            "citations": []
+          }
+        }
+      }
+    ],
+    "reference_method": "独立 SQLite 读取/人工规则标注，原件哈希已核对"
+  },
+  "N06": {
+    "turns": [
+      {
+        "decision": "insufficient",
+        "fields": {
+          "gap": {
+            "value": "switch_soe",
+            "unit": "",
+            "tolerance": 0,
+            "citations": []
+          }
+        }
+      }
+    ],
+    "reference_method": "独立 SQLite 读取/人工规则标注，原件哈希已核对"
+  },
+  "N07": {
+    "turns": [
+      {
+        "decision": "insufficient",
+        "fields": {
+          "gap": {
+            "value": "nameplate",
+            "unit": "",
+            "tolerance": 0,
+            "citations": []
+          }
+        }
+      }
+    ],
+    "reference_method": "独立 SQLite 读取/人工规则标注，原件哈希已核对"
+  },
+  "N08": {
+    "turns": [
+      {
+        "decision": "insufficient",
+        "fields": {
+          "gap": {
+            "value": "underground_hourly",
+            "unit": "",
+            "tolerance": 0,
+            "citations": []
+          }
+        }
+      }
+    ],
+    "reference_method": "独立 SQLite 读取/人工规则标注，原件哈希已核对"
+  },
+  "D01": {
+    "turns": [
+      {
+        "decision": "conditional",
+        "fields": {
+          "p_306": {
+            "value": -33.21,
+            "unit": "kW",
+            "tolerance": 0.005,
+            "citations": [
+              "1112.xls / New Sheet1!H16"
+            ]
+          },
+          "p_312": {
+            "value": -23.28,
+            "unit": "kW",
+            "tolerance": 0.005,
+            "citations": [
+              "1112.xls / New Sheet1!P16"
+            ]
+          },
+          "p_1027": {
+            "value": 0.0,
+            "unit": "kW",
+            "tolerance": 0.005,
+            "citations": [
+              "1112.xls / New Sheet1!AF16"
+            ]
+          },
+          "hypothesis": {
+            "value": "meter_or_polarity",
+            "unit": "",
+            "tolerance": 0,
+            "citations": []
+          },
+          "gap": {
+            "value": "wiring_meter",
+            "unit": "",
+            "tolerance": 0,
+            "citations": []
+          },
+          "confirmed": {
+            "value": "unconfirmed",
+            "unit": "",
+            "tolerance": 0,
+            "citations": []
+          }
+        }
+      }
+    ],
+    "reference_method": "原表点位复算与保守归因规则。排序标签需独立值班员复核"
+  },
+  "D02": {
+    "turns": [
+      {
+        "decision": "conditional",
+        "fields": {
+          "p_306": {
+            "value": -33.21,
+            "unit": "kW",
+            "tolerance": 0.005,
+            "citations": [
+              "1112.xls / New Sheet1!H16"
+            ]
+          },
+          "p_312": {
+            "value": -23.28,
+            "unit": "kW",
+            "tolerance": 0.005,
+            "citations": [
+              "1112.xls / New Sheet1!P16"
+            ]
+          },
+          "p_1012": {
+            "value": 2.37,
+            "unit": "kW",
+            "tolerance": 0.005,
+            "citations": [
+              "1112.xls / New Sheet1!BP16"
+            ]
+          },
+          "hypothesis": {
+            "value": "meter_or_polarity",
+            "unit": "",
+            "tolerance": 0,
+            "citations": []
+          },
+          "gap": {
+            "value": "wiring_meter",
+            "unit": "",
+            "tolerance": 0,
+            "citations": []
+          },
+          "confirmed": {
+            "value": "unconfirmed",
+            "unit": "",
+            "tolerance": 0,
+            "citations": []
+          }
+        }
+      }
+    ],
+    "reference_method": "原表点位复算与保守归因规则。排序标签需独立值班员复核"
+  },
+  "D03": {
+    "turns": [
+      {
+        "decision": "conditional",
+        "fields": {
+          "p_303": {
+            "value": 5710.12,
+            "unit": "kW",
+            "tolerance": 0.005,
+            "citations": [
+              "1113.xls / New Sheet1!D19"
+            ]
+          },
+          "p_306": {
+            "value": 0.0,
+            "unit": "kW",
+            "tolerance": 0.005,
+            "citations": [
+              "1113.xls / New Sheet1!H19"
+            ]
+          },
+          "hypothesis": {
+            "value": "topology_or_operation",
+            "unit": "",
+            "tolerance": 0,
+            "citations": []
+          },
+          "gap": {
+            "value": "switch_soe",
+            "unit": "",
+            "tolerance": 0,
+            "citations": []
+          },
+          "confirmed": {
+            "value": "unconfirmed",
+            "unit": "",
+            "tolerance": 0,
+            "citations": []
+          }
+        }
+      }
+    ],
+    "reference_method": "原表点位复算与保守归因规则。排序标签需独立值班员复核"
+  },
+  "D04": {
+    "turns": [
+      {
+        "decision": "conditional",
+        "fields": {
+          "p_303": {
+            "value": 5673.6,
+            "unit": "kW",
+            "tolerance": 0.005,
+            "citations": [
+              "1113.xls / New Sheet1!D22"
+            ]
+          },
+          "p_306": {
+            "value": 0.0,
+            "unit": "kW",
+            "tolerance": 0.005,
+            "citations": [
+              "1113.xls / New Sheet1!H22"
+            ]
+          },
+          "hypothesis": {
+            "value": "topology_or_operation",
+            "unit": "",
+            "tolerance": 0,
+            "citations": []
+          },
+          "gap": {
+            "value": "switch_soe",
+            "unit": "",
+            "tolerance": 0,
+            "citations": []
+          },
+          "confirmed": {
+            "value": "unconfirmed",
+            "unit": "",
+            "tolerance": 0,
+            "citations": []
+          }
+        }
+      }
+    ],
+    "reference_method": "原表点位复算与保守归因规则。排序标签需独立值班员复核"
+  },
+  "D05": {
+    "turns": [
+      {
+        "decision": "conditional",
+        "fields": {
+          "p_303": {
+            "value": 3155.1,
+            "unit": "kW",
+            "tolerance": 0.005,
+            "citations": [
+              "1116.xls / New Sheet1!D21"
+            ]
+          },
+          "p_311": {
+            "value": 730.97,
+            "unit": "kW",
+            "tolerance": 0.005,
+            "citations": [
+              "1116.xls / New Sheet1!L21"
+            ]
+          },
+          "hypothesis": {
+            "value": "manifold_scan_skew",
+            "unit": "",
+            "tolerance": 0,
+            "citations": []
+          },
+          "gap": {
+            "value": "time_sync",
+            "unit": "",
+            "tolerance": 0,
+            "citations": []
+          },
+          "confirmed": {
+            "value": "unconfirmed",
+            "unit": "",
+            "tolerance": 0,
+            "citations": []
+          }
+        }
+      }
+    ],
+    "reference_method": "原表点位复算与保守归因规则。排序标签需独立值班员复核"
+  },
+  "D06": {
+    "turns": [
+      {
+        "decision": "conditional",
+        "fields": {
+          "p_303": {
+            "value": 4479.96,
+            "unit": "kW",
+            "tolerance": 0.005,
+            "citations": [
+              "1110.xls / New Sheet1!D16"
+            ]
+          },
+          "p_306": {
+            "value": 223.13,
+            "unit": "kW",
+            "tolerance": 0.005,
+            "citations": [
+              "1110.xls / New Sheet1!H16"
+            ]
+          },
+          "hypothesis": {
+            "value": "manifold_scan_skew",
+            "unit": "",
+            "tolerance": 0,
+            "citations": []
+          },
+          "gap": {
+            "value": "time_sync",
+            "unit": "",
+            "tolerance": 0,
+            "citations": []
+          },
+          "confirmed": {
+            "value": "unconfirmed",
+            "unit": "",
+            "tolerance": 0,
+            "citations": []
+          }
+        }
+      }
+    ],
+    "reference_method": "原表点位复算与保守归因规则。排序标签需独立值班员复核"
+  },
+  "D07": {
+    "turns": [
+      {
+        "decision": "conditional",
+        "fields": {
+          "q_P": {
+            "value": -80.72,
+            "unit": "kW",
+            "tolerance": 0.005,
+            "citations": [
+              "1111.xls / New Sheet1!BX22"
+            ]
+          },
+          "q_cos": {
+            "value": -0.45,
+            "unit": "",
+            "tolerance": 0.005,
+            "citations": [
+              "1111.xls / New Sheet1!BY22"
+            ]
+          },
+          "hypothesis": {
+            "value": "meter_or_polarity",
+            "unit": "",
+            "tolerance": 0,
+            "citations": []
+          },
+          "gap": {
+            "value": "wiring_meter",
+            "unit": "",
+            "tolerance": 0,
+            "citations": []
+          },
+          "confirmed": {
+            "value": "unconfirmed",
+            "unit": "",
+            "tolerance": 0,
+            "citations": []
+          }
+        }
+      }
+    ],
+    "reference_method": "原表点位复算与保守归因规则。排序标签需独立值班员复核"
+  },
+  "D08": {
+    "turns": [
+      {
+        "decision": "conditional",
+        "fields": {
+          "q_P": {
+            "value": -104.88,
+            "unit": "kW",
+            "tolerance": 0.005,
+            "citations": [
+              "1116.xls / New Sheet1!BX25"
+            ]
+          },
+          "q_cos": {
+            "value": -0.28,
+            "unit": "",
+            "tolerance": 0.005,
+            "citations": [
+              "1116.xls / New Sheet1!BY25"
+            ]
+          },
+          "hypothesis": {
+            "value": "meter_or_polarity",
+            "unit": "",
+            "tolerance": 0,
+            "citations": []
+          },
+          "gap": {
+            "value": "wiring_meter",
+            "unit": "",
+            "tolerance": 0,
+            "citations": []
+          },
+          "confirmed": {
+            "value": "unconfirmed",
+            "unit": "",
+            "tolerance": 0,
+            "citations": []
+          }
+        }
+      }
+    ],
+    "reference_method": "原表点位复算与保守归因规则。排序标签需独立值班员复核"
+  },
+  "P01": {
+    "turns": [
+      {
+        "decision": "conditional",
+        "fields": {
+          "simulation": {
+            "value": 10.925,
+            "unit": "kV",
+            "tolerance": 0.005,
+            "citations": [
+              "1113.xls / New Sheet1!Z21"
+            ]
+          },
+          "boundary": {
+            "value": 10.9,
+            "unit": "kV",
+            "tolerance": 0.005,
+            "citations": [
+              "1113.xls / New Sheet1!Z21"
+            ]
+          },
+          "scope": {
+            "value": "equivalent_model",
+            "unit": "",
+            "tolerance": 0,
+            "citations": []
+          }
+        }
+      }
+    ],
+    "reference_method": "冻结 pandapower 等值模型参考值，日报边界独立读取。用于求解器回执一致性"
+  },
+  "P02": {
+    "turns": [
+      {
+        "decision": "conditional",
+        "fields": {
+          "simulation": {
+            "value": 14.654,
+            "unit": "kW",
+            "tolerance": 0.005,
+            "citations": [
+              "1114.xls / New Sheet1!Z21"
+            ]
+          },
+          "boundary": {
+            "value": 10.66,
+            "unit": "kV",
+            "tolerance": 0.005,
+            "citations": [
+              "1114.xls / New Sheet1!Z21"
+            ]
+          },
+          "scope": {
+            "value": "equivalent_model",
+            "unit": "",
+            "tolerance": 0,
+            "citations": []
+          }
+        }
+      }
+    ],
+    "reference_method": "冻结 pandapower 等值模型参考值，日报边界独立读取。用于求解器回执一致性"
+  },
+  "P03": {
+    "turns": [
+      {
+        "decision": "conditional",
+        "fields": {
+          "simulation": {
+            "value": 10.662,
+            "unit": "kV",
+            "tolerance": 0.005,
+            "citations": [
+              "1113.xls / New Sheet1!Z21"
+            ]
+          },
+          "boundary": {
+            "value": 10.9,
+            "unit": "kV",
+            "tolerance": 0.005,
+            "citations": [
+              "1113.xls / New Sheet1!Z21"
+            ]
+          },
+          "scope": {
+            "value": "equivalent_model",
+            "unit": "",
+            "tolerance": 0,
+            "citations": []
+          }
+        }
+      }
+    ],
+    "reference_method": "冻结 pandapower 等值模型参考值，日报边界独立读取。用于求解器回执一致性"
+  },
+  "P04": {
+    "turns": [
+      {
+        "decision": "conditional",
+        "fields": {
+          "simulation": {
+            "value": 17.74,
+            "unit": "A",
+            "tolerance": 0.005,
+            "citations": [
+              "1113.xls / New Sheet1!BL21"
+            ]
+          },
+          "boundary": {
+            "value": 105.88,
+            "unit": "kW",
+            "tolerance": 0.005,
+            "citations": [
+              "1113.xls / New Sheet1!BL21"
+            ]
+          },
+          "scope": {
+            "value": "equivalent_model",
+            "unit": "",
+            "tolerance": 0,
+            "citations": []
+          },
+          "voltage": {
+            "value": "false",
+            "unit": "",
+            "tolerance": 0,
+            "citations": []
+          }
+        }
+      }
+    ],
+    "reference_method": "冻结 pandapower 等值模型参考值，日报边界独立读取。用于求解器回执一致性"
+  },
+  "P05": {
+    "turns": [
+      {
+        "decision": "conditional",
+        "fields": {
+          "simulation": {
+            "value": 10.578,
+            "unit": "kV",
+            "tolerance": 0.005,
+            "citations": [
+              "1114.xls / New Sheet1!BL21"
+            ]
+          },
+          "boundary": {
+            "value": 225.46,
+            "unit": "kW",
+            "tolerance": 0.005,
+            "citations": [
+              "1114.xls / New Sheet1!BL21"
+            ]
+          },
+          "scope": {
+            "value": "equivalent_model",
+            "unit": "",
+            "tolerance": 0,
+            "citations": []
+          },
+          "voltage": {
+            "value": "true",
+            "unit": "",
+            "tolerance": 0,
+            "citations": []
+          }
+        }
+      }
+    ],
+    "reference_method": "冻结 pandapower 等值模型参考值，日报边界独立读取。用于求解器回执一致性"
+  },
+  "P06": {
+    "turns": [
+      {
+        "decision": "conditional",
+        "fields": {
+          "simulation": {
+            "value": 0.157,
+            "unit": "kW",
+            "tolerance": 0.005,
+            "citations": [
+              "1113.xls / New Sheet1!BL21"
+            ]
+          },
+          "boundary": {
+            "value": 105.88,
+            "unit": "kW",
+            "tolerance": 0.005,
+            "citations": [
+              "1113.xls / New Sheet1!BL21"
+            ]
+          },
+          "scope": {
+            "value": "equivalent_model",
+            "unit": "",
+            "tolerance": 0,
+            "citations": []
+          }
+        }
+      }
+    ],
+    "reference_method": "冻结 pandapower 等值模型参考值，日报边界独立读取。用于求解器回执一致性"
+  },
+  "P07": {
+    "turns": [
+      {
+        "decision": "insufficient",
+        "fields": {
+          "gap": {
+            "value": "transfer_limits",
+            "unit": "",
+            "tolerance": 0,
+            "citations": []
+          },
+          "clause": {
+            "value": "GB/T 50417-2017 3.0.3",
+            "unit": "",
+            "tolerance": 0,
+            "citations": [
+              "GB/T 50417-2017 3.0.3"
+            ]
+          }
+        }
+      }
+    ],
+    "reference_method": "独立 SQLite 读取/人工规则标注，原件哈希已核对"
+  },
+  "P08": {
+    "turns": [
+      {
+        "decision": "insufficient",
+        "fields": {
+          "gap": {
+            "value": "nameplate",
+            "unit": "",
+            "tolerance": 0,
+            "citations": []
+          }
+        }
+      }
+    ],
+    "reference_method": "独立 SQLite 读取/人工规则标注，原件哈希已核对"
+  },
+  "H01": {
+    "turns": [
+      {
+        "decision": "insufficient",
+        "fields": {
+          "peak": {
+            "value": 100.06,
+            "unit": "A",
+            "tolerance": 0.005,
+            "citations": [
+              "1113.xls / New Sheet1!C22"
+            ]
+          },
+          "state": {
+            "value": "pending",
+            "unit": "",
+            "tolerance": 0,
+            "citations": []
+          }
+        }
+      },
+      {
+        "decision": "conditional",
+        "fields": {
+          "peak": {
+            "value": 100.06,
+            "unit": "A",
+            "tolerance": 0.005,
+            "citations": [
+              "1113.xls / New Sheet1!C22"
+            ]
+          },
+          "state": {
+            "value": "satisfied",
+            "unit": "",
+            "tolerance": 0,
+            "citations": []
+          },
+          "load_ratio": {
+            "value": 55.59,
+            "unit": "%",
+            "tolerance": 0.011,
+            "citations": [
+              "1113.xls / New Sheet1!C22",
+              "演练补证-H01"
+            ]
+          }
+        }
+      }
+    ],
+    "reference_method": "原表独立计算峰值及指定参数复算。补证包是研究者编写的演练输入"
+  },
+  "H02": {
+    "turns": [
+      {
+        "decision": "insufficient",
+        "fields": {
+          "peak": {
+            "value": 100.06,
+            "unit": "A",
+            "tolerance": 0.005,
+            "citations": [
+              "1113.xls / New Sheet1!C22"
+            ]
+          },
+          "state": {
+            "value": "pending",
+            "unit": "",
+            "tolerance": 0,
+            "citations": []
+          }
+        }
+      },
+      {
+        "decision": "conditional",
+        "fields": {
+          "peak": {
+            "value": 100.06,
+            "unit": "A",
+            "tolerance": 0.005,
+            "citations": [
+              "1113.xls / New Sheet1!C22"
+            ]
+          },
+          "state": {
+            "value": "violated",
+            "unit": "",
+            "tolerance": 0,
+            "citations": []
+          },
+          "load_ratio": {
+            "value": 123.53,
+            "unit": "%",
+            "tolerance": 0.011,
+            "citations": [
+              "1113.xls / New Sheet1!C22",
+              "演练补证-H02"
+            ]
+          }
+        }
+      }
+    ],
+    "reference_method": "原表独立计算峰值及指定参数复算。补证包是研究者编写的演练输入"
+  },
+  "H03": {
+    "turns": [
+      {
+        "decision": "insufficient",
+        "fields": {
+          "peak": {
+            "value": 100.06,
+            "unit": "A",
+            "tolerance": 0.005,
+            "citations": [
+              "1113.xls / New Sheet1!C22"
+            ]
+          },
+          "state": {
+            "value": "pending",
+            "unit": "",
+            "tolerance": 0,
+            "citations": []
+          }
+        }
+      },
+      {
+        "decision": "insufficient",
+        "fields": {
+          "peak": {
+            "value": 100.06,
+            "unit": "A",
+            "tolerance": 0.005,
+            "citations": [
+              "1113.xls / New Sheet1!C22"
+            ]
+          },
+          "state": {
+            "value": "partial",
+            "unit": "",
+            "tolerance": 0,
+            "citations": []
+          }
+        }
+      }
+    ],
+    "reference_method": "原表独立计算峰值及指定参数复算。补证包是研究者编写的演练输入"
+  },
+  "H04": {
+    "turns": [
+      {
+        "decision": "insufficient",
+        "fields": {
+          "peak": {
+            "value": 100.06,
+            "unit": "A",
+            "tolerance": 0.005,
+            "citations": [
+              "1113.xls / New Sheet1!C22"
+            ]
+          },
+          "state": {
+            "value": "pending",
+            "unit": "",
+            "tolerance": 0,
+            "citations": []
+          }
+        }
+      },
+      {
+        "decision": "insufficient",
+        "fields": {
+          "peak": {
+            "value": 100.06,
+            "unit": "A",
+            "tolerance": 0.005,
+            "citations": [
+              "1113.xls / New Sheet1!C22"
+            ]
+          },
+          "state": {
+            "value": "rejected",
+            "unit": "",
+            "tolerance": 0,
+            "citations": []
+          }
+        }
+      }
+    ],
+    "reference_method": "原表独立计算峰值及指定参数复算。补证包是研究者编写的演练输入"
+  },
+  "H05": {
+    "turns": [
+      {
+        "decision": "insufficient",
+        "fields": {
+          "peak": {
+            "value": 159.69,
+            "unit": "A",
+            "tolerance": 0.005,
+            "citations": [
+              "1110.xls / New Sheet1!BC10",
+              "1110.xls / New Sheet1!BK10"
+            ]
+          },
+          "state": {
+            "value": "pending",
+            "unit": "",
+            "tolerance": 0,
+            "citations": []
+          }
+        }
+      },
+      {
+        "decision": "conditional",
+        "fields": {
+          "peak": {
+            "value": 159.69,
+            "unit": "A",
+            "tolerance": 0.005,
+            "citations": [
+              "1110.xls / New Sheet1!BC10",
+              "1110.xls / New Sheet1!BK10"
+            ]
+          },
+          "state": {
+            "value": "satisfied",
+            "unit": "",
+            "tolerance": 0,
+            "citations": []
+          },
+          "load_ratio": {
+            "value": 59.14,
+            "unit": "%",
+            "tolerance": 0.011,
+            "citations": [
+              "1110.xls / New Sheet1!BC10",
+              "1110.xls / New Sheet1!BK10",
+              "演练补证-H05"
+            ]
+          }
+        }
+      }
+    ],
+    "reference_method": "原表独立计算峰值及指定参数复算。补证包是研究者编写的演练输入"
+  },
+  "H06": {
+    "turns": [
+      {
+        "decision": "insufficient",
+        "fields": {
+          "peak": {
+            "value": 159.69,
+            "unit": "A",
+            "tolerance": 0.005,
+            "citations": [
+              "1110.xls / New Sheet1!BC10",
+              "1110.xls / New Sheet1!BK10"
+            ]
+          },
+          "state": {
+            "value": "pending",
+            "unit": "",
+            "tolerance": 0,
+            "citations": []
+          }
+        }
+      },
+      {
+        "decision": "conditional",
+        "fields": {
+          "peak": {
+            "value": 159.69,
+            "unit": "A",
+            "tolerance": 0.005,
+            "citations": [
+              "1110.xls / New Sheet1!BC10",
+              "1110.xls / New Sheet1!BK10"
+            ]
+          },
+          "state": {
+            "value": "violated",
+            "unit": "",
+            "tolerance": 0,
+            "citations": []
+          },
+          "load_ratio": {
+            "value": 59.14,
+            "unit": "%",
+            "tolerance": 0.011,
+            "citations": [
+              "1110.xls / New Sheet1!BC10",
+              "1110.xls / New Sheet1!BK10",
+              "演练补证-H06"
+            ]
+          }
+        }
+      }
+    ],
+    "reference_method": "原表独立计算峰值及指定参数复算。补证包是研究者编写的演练输入"
+  },
+  "H07": {
+    "turns": [
+      {
+        "decision": "insufficient",
+        "fields": {
+          "peak": {
+            "value": 159.69,
+            "unit": "A",
+            "tolerance": 0.005,
+            "citations": [
+              "1110.xls / New Sheet1!BC10",
+              "1110.xls / New Sheet1!BK10"
+            ]
+          },
+          "state": {
+            "value": "pending",
+            "unit": "",
+            "tolerance": 0,
+            "citations": []
+          }
+        }
+      },
+      {
+        "decision": "insufficient",
+        "fields": {
+          "peak": {
+            "value": 159.69,
+            "unit": "A",
+            "tolerance": 0.005,
+            "citations": [
+              "1110.xls / New Sheet1!BC10",
+              "1110.xls / New Sheet1!BK10"
+            ]
+          },
+          "state": {
+            "value": "rejected",
+            "unit": "",
+            "tolerance": 0,
+            "citations": []
+          }
+        }
+      }
+    ],
+    "reference_method": "原表独立计算峰值及指定参数复算。补证包是研究者编写的演练输入"
+  },
+  "H08": {
+    "turns": [
+      {
+        "decision": "insufficient",
+        "fields": {
+          "peak": {
+            "value": 159.69,
+            "unit": "A",
+            "tolerance": 0.005,
+            "citations": [
+              "1110.xls / New Sheet1!BC10",
+              "1110.xls / New Sheet1!BK10"
+            ]
+          },
+          "state": {
+            "value": "pending",
+            "unit": "",
+            "tolerance": 0,
+            "citations": []
+          }
+        }
+      },
+      {
+        "decision": "insufficient",
+        "fields": {
+          "peak": {
+            "value": 159.69,
+            "unit": "A",
+            "tolerance": 0.005,
+            "citations": [
+              "1110.xls / New Sheet1!BC10",
+              "1110.xls / New Sheet1!BK10"
+            ]
+          },
+          "state": {
+            "value": "partial",
+            "unit": "",
+            "tolerance": 0,
+            "citations": []
+          }
+        }
+      }
+    ],
+    "reference_method": "原表独立计算峰值及指定参数复算。补证包是研究者编写的演练输入"
+  }
+}

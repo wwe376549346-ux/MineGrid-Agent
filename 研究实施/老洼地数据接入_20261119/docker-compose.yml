@@ -1,0 +1,82 @@
+# The migrate service publishes a complete archive before API and Worker start.
+x-app-environment: &app-environment
+  LAOWADI_BACKEND: postgresql
+  LAOWADI_DATABASE_URL: ${LAOWADI_DATABASE_URL:-postgresql+psycopg://postgres:${LAOWADI_PG_PASSWORD:?set LAOWADI_PG_PASSWORD}@timescaledb:5432/laowadi}
+  LAOWADI_REQUIRE_AUTH: ${LAOWADI_REQUIRE_AUTH:-1}
+  LAOWADI_AUTH_SECRET: ${LAOWADI_AUTH_SECRET:?set LAOWADI_AUTH_SECRET}
+  LAOWADI_ALLOWED_HOSTS: ${LAOWADI_ALLOWED_HOSTS:-api}
+  LAOWADI_ALLOWED_LOCAL_PORTS: ${LAOWADI_BIND_PORT:-8765}
+  LAOWADI_LOG_FORMAT: json
+  LAOWADI_PORT: "8765"
+  LAOWADI_DB: /archive/seed/laowadi.sqlite3
+  LAOWADI_EVENTS_DB: /archive/seed/laowadi_events.sqlite3
+  LAOWADI_SOURCE_DIR: /archive/sources
+  LAOWADI_STANDARDS_DIR: /archive/standards
+  LAOWADI_BACKUP_DIR: /backups
+  LAOWADI_MAX_DATA_AGE_HOURS: ${LAOWADI_MAX_DATA_AGE_HOURS:-0}
+  COAL_API_KEY: ${COAL_API_KEY:-}
+  COAL_API_MODEL: ${COAL_API_MODEL:-deepseek-v4-pro}
+  COAL_API_BASE_URL: ${COAL_API_BASE_URL:-https://api.deepseek.com/v1}
+
+x-app: &app
+  image: laowadi/power-agent:2.4.0
+  build: .
+  environment: *app-environment
+  volumes:
+    - ${LAOWADI_ARCHIVE_DIR:?set LAOWADI_ARCHIVE_DIR}:/archive:ro
+    - laowadi_backups:/backups
+
+services:
+  timescaledb:
+    build:
+      context: .
+      dockerfile: Dockerfile.timescaledb
+    image: laowadi/timescaledb-pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${LAOWADI_PG_PASSWORD:?set LAOWADI_PG_PASSWORD}
+      POSTGRES_DB: laowadi
+    volumes:
+      - laowadi_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres", "-d", "laowadi"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  migrate:
+    <<: *app
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+    command: ["python", "-B", "-m", "laowadi", "db", "migrate-archive", "--db", "/archive/seed/laowadi.sqlite3", "--events-db", "/archive/seed/laowadi_events.sqlite3"]
+
+  api:
+    <<: *app
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    ports:
+      - "127.0.0.1:${LAOWADI_BIND_PORT:-8765}:8765"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8765/readyz"]
+      interval: 10s
+      timeout: 10s
+      retries: 6
+
+  worker:
+    <<: *app
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    deploy:
+      replicas: 2
+    command: ["python", "-B", "-m", "laowadi", "worker"]
+
+volumes:
+  laowadi_pgdata:
+  laowadi_backups:
+

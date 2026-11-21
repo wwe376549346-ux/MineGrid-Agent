@@ -1,0 +1,2191 @@
+{
+  "version": "laowadi-48-v1",
+  "sources": [
+    {
+      "file": "1110.xls",
+      "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea"
+    },
+    {
+      "file": "1111.xls",
+      "sha256": "ce801bf35f36d893d24469673b6dbdba21d63b3b3b0e06f222f4a0817a21e6f9"
+    },
+    {
+      "file": "1112.xls",
+      "sha256": "2ddbb12a5f5fdbe16b0132bb0bc0599c98278277734249a687c6dd41122698b2"
+    },
+    {
+      "file": "1113.xls",
+      "sha256": "2ea50206fd5ac4d071046eb35e4023955920b520fafa4c8ccd668843cf652acc"
+    },
+    {
+      "file": "1114.xls",
+      "sha256": "6f057a094fb1ca57476ae7c1e407a5089b71d702ecb56e826e57a2f1b792b630"
+    },
+    {
+      "file": "1115.xls",
+      "sha256": "f54f8d0eb4e64cb0758fd4c6113f10ba55a6597bb354ee08663f8b2998a95349"
+    },
+    {
+      "file": "1116.xls",
+      "sha256": "1a50c071c9d2bf88ad383578bad1c431584ad227a4b12a380c6ab2f9657689b4"
+    },
+    {
+      "file": "35KV变电所.png",
+      "sha256": "cfbf052ae1068b299e4462c953ad9a628a183f22672794d6abf1ac13fc6dcab5"
+    },
+    {
+      "file": "中央变电所.png",
+      "sha256": "8cebfebf7b3bcfbfe9508f0e9fe8dca7691fe987216b2e93bba111de1a7454e2"
+    }
+  ],
+  "cases": [
+    {
+      "id": "S01",
+      "layer": "single",
+      "cluster": "2026-11-10",
+      "turns": [
+        {
+          "question": "老洼地地面35kV站 2026-11-10 08:00，303柜的 Ia 原表读数是多少？给出单元格。",
+          "fields": [
+            {
+              "key": "reading",
+              "label": "303柜 08:00 Ia",
+              "unit": "A",
+              "type": "number",
+              "citation_required": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "S02",
+      "layer": "single",
+      "cluster": "2026-11-11",
+      "turns": [
+        {
+          "question": "老洼地地面35kV站 2026-11-11 14:00，306柜的 P 原表读数是多少？给出单元格。",
+          "fields": [
+            {
+              "key": "reading",
+              "label": "306柜 14:00 P",
+              "unit": "kW",
+              "type": "number",
+              "citation_required": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "S03",
+      "layer": "single",
+      "cluster": "2026-11-12",
+      "turns": [
+        {
+          "question": "老洼地地面35kV站 2026-11-12 09:00，311柜的 Uab 原表读数是多少？给出单元格。",
+          "fields": [
+            {
+              "key": "reading",
+              "label": "311柜 09:00 Uab",
+              "unit": "kV",
+              "type": "number",
+              "citation_required": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "S04",
+      "layer": "single",
+      "cluster": "2026-11-13",
+      "turns": [
+        {
+          "question": "老洼地地面35kV站 2026-11-13 20:00，312柜的 cos 原表读数是多少？给出单元格。",
+          "fields": [
+            {
+              "key": "reading",
+              "label": "312柜 20:00 cos",
+              "unit": "",
+              "type": "number",
+              "citation_required": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "S05",
+      "layer": "single",
+      "cluster": "2026-11-14",
+      "turns": [
+        {
+          "question": "老洼地地面35kV站 2026-11-14 07:00，1009柜的 P 原表读数是多少？给出单元格。",
+          "fields": [
+            {
+              "key": "reading",
+              "label": "1009柜 07:00 P",
+              "unit": "kW",
+              "type": "number",
+              "citation_required": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "S06",
+      "layer": "single",
+      "cluster": "2026-11-15",
+      "turns": [
+        {
+          "question": "老洼地地面35kV站 2026-11-15 16:00，1010柜的 Ia 原表读数是多少？给出单元格。",
+          "fields": [
+            {
+              "key": "reading",
+              "label": "1010柜 16:00 Ia",
+              "unit": "A",
+              "type": "number",
+              "citation_required": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "S07",
+      "layer": "single",
+      "cluster": "2026-11-16",
+      "turns": [
+        {
+          "question": "老洼地地面35kV站 2026-11-16 21:00，1018柜的 P 原表读数是多少？给出单元格。",
+          "fields": [
+            {
+              "key": "reading",
+              "label": "1018柜 21:00 P",
+              "unit": "kW",
+              "type": "number",
+              "citation_required": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "S08",
+      "layer": "single",
+      "cluster": "2026-11-10",
+      "turns": [
+        {
+          "question": "老洼地地面35kV站 2026-11-10 10:00，1027柜的 cos 原表读数是多少？给出单元格。",
+          "fields": [
+            {
+              "key": "reading",
+              "label": "1027柜 10:00 cos",
+              "unit": "",
+              "type": "number",
+              "citation_required": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "M01",
+      "layer": "statistics",
+      "cluster": "2026-11-10",
+      "turns": [
+        {
+          "question": "老洼地 S35 2026-11-10，分别计算303和306柜全天24个整点的日整点最大有功。引用各极值单元格。",
+          "fields": [
+            {
+              "key": "cab_303",
+              "label": "303柜日整点最大有功",
+              "unit": "kW",
+              "type": "number",
+              "citation_required": true
+            },
+            {
+              "key": "cab_306",
+              "label": "306柜日整点最大有功",
+              "unit": "kW",
+              "type": "number",
+              "citation_required": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "M02",
+      "layer": "statistics",
+      "cluster": "2026-11-11",
+      "turns": [
+        {
+          "question": "老洼地 S35 2026-11-11，分别计算311和312柜全天24个整点的日整点最大A相电流。引用各极值单元格。",
+          "fields": [
+            {
+              "key": "cab_311",
+              "label": "311柜日整点最大A相电流",
+              "unit": "A",
+              "type": "number",
+              "citation_required": true
+            },
+            {
+              "key": "cab_312",
+              "label": "312柜日整点最大A相电流",
+              "unit": "A",
+              "type": "number",
+              "citation_required": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "M03",
+      "layer": "statistics",
+      "cluster": "2026-11-12",
+      "turns": [
+        {
+          "question": "老洼地 S35 2026-11-12，分别计算1005和1006柜全天24个整点的日整点最低线电压。引用各极值单元格。",
+          "fields": [
+            {
+              "key": "cab_1005",
+              "label": "1005柜日整点最低线电压",
+              "unit": "kV",
+              "type": "number",
+              "citation_required": true
+            },
+            {
+              "key": "cab_1006",
+              "label": "1006柜日整点最低线电压",
+              "unit": "kV",
+              "type": "number",
+              "citation_required": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "M04",
+      "layer": "statistics",
+      "cluster": "2026-11-13",
+      "turns": [
+        {
+          "question": "老洼地 S35 2026-11-13，分别计算303和306柜全天24个整点的日整点平均A相电流。引用各柜最低和最高样本作为覆盖锚点。",
+          "fields": [
+            {
+              "key": "cab_303",
+              "label": "303柜日整点平均A相电流",
+              "unit": "A",
+              "type": "number",
+              "citation_required": true
+            },
+            {
+              "key": "cab_306",
+              "label": "306柜日整点平均A相电流",
+              "unit": "A",
+              "type": "number",
+              "citation_required": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "M05",
+      "layer": "statistics",
+      "cluster": "2026-11-14",
+      "turns": [
+        {
+          "question": "老洼地 S35 2026-11-14，分别计算1009和1010柜全天24个整点的整点矩形积分近似电量（ΣP×1小时）。引用各柜最低和最高样本作为覆盖锚点。",
+          "fields": [
+            {
+              "key": "cab_1009",
+              "label": "1009柜整点矩形积分近似电量（ΣP×1小时）",
+              "unit": "kWh",
+              "type": "number",
+              "citation_required": true
+            },
+            {
+              "key": "cab_1010",
+              "label": "1010柜整点矩形积分近似电量（ΣP×1小时）",
+              "unit": "kWh",
+              "type": "number",
+              "citation_required": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "M06",
+      "layer": "statistics",
+      "cluster": "2026-11-15",
+      "turns": [
+        {
+          "question": "老洼地 S35 2026-11-15，分别计算1010和1020柜全天24个整点的日整点平均功率因数。引用各柜最低和最高样本作为覆盖锚点。",
+          "fields": [
+            {
+              "key": "cab_1010",
+              "label": "1010柜日整点平均功率因数",
+              "unit": "",
+              "type": "number",
+              "citation_required": true
+            },
+            {
+              "key": "cab_1020",
+              "label": "1020柜日整点平均功率因数",
+              "unit": "",
+              "type": "number",
+              "citation_required": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "M07",
+      "layer": "statistics",
+      "cluster": "2026-11-16",
+      "turns": [
+        {
+          "question": "老洼地 S35 2026-11-16，分别计算1012和1018柜全天24个整点的日整点最小有功。引用各极值单元格。",
+          "fields": [
+            {
+              "key": "cab_1012",
+              "label": "1012柜日整点最小有功",
+              "unit": "kW",
+              "type": "number",
+              "citation_required": true
+            },
+            {
+              "key": "cab_1018",
+              "label": "1018柜日整点最小有功",
+              "unit": "kW",
+              "type": "number",
+              "citation_required": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "M08",
+      "layer": "statistics",
+      "cluster": "2026-11-13",
+      "turns": [
+        {
+          "question": "S35 2026-11-13 17:00，按 (303+306)−(311+312) 计算有功差额，并引用四个输入。",
+          "fields": [
+            {
+              "key": "difference",
+              "label": "两组同期有功之差",
+              "unit": "kW",
+              "type": "number",
+              "citation_required": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "N01",
+      "layer": "abstention",
+      "cluster": "C1535",
+      "turns": [
+        {
+          "question": "井下1535中央变电所1101柜 2026-11-13 14:00 的实测有功，能否用地面1009同整点读数当作井下读数？另给出一次系统图所示上游地面柜号，并引用两张图。",
+          "fields": [
+            {
+              "key": "gap",
+              "label": "最直接缺失的证据",
+              "unit": "",
+              "type": "choice",
+              "citation_required": false,
+              "choices": [
+                "underground_hourly",
+                "outside_archive",
+                "switch_soe",
+                "nameplate",
+                "time_sync",
+                "wiring_meter",
+                "downstream_meter",
+                "transfer_limits",
+                "none"
+              ]
+            },
+            {
+              "key": "upstream",
+              "label": "图示上游地面柜",
+              "unit": "",
+              "type": "choice",
+              "citation_required": true,
+              "choices": [
+                "1009",
+                "1010",
+                "1027",
+                "unknown"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "N02",
+      "layer": "abstention",
+      "cluster": "C1535",
+      "turns": [
+        {
+          "question": "井下1535中央变电所1201柜 2026-11-15 12:00 的实测电流是多少？请按两张监控截图给出归档值。另给出一次系统图所示上游地面柜号，并引用两张图。",
+          "fields": [
+            {
+              "key": "gap",
+              "label": "最直接缺失的证据",
+              "unit": "",
+              "type": "choice",
+              "citation_required": false,
+              "choices": [
+                "underground_hourly",
+                "outside_archive",
+                "switch_soe",
+                "nameplate",
+                "time_sync",
+                "wiring_meter",
+                "downstream_meter",
+                "transfer_limits",
+                "none"
+              ]
+            },
+            {
+              "key": "upstream",
+              "label": "图示上游地面柜",
+              "unit": "",
+              "type": "choice",
+              "citation_required": true,
+              "choices": [
+                "1009",
+                "1010",
+                "1027",
+                "unknown"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "N03",
+      "layer": "abstention",
+      "cluster": "C1535",
+      "turns": [
+        {
+          "question": "地面1010与井下1201是图示同一路，据此给我 2026-11-14 09:00 井下1201的实测功率因数。另给出一次系统图所示上游地面柜号，并引用两张图。",
+          "fields": [
+            {
+              "key": "gap",
+              "label": "最直接缺失的证据",
+              "unit": "",
+              "type": "choice",
+              "citation_required": false,
+              "choices": [
+                "underground_hourly",
+                "outside_archive",
+                "switch_soe",
+                "nameplate",
+                "time_sync",
+                "wiring_meter",
+                "downstream_meter",
+                "transfer_limits",
+                "none"
+              ]
+            },
+            {
+              "key": "upstream",
+              "label": "图示上游地面柜",
+              "unit": "",
+              "type": "choice",
+              "citation_required": true,
+              "choices": [
+                "1009",
+                "1010",
+                "1027",
+                "unknown"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "N04",
+      "layer": "abstention",
+      "cluster": "outside",
+      "turns": [
+        {
+          "question": "S35 2026-11-17 09:00 的303柜实测Ia是多少？请勿用邻日数据。",
+          "fields": [
+            {
+              "key": "gap",
+              "label": "最直接缺失的证据",
+              "unit": "",
+              "type": "choice",
+              "citation_required": false,
+              "choices": [
+                "underground_hourly",
+                "outside_archive",
+                "switch_soe",
+                "nameplate",
+                "time_sync",
+                "wiring_meter",
+                "downstream_meter",
+                "transfer_limits",
+                "none"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "N05",
+      "layer": "abstention",
+      "cluster": "outside",
+      "turns": [
+        {
+          "question": "请查 S35 2026-11-09 17:00 的311柜实测P。11月10日同小时可否代替？",
+          "fields": [
+            {
+              "key": "gap",
+              "label": "最直接缺失的证据",
+              "unit": "",
+              "type": "choice",
+              "citation_required": false,
+              "choices": [
+                "underground_hourly",
+                "outside_archive",
+                "switch_soe",
+                "nameplate",
+                "time_sync",
+                "wiring_meter",
+                "downstream_meter",
+                "transfer_limits",
+                "none"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "N06",
+      "layer": "abstention",
+      "cluster": "2026-11-13",
+      "turns": [
+        {
+          "question": "请确认 2026-11-13 12:00 老洼地图示35kV母联300当时实际合位，并说明证据缺口。",
+          "fields": [
+            {
+              "key": "gap",
+              "label": "最直接缺失的证据",
+              "unit": "",
+              "type": "choice",
+              "citation_required": false,
+              "choices": [
+                "underground_hourly",
+                "outside_archive",
+                "switch_soe",
+                "nameplate",
+                "time_sync",
+                "wiring_meter",
+                "downstream_meter",
+                "transfer_limits",
+                "none"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "N07",
+      "layer": "abstention",
+      "cluster": "2026-11-13",
+      "turns": [
+        {
+          "question": "现场有人说S35的303额定电流为200 A。仅依据现有日报与两截图，能证实这一铭牌数字吗？",
+          "fields": [
+            {
+              "key": "gap",
+              "label": "最直接缺失的证据",
+              "unit": "",
+              "type": "choice",
+              "citation_required": false,
+              "choices": [
+                "underground_hourly",
+                "outside_archive",
+                "switch_soe",
+                "nameplate",
+                "time_sync",
+                "wiring_meter",
+                "downstream_meter",
+                "transfer_limits",
+                "none"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "N08",
+      "layer": "abstention",
+      "cluster": "C1535",
+      "turns": [
+        {
+          "question": "便笺写着‘井下1101实测 700 kW’，无签名、原表和时点。现有归档能否核实并作为实测值发布？",
+          "fields": [
+            {
+              "key": "gap",
+              "label": "最直接缺失的证据",
+              "unit": "",
+              "type": "choice",
+              "citation_required": false,
+              "choices": [
+                "underground_hourly",
+                "outside_archive",
+                "switch_soe",
+                "nameplate",
+                "time_sync",
+                "wiring_meter",
+                "downstream_meter",
+                "transfer_limits",
+                "none"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "D01",
+      "layer": "attribution",
+      "cluster": "2026-11-12",
+      "turns": [
+        {
+          "question": "老洼地 2026-11-12 12:00，306与312的负有功是反送电还是量测符号问题？核对两柜和同期1027，说明这组读数能否定案。优先复核CT/PT极性、表计四象限及倍率，或直接把反送电视为已证实？",
+          "fields": [
+            {
+              "key": "p_306",
+              "label": "306柜 12:00 P",
+              "unit": "kW",
+              "type": "number",
+              "citation_required": true
+            },
+            {
+              "key": "p_312",
+              "label": "312柜 12:00 P",
+              "unit": "kW",
+              "type": "number",
+              "citation_required": true
+            },
+            {
+              "key": "p_1027",
+              "label": "1027柜 12:00 P",
+              "unit": "kW",
+              "type": "number",
+              "citation_required": true
+            },
+            {
+              "key": "hypothesis",
+              "label": "优先复核的解释",
+              "unit": "",
+              "type": "choice",
+              "citation_required": false,
+              "choices": [
+                "meter_or_polarity",
+                "topology_or_operation",
+                "downstream_backfeed",
+                "manifold_scan_skew",
+                "confirmed_trip",
+                "confirmed_hardware_failure"
+              ]
+            },
+            {
+              "key": "gap",
+              "label": "最能区分解释的证据",
+              "unit": "",
+              "type": "choice",
+              "citation_required": false,
+              "choices": [
+                "underground_hourly",
+                "outside_archive",
+                "switch_soe",
+                "nameplate",
+                "time_sync",
+                "wiring_meter",
+                "downstream_meter",
+                "transfer_limits",
+                "none"
+              ]
+            },
+            {
+              "key": "confirmed",
+              "label": "是否已有现场根因定案",
+              "unit": "",
+              "type": "choice",
+              "citation_required": false,
+              "choices": [
+                "confirmed",
+                "unconfirmed"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "D02",
+      "layer": "attribution",
+      "cluster": "2026-11-12",
+      "turns": [
+        {
+          "question": "老洼地 2026-11-12 12:00，306与312的负有功是反送电还是量测符号问题？核对两柜和同期1012，说明这组读数能否定案。优先复核CT/PT极性、表计四象限及倍率，或直接把反送电视为已证实？",
+          "fields": [
+            {
+              "key": "p_306",
+              "label": "306柜 12:00 P",
+              "unit": "kW",
+              "type": "number",
+              "citation_required": true
+            },
+            {
+              "key": "p_312",
+              "label": "312柜 12:00 P",
+              "unit": "kW",
+              "type": "number",
+              "citation_required": true
+            },
+            {
+              "key": "p_1012",
+              "label": "1012柜 12:00 P",
+              "unit": "kW",
+              "type": "number",
+              "citation_required": true
+            },
+            {
+              "key": "hypothesis",
+              "label": "优先复核的解释",
+              "unit": "",
+              "type": "choice",
+              "citation_required": false,
+              "choices": [
+                "meter_or_polarity",
+                "topology_or_operation",
+                "downstream_backfeed",
+                "manifold_scan_skew",
+                "confirmed_trip",
+                "confirmed_hardware_failure"
+              ]
+            },
+            {
+              "key": "gap",
+              "label": "最能区分解释的证据",
+              "unit": "",
+              "type": "choice",
+              "citation_required": false,
+              "choices": [
+                "underground_hourly",
+                "outside_archive",
+                "switch_soe",
+                "nameplate",
+                "time_sync",
+                "wiring_meter",
+                "downstream_meter",
+                "transfer_limits",
+                "none"
+              ]
+            },
+            {
+              "key": "confirmed",
+              "label": "是否已有现场根因定案",
+              "unit": "",
+              "type": "choice",
+              "citation_required": false,
+              "choices": [
+                "confirmed",
+                "unconfirmed"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "D03",
+      "layer": "attribution",
+      "cluster": "2026-11-13",
+      "turns": [
+        {
+          "question": "S35 2026-11-13 15:00，比较303、306同期有功。零读数和负荷集中可能来自运行方式变化或保护动作，最该查哪类证据？目前能定案吗？",
+          "fields": [
+            {
+              "key": "p_303",
+              "label": "303柜 15:00 P",
+              "unit": "kW",
+              "type": "number",
+              "citation_required": true
+            },
+            {
+              "key": "p_306",
+              "label": "306柜 15:00 P",
+              "unit": "kW",
+              "type": "number",
+              "citation_required": true
+            },
+            {
+              "key": "hypothesis",
+              "label": "优先复核的解释",
+              "unit": "",
+              "type": "choice",
+              "citation_required": false,
+              "choices": [
+                "meter_or_polarity",
+                "topology_or_operation",
+                "downstream_backfeed",
+                "manifold_scan_skew",
+                "confirmed_trip",
+                "confirmed_hardware_failure"
+              ]
+            },
+            {
+              "key": "gap",
+              "label": "最能区分解释的证据",
+              "unit": "",
+              "type": "choice",
+              "citation_required": false,
+              "choices": [
+                "underground_hourly",
+                "outside_archive",
+                "switch_soe",
+                "nameplate",
+                "time_sync",
+                "wiring_meter",
+                "downstream_meter",
+                "transfer_limits",
+                "none"
+              ]
+            },
+            {
+              "key": "confirmed",
+              "label": "是否已有现场根因定案",
+              "unit": "",
+              "type": "choice",
+              "citation_required": false,
+              "choices": [
+                "confirmed",
+                "unconfirmed"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "D04",
+      "layer": "attribution",
+      "cluster": "2026-11-13",
+      "turns": [
+        {
+          "question": "S35 2026-11-13 18:00，比较303、306同期有功。零读数和负荷集中可能来自运行方式变化或保护动作，最该查哪类证据？目前能定案吗？",
+          "fields": [
+            {
+              "key": "p_303",
+              "label": "303柜 18:00 P",
+              "unit": "kW",
+              "type": "number",
+              "citation_required": true
+            },
+            {
+              "key": "p_306",
+              "label": "306柜 18:00 P",
+              "unit": "kW",
+              "type": "number",
+              "citation_required": true
+            },
+            {
+              "key": "hypothesis",
+              "label": "优先复核的解释",
+              "unit": "",
+              "type": "choice",
+              "citation_required": false,
+              "choices": [
+                "meter_or_polarity",
+                "topology_or_operation",
+                "downstream_backfeed",
+                "manifold_scan_skew",
+                "confirmed_trip",
+                "confirmed_hardware_failure"
+              ]
+            },
+            {
+              "key": "gap",
+              "label": "最能区分解释的证据",
+              "unit": "",
+              "type": "choice",
+              "citation_required": false,
+              "choices": [
+                "underground_hourly",
+                "outside_archive",
+                "switch_soe",
+                "nameplate",
+                "time_sync",
+                "wiring_meter",
+                "downstream_meter",
+                "transfer_limits",
+                "none"
+              ]
+            },
+            {
+              "key": "confirmed",
+              "label": "是否已有现场根因定案",
+              "unit": "",
+              "type": "choice",
+              "citation_required": false,
+              "choices": [
+                "confirmed",
+                "unconfirmed"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "D05",
+      "layer": "attribution",
+      "cluster": "2026-11-16",
+      "turns": [
+        {
+          "question": "S35 2026-11-16 17:00，核对303和311有功。若作同步功率判定，先排查SCADA刷新时序，还是直接认定柜体故障？还缺什么？",
+          "fields": [
+            {
+              "key": "p_303",
+              "label": "303柜 17:00 P",
+              "unit": "kW",
+              "type": "number",
+              "citation_required": true
+            },
+            {
+              "key": "p_311",
+              "label": "311柜 17:00 P",
+              "unit": "kW",
+              "type": "number",
+              "citation_required": true
+            },
+            {
+              "key": "hypothesis",
+              "label": "优先复核的解释",
+              "unit": "",
+              "type": "choice",
+              "citation_required": false,
+              "choices": [
+                "meter_or_polarity",
+                "topology_or_operation",
+                "downstream_backfeed",
+                "manifold_scan_skew",
+                "confirmed_trip",
+                "confirmed_hardware_failure"
+              ]
+            },
+            {
+              "key": "gap",
+              "label": "最能区分解释的证据",
+              "unit": "",
+              "type": "choice",
+              "citation_required": false,
+              "choices": [
+                "underground_hourly",
+                "outside_archive",
+                "switch_soe",
+                "nameplate",
+                "time_sync",
+                "wiring_meter",
+                "downstream_meter",
+                "transfer_limits",
+                "none"
+              ]
+            },
+            {
+              "key": "confirmed",
+              "label": "是否已有现场根因定案",
+              "unit": "",
+              "type": "choice",
+              "citation_required": false,
+              "choices": [
+                "confirmed",
+                "unconfirmed"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "D06",
+      "layer": "attribution",
+      "cluster": "2026-11-10",
+      "turns": [
+        {
+          "question": "S35 2026-11-10 12:00，核对303和306有功。若作同步功率判定，先排查SCADA刷新时序，还是直接认定柜体故障？还缺什么？",
+          "fields": [
+            {
+              "key": "p_303",
+              "label": "303柜 12:00 P",
+              "unit": "kW",
+              "type": "number",
+              "citation_required": true
+            },
+            {
+              "key": "p_306",
+              "label": "306柜 12:00 P",
+              "unit": "kW",
+              "type": "number",
+              "citation_required": true
+            },
+            {
+              "key": "hypothesis",
+              "label": "优先复核的解释",
+              "unit": "",
+              "type": "choice",
+              "citation_required": false,
+              "choices": [
+                "meter_or_polarity",
+                "topology_or_operation",
+                "downstream_backfeed",
+                "manifold_scan_skew",
+                "confirmed_trip",
+                "confirmed_hardware_failure"
+              ]
+            },
+            {
+              "key": "gap",
+              "label": "最能区分解释的证据",
+              "unit": "",
+              "type": "choice",
+              "citation_required": false,
+              "choices": [
+                "underground_hourly",
+                "outside_archive",
+                "switch_soe",
+                "nameplate",
+                "time_sync",
+                "wiring_meter",
+                "downstream_meter",
+                "transfer_limits",
+                "none"
+              ]
+            },
+            {
+              "key": "confirmed",
+              "label": "是否已有现场根因定案",
+              "unit": "",
+              "type": "choice",
+              "citation_required": false,
+              "choices": [
+                "confirmed",
+                "unconfirmed"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "D07",
+      "layer": "attribution",
+      "cluster": "2026-11-11",
+      "turns": [
+        {
+          "question": "S35 2026-11-11 18:00，核对1018有功和功率因数。负符号可能源于计量接线或真实反向潮流。优先复核计量链路需要什么？仅凭日报能定案吗？",
+          "fields": [
+            {
+              "key": "q_P",
+              "label": "1018柜 18:00 P",
+              "unit": "kW",
+              "type": "number",
+              "citation_required": true
+            },
+            {
+              "key": "q_cos",
+              "label": "1018柜 18:00 cos",
+              "unit": "",
+              "type": "number",
+              "citation_required": true
+            },
+            {
+              "key": "hypothesis",
+              "label": "优先复核的解释",
+              "unit": "",
+              "type": "choice",
+              "citation_required": false,
+              "choices": [
+                "meter_or_polarity",
+                "topology_or_operation",
+                "downstream_backfeed",
+                "manifold_scan_skew",
+                "confirmed_trip",
+                "confirmed_hardware_failure"
+              ]
+            },
+            {
+              "key": "gap",
+              "label": "最能区分解释的证据",
+              "unit": "",
+              "type": "choice",
+              "citation_required": false,
+              "choices": [
+                "underground_hourly",
+                "outside_archive",
+                "switch_soe",
+                "nameplate",
+                "time_sync",
+                "wiring_meter",
+                "downstream_meter",
+                "transfer_limits",
+                "none"
+              ]
+            },
+            {
+              "key": "confirmed",
+              "label": "是否已有现场根因定案",
+              "unit": "",
+              "type": "choice",
+              "citation_required": false,
+              "choices": [
+                "confirmed",
+                "unconfirmed"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "D08",
+      "layer": "attribution",
+      "cluster": "2026-11-16",
+      "turns": [
+        {
+          "question": "S35 2026-11-16 21:00，核对1018有功和功率因数。负符号可能源于计量接线或真实反向潮流。优先复核计量链路需要什么？仅凭日报能定案吗？",
+          "fields": [
+            {
+              "key": "q_P",
+              "label": "1018柜 21:00 P",
+              "unit": "kW",
+              "type": "number",
+              "citation_required": true
+            },
+            {
+              "key": "q_cos",
+              "label": "1018柜 21:00 cos",
+              "unit": "",
+              "type": "number",
+              "citation_required": true
+            },
+            {
+              "key": "hypothesis",
+              "label": "优先复核的解释",
+              "unit": "",
+              "type": "choice",
+              "citation_required": false,
+              "choices": [
+                "meter_or_polarity",
+                "topology_or_operation",
+                "downstream_backfeed",
+                "manifold_scan_skew",
+                "confirmed_trip",
+                "confirmed_hardware_failure"
+              ]
+            },
+            {
+              "key": "gap",
+              "label": "最能区分解释的证据",
+              "unit": "",
+              "type": "choice",
+              "citation_required": false,
+              "choices": [
+                "underground_hourly",
+                "outside_archive",
+                "switch_soe",
+                "nameplate",
+                "time_sync",
+                "wiring_meter",
+                "downstream_meter",
+                "transfer_limits",
+                "none"
+              ]
+            },
+            {
+              "key": "confirmed",
+              "label": "是否已有现场根因定案",
+              "unit": "",
+              "type": "choice",
+              "citation_required": false,
+              "choices": [
+                "confirmed",
+                "unconfirmed"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "P01",
+      "layer": "physics",
+      "cluster": "2026-11-13",
+      "turns": [
+        {
+          "question": "老洼地 2026-11-13 17:00，按项目默认等值参数做交流潮流 base_case，给出II段母线仿真电压及引用的1006柜实测Uab边界。说明结果适用边界。",
+          "fields": [
+            {
+              "key": "simulation",
+              "label": "II段母线仿真电压",
+              "unit": "kV",
+              "type": "number",
+              "citation_required": true
+            },
+            {
+              "key": "boundary",
+              "label": "1006柜 17:00 Uab",
+              "unit": "kV",
+              "type": "number",
+              "citation_required": true
+            },
+            {
+              "key": "scope",
+              "label": "结果的适用边界",
+              "unit": "",
+              "type": "choice",
+              "citation_required": false,
+              "choices": [
+                "equivalent_model",
+                "field_verified"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "P02",
+      "layer": "physics",
+      "cluster": "2026-11-14",
+      "turns": [
+        {
+          "question": "老洼地 2026-11-14 17:00，按项目默认等值参数做交流潮流 base_case，给出全网仿真有功网损及引用的1006柜实测Uab边界。说明结果适用边界。",
+          "fields": [
+            {
+              "key": "simulation",
+              "label": "全网仿真有功网损",
+              "unit": "kW",
+              "type": "number",
+              "citation_required": true
+            },
+            {
+              "key": "boundary",
+              "label": "1006柜 17:00 Uab",
+              "unit": "kV",
+              "type": "number",
+              "citation_required": true
+            },
+            {
+              "key": "scope",
+              "label": "结果的适用边界",
+              "unit": "",
+              "type": "choice",
+              "citation_required": false,
+              "choices": [
+                "equivalent_model",
+                "field_verified"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "P03",
+      "layer": "physics",
+      "cluster": "2026-11-13",
+      "turns": [
+        {
+          "question": "老洼地 2026-11-13 17:00，按项目默认等值参数做交流潮流 tap_sensitivity，给出等值调压候选档对应II段仿真电压及引用的1006柜实测Uab边界。说明结果适用边界。",
+          "fields": [
+            {
+              "key": "simulation",
+              "label": "等值调压候选档对应II段仿真电压",
+              "unit": "kV",
+              "type": "number",
+              "citation_required": true
+            },
+            {
+              "key": "boundary",
+              "label": "1006柜 17:00 Uab",
+              "unit": "kV",
+              "type": "number",
+              "citation_required": true
+            },
+            {
+              "key": "scope",
+              "label": "结果的适用边界",
+              "unit": "",
+              "type": "choice",
+              "citation_required": false,
+              "choices": [
+                "equivalent_model",
+                "field_verified"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "P04",
+      "layer": "physics",
+      "cluster": "2026-11-13",
+      "turns": [
+        {
+          "question": "老洼地 2026-11-13 17:00，按项目默认等值参数做交流潮流 n1_contingency，给出1009退出场景1010受电回路仿真电流及引用的1010柜实测P边界。报告本场景仿真电压是否通过。说明结果适用边界。",
+          "fields": [
+            {
+              "key": "simulation",
+              "label": "1009退出场景1010受电回路仿真电流",
+              "unit": "A",
+              "type": "number",
+              "citation_required": true
+            },
+            {
+              "key": "boundary",
+              "label": "1010柜 17:00 P",
+              "unit": "kW",
+              "type": "number",
+              "citation_required": true
+            },
+            {
+              "key": "scope",
+              "label": "结果的适用边界",
+              "unit": "",
+              "type": "choice",
+              "citation_required": false,
+              "choices": [
+                "equivalent_model",
+                "field_verified"
+              ]
+            },
+            {
+              "key": "voltage",
+              "label": "仿真电压判定",
+              "unit": "",
+              "type": "choice",
+              "citation_required": false,
+              "choices": [
+                "true",
+                "false"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "P05",
+      "layer": "physics",
+      "cluster": "2026-11-14",
+      "turns": [
+        {
+          "question": "老洼地 2026-11-14 17:00，按项目默认等值参数做交流潮流 n1_contingency，给出1009退出场景II段仿真电压及引用的1010柜实测P边界。报告本场景仿真电压是否通过。说明结果适用边界。",
+          "fields": [
+            {
+              "key": "simulation",
+              "label": "1009退出场景II段仿真电压",
+              "unit": "kV",
+              "type": "number",
+              "citation_required": true
+            },
+            {
+              "key": "boundary",
+              "label": "1010柜 17:00 P",
+              "unit": "kW",
+              "type": "number",
+              "citation_required": true
+            },
+            {
+              "key": "scope",
+              "label": "结果的适用边界",
+              "unit": "",
+              "type": "choice",
+              "citation_required": false,
+              "choices": [
+                "equivalent_model",
+                "field_verified"
+              ]
+            },
+            {
+              "key": "voltage",
+              "label": "仿真电压判定",
+              "unit": "",
+              "type": "choice",
+              "citation_required": false,
+              "choices": [
+                "true",
+                "false"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "P06",
+      "layer": "physics",
+      "cluster": "2026-11-13",
+      "turns": [
+        {
+          "question": "老洼地 2026-11-13 17:00，按项目默认等值参数做交流潮流 reactive_opt，给出1010默认补偿情景的仿真总网损减少量及引用的1010柜实测P边界。说明结果适用边界。",
+          "fields": [
+            {
+              "key": "simulation",
+              "label": "1010默认补偿情景的仿真总网损减少量",
+              "unit": "kW",
+              "type": "number",
+              "citation_required": true
+            },
+            {
+              "key": "boundary",
+              "label": "1010柜 17:00 P",
+              "unit": "kW",
+              "type": "number",
+              "citation_required": true
+            },
+            {
+              "key": "scope",
+              "label": "结果的适用边界",
+              "unit": "",
+              "type": "choice",
+              "citation_required": false,
+              "choices": [
+                "equivalent_model",
+                "field_verified"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "P07",
+      "layer": "physics",
+      "cluster": "2026-11-13",
+      "turns": [
+        {
+          "question": "2026-11-13 17:00 的等值N-1交流潮流能否证明井下1200现实中具备转供条件？缺哪类资料？请引用项目归档中明确要求一回退出后其余回路承担负荷的设计条款。",
+          "fields": [
+            {
+              "key": "gap",
+              "label": "最直接缺项",
+              "unit": "",
+              "type": "choice",
+              "citation_required": false,
+              "choices": [
+                "underground_hourly",
+                "outside_archive",
+                "switch_soe",
+                "nameplate",
+                "time_sync",
+                "wiring_meter",
+                "downstream_meter",
+                "transfer_limits",
+                "none"
+              ]
+            },
+            {
+              "key": "clause",
+              "label": "归档设计条款",
+              "unit": "",
+              "type": "choice",
+              "citation_required": true,
+              "choices": [
+                "GB/T 50417-2017 3.0.3",
+                "GB/T 12325-2008",
+                "unknown"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "P08",
+      "layer": "physics",
+      "cluster": "2026-11-14",
+      "turns": [
+        {
+          "question": "2026-11-14 17:00，能否用等值潮流报告的主变容量证明2号主变铭牌值？缺哪类资料？",
+          "fields": [
+            {
+              "key": "gap",
+              "label": "最直接缺项",
+              "unit": "",
+              "type": "choice",
+              "citation_required": false,
+              "choices": [
+                "underground_hourly",
+                "outside_archive",
+                "switch_soe",
+                "nameplate",
+                "time_sync",
+                "wiring_meter",
+                "downstream_meter",
+                "transfer_limits",
+                "none"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "H01",
+      "layer": "hitl",
+      "cluster": "V01",
+      "turns": [
+        {
+          "question": "老洼地 S35，复核2026-11-13 07:00至19:00 的303进线电流峰值及对应条件负载率。给出峰值与证据。还未收到明确来源的本次参数单，条件结论能否给出？",
+          "fields": [
+            {
+              "key": "peak",
+              "label": "归档峰值",
+              "unit": "A",
+              "type": "number",
+              "citation_required": true
+            },
+            {
+              "key": "state",
+              "label": "补证前状态",
+              "unit": "",
+              "type": "choice",
+              "citation_required": false,
+              "choices": [
+                "satisfied",
+                "violated",
+                "partial",
+                "rejected",
+                "conflict",
+                "pending"
+              ]
+            }
+          ]
+        },
+        {
+          "question": "现收到下列演练补证。请重新判断原问题，并保留原始量测和适用边界。",
+          "fields": [
+            {
+              "key": "peak",
+              "label": "归档峰值",
+              "unit": "A",
+              "type": "number",
+              "citation_required": true
+            },
+            {
+              "key": "state",
+              "label": "补证后状态",
+              "unit": "",
+              "type": "choice",
+              "citation_required": false,
+              "choices": [
+                "satisfied",
+                "violated",
+                "partial",
+                "rejected",
+                "conflict",
+                "pending"
+              ]
+            },
+            {
+              "key": "load_ratio",
+              "label": "前置完备时才填条件电流负载率",
+              "unit": "%",
+              "type": "number",
+              "citation_required": true
+            }
+          ],
+          "supplement": {
+            "station": "S35",
+            "source_doc": "演练补证-H01",
+            "parameters": {
+              "303_rated_current_a": 200,
+              "ambient_derating_factor": 0.9,
+              "main_transformer_rated_kva": 6300,
+              "switch_log_20261113": "演练：306停运窗口由303供电"
+            },
+            "item": "V01"
+          }
+        }
+      ]
+    },
+    {
+      "id": "H02",
+      "layer": "hitl",
+      "cluster": "V01",
+      "turns": [
+        {
+          "question": "老洼地 S35，复核2026-11-13 07:00至19:00 的303进线电流峰值及对应条件负载率。给出峰值与证据。还未收到明确来源的本次参数单，条件结论能否给出？",
+          "fields": [
+            {
+              "key": "peak",
+              "label": "归档峰值",
+              "unit": "A",
+              "type": "number",
+              "citation_required": true
+            },
+            {
+              "key": "state",
+              "label": "补证前状态",
+              "unit": "",
+              "type": "choice",
+              "citation_required": false,
+              "choices": [
+                "satisfied",
+                "violated",
+                "partial",
+                "rejected",
+                "conflict",
+                "pending"
+              ]
+            }
+          ]
+        },
+        {
+          "question": "现收到下列演练补证。请重新判断原问题，并保留原始量测和适用边界。",
+          "fields": [
+            {
+              "key": "peak",
+              "label": "归档峰值",
+              "unit": "A",
+              "type": "number",
+              "citation_required": true
+            },
+            {
+              "key": "state",
+              "label": "补证后状态",
+              "unit": "",
+              "type": "choice",
+              "citation_required": false,
+              "choices": [
+                "satisfied",
+                "violated",
+                "partial",
+                "rejected",
+                "conflict",
+                "pending"
+              ]
+            },
+            {
+              "key": "load_ratio",
+              "label": "前置完备时才填条件电流负载率",
+              "unit": "%",
+              "type": "number",
+              "citation_required": true
+            }
+          ],
+          "supplement": {
+            "station": "S35",
+            "source_doc": "演练补证-H02",
+            "parameters": {
+              "303_rated_current_a": 90,
+              "ambient_derating_factor": 0.9,
+              "main_transformer_rated_kva": 6300,
+              "switch_log_20261113": "演练：306停运窗口由303供电"
+            },
+            "item": "V01"
+          }
+        }
+      ]
+    },
+    {
+      "id": "H03",
+      "layer": "hitl",
+      "cluster": "V01",
+      "turns": [
+        {
+          "question": "老洼地 S35，复核2026-11-13 07:00至19:00 的303进线电流峰值及对应条件负载率。给出峰值与证据。还未收到明确来源的本次参数单，条件结论能否给出？",
+          "fields": [
+            {
+              "key": "peak",
+              "label": "归档峰值",
+              "unit": "A",
+              "type": "number",
+              "citation_required": true
+            },
+            {
+              "key": "state",
+              "label": "补证前状态",
+              "unit": "",
+              "type": "choice",
+              "citation_required": false,
+              "choices": [
+                "satisfied",
+                "violated",
+                "partial",
+                "rejected",
+                "conflict",
+                "pending"
+              ]
+            }
+          ]
+        },
+        {
+          "question": "现收到下列演练补证。请重新判断原问题，并保留原始量测和适用边界。",
+          "fields": [
+            {
+              "key": "peak",
+              "label": "归档峰值",
+              "unit": "A",
+              "type": "number",
+              "citation_required": true
+            },
+            {
+              "key": "state",
+              "label": "补证后状态",
+              "unit": "",
+              "type": "choice",
+              "citation_required": false,
+              "choices": [
+                "satisfied",
+                "violated",
+                "partial",
+                "rejected",
+                "conflict",
+                "pending"
+              ]
+            },
+            {
+              "key": "load_ratio",
+              "label": "前置完备时才填条件电流负载率",
+              "unit": "%",
+              "type": "number",
+              "citation_required": true
+            }
+          ],
+          "supplement": {
+            "station": "S35",
+            "source_doc": "演练补证-H03",
+            "parameters": {
+              "303_rated_current_a": 200,
+              "main_transformer_rated_kva": 6300,
+              "switch_log_20261113": "演练：306停运窗口由303供电"
+            },
+            "item": "V01"
+          }
+        }
+      ]
+    },
+    {
+      "id": "H04",
+      "layer": "hitl",
+      "cluster": "V01",
+      "turns": [
+        {
+          "question": "老洼地 S35，复核2026-11-13 07:00至19:00 的303进线电流峰值及对应条件负载率。给出峰值与证据。还未收到明确来源的本次参数单，条件结论能否给出？",
+          "fields": [
+            {
+              "key": "peak",
+              "label": "归档峰值",
+              "unit": "A",
+              "type": "number",
+              "citation_required": true
+            },
+            {
+              "key": "state",
+              "label": "补证前状态",
+              "unit": "",
+              "type": "choice",
+              "citation_required": false,
+              "choices": [
+                "satisfied",
+                "violated",
+                "partial",
+                "rejected",
+                "conflict",
+                "pending"
+              ]
+            }
+          ]
+        },
+        {
+          "question": "现收到下列演练补证。请重新判断原问题，并保留原始量测和适用边界。",
+          "fields": [
+            {
+              "key": "peak",
+              "label": "归档峰值",
+              "unit": "A",
+              "type": "number",
+              "citation_required": true
+            },
+            {
+              "key": "state",
+              "label": "补证后状态",
+              "unit": "",
+              "type": "choice",
+              "citation_required": false,
+              "choices": [
+                "satisfied",
+                "violated",
+                "partial",
+                "rejected",
+                "conflict",
+                "pending"
+              ]
+            },
+            {
+              "key": "load_ratio",
+              "label": "前置完备时才填条件电流负载率",
+              "unit": "%",
+              "type": "number",
+              "citation_required": true
+            }
+          ],
+          "supplement": {
+            "station": "C1535",
+            "source_doc": "演练补证-H04",
+            "parameters": {
+              "303_rated_current_a": 200,
+              "ambient_derating_factor": 0.9,
+              "main_transformer_rated_kva": 6300,
+              "switch_log_20261113": "演练：306停运窗口由303供电"
+            },
+            "item": "V01"
+          }
+        }
+      ]
+    },
+    {
+      "id": "H05",
+      "layer": "hitl",
+      "cluster": "V02",
+      "turns": [
+        {
+          "question": "老洼地 S35，复核2026-11-10至16日1009与1010同期A相电流代数和峰值及假定单回转供负载率。给出峰值与证据。还未收到明确来源的本次参数单，条件结论能否给出？",
+          "fields": [
+            {
+              "key": "peak",
+              "label": "归档峰值",
+              "unit": "A",
+              "type": "number",
+              "citation_required": true
+            },
+            {
+              "key": "state",
+              "label": "补证前状态",
+              "unit": "",
+              "type": "choice",
+              "citation_required": false,
+              "choices": [
+                "satisfied",
+                "violated",
+                "partial",
+                "rejected",
+                "conflict",
+                "pending"
+              ]
+            }
+          ]
+        },
+        {
+          "question": "现收到下列演练补证。请重新判断原问题，并保留原始量测和适用边界。",
+          "fields": [
+            {
+              "key": "peak",
+              "label": "归档峰值",
+              "unit": "A",
+              "type": "number",
+              "citation_required": true
+            },
+            {
+              "key": "state",
+              "label": "补证后状态",
+              "unit": "",
+              "type": "choice",
+              "citation_required": false,
+              "choices": [
+                "satisfied",
+                "violated",
+                "partial",
+                "rejected",
+                "conflict",
+                "pending"
+              ]
+            },
+            {
+              "key": "load_ratio",
+              "label": "前置完备时才填条件电流负载率",
+              "unit": "%",
+              "type": "number",
+              "citation_required": true
+            }
+          ],
+          "supplement": {
+            "station": "S35",
+            "source_doc": "演练补证-H05",
+            "parameters": {
+              "1009_1010_rated_current_a": 300,
+              "ambient_derating_factor": 0.9,
+              "c1535_tie_switch_mode": "具备联络转供"
+            },
+            "item": "V02"
+          }
+        }
+      ]
+    },
+    {
+      "id": "H06",
+      "layer": "hitl",
+      "cluster": "V02",
+      "turns": [
+        {
+          "question": "老洼地 S35，复核2026-11-10至16日1009与1010同期A相电流代数和峰值及假定单回转供负载率。给出峰值与证据。还未收到明确来源的本次参数单，条件结论能否给出？",
+          "fields": [
+            {
+              "key": "peak",
+              "label": "归档峰值",
+              "unit": "A",
+              "type": "number",
+              "citation_required": true
+            },
+            {
+              "key": "state",
+              "label": "补证前状态",
+              "unit": "",
+              "type": "choice",
+              "citation_required": false,
+              "choices": [
+                "satisfied",
+                "violated",
+                "partial",
+                "rejected",
+                "conflict",
+                "pending"
+              ]
+            }
+          ]
+        },
+        {
+          "question": "现收到下列演练补证。请重新判断原问题，并保留原始量测和适用边界。",
+          "fields": [
+            {
+              "key": "peak",
+              "label": "归档峰值",
+              "unit": "A",
+              "type": "number",
+              "citation_required": true
+            },
+            {
+              "key": "state",
+              "label": "补证后状态",
+              "unit": "",
+              "type": "choice",
+              "citation_required": false,
+              "choices": [
+                "satisfied",
+                "violated",
+                "partial",
+                "rejected",
+                "conflict",
+                "pending"
+              ]
+            },
+            {
+              "key": "load_ratio",
+              "label": "前置完备时才填条件电流负载率",
+              "unit": "%",
+              "type": "number",
+              "citation_required": true
+            }
+          ],
+          "supplement": {
+            "station": "S35",
+            "source_doc": "演练补证-H06",
+            "parameters": {
+              "1009_1010_rated_current_a": 300,
+              "ambient_derating_factor": 0.9,
+              "c1535_tie_switch_mode": "检修闭锁不可切换"
+            },
+            "item": "V02"
+          }
+        }
+      ]
+    },
+    {
+      "id": "H07",
+      "layer": "hitl",
+      "cluster": "V02",
+      "turns": [
+        {
+          "question": "老洼地 S35，复核2026-11-10至16日1009与1010同期A相电流代数和峰值及假定单回转供负载率。给出峰值与证据。还未收到明确来源的本次参数单，条件结论能否给出？",
+          "fields": [
+            {
+              "key": "peak",
+              "label": "归档峰值",
+              "unit": "A",
+              "type": "number",
+              "citation_required": true
+            },
+            {
+              "key": "state",
+              "label": "补证前状态",
+              "unit": "",
+              "type": "choice",
+              "citation_required": false,
+              "choices": [
+                "satisfied",
+                "violated",
+                "partial",
+                "rejected",
+                "conflict",
+                "pending"
+              ]
+            }
+          ]
+        },
+        {
+          "question": "现收到下列演练补证。请重新判断原问题，并保留原始量测和适用边界。",
+          "fields": [
+            {
+              "key": "peak",
+              "label": "归档峰值",
+              "unit": "A",
+              "type": "number",
+              "citation_required": true
+            },
+            {
+              "key": "state",
+              "label": "补证后状态",
+              "unit": "",
+              "type": "choice",
+              "citation_required": false,
+              "choices": [
+                "satisfied",
+                "violated",
+                "partial",
+                "rejected",
+                "conflict",
+                "pending"
+              ]
+            },
+            {
+              "key": "load_ratio",
+              "label": "前置完备时才填条件电流负载率",
+              "unit": "%",
+              "type": "number",
+              "citation_required": true
+            }
+          ],
+          "supplement": {
+            "station": "S35",
+            "source_doc": "",
+            "parameters": {
+              "1009_1010_rated_current_a": 300,
+              "ambient_derating_factor": 0.9,
+              "c1535_tie_switch_mode": "具备联络转供"
+            },
+            "item": "V02"
+          }
+        }
+      ]
+    },
+    {
+      "id": "H08",
+      "layer": "hitl",
+      "cluster": "V02",
+      "turns": [
+        {
+          "question": "老洼地 S35，复核2026-11-10至16日1009与1010同期A相电流代数和峰值及假定单回转供负载率。给出峰值与证据。还未收到明确来源的本次参数单，条件结论能否给出？",
+          "fields": [
+            {
+              "key": "peak",
+              "label": "归档峰值",
+              "unit": "A",
+              "type": "number",
+              "citation_required": true
+            },
+            {
+              "key": "state",
+              "label": "补证前状态",
+              "unit": "",
+              "type": "choice",
+              "citation_required": false,
+              "choices": [
+                "satisfied",
+                "violated",
+                "partial",
+                "rejected",
+                "conflict",
+                "pending"
+              ]
+            }
+          ]
+        },
+        {
+          "question": "现收到下列演练补证。请重新判断原问题，并保留原始量测和适用边界。",
+          "fields": [
+            {
+              "key": "peak",
+              "label": "归档峰值",
+              "unit": "A",
+              "type": "number",
+              "citation_required": true
+            },
+            {
+              "key": "state",
+              "label": "补证后状态",
+              "unit": "",
+              "type": "choice",
+              "citation_required": false,
+              "choices": [
+                "satisfied",
+                "violated",
+                "partial",
+                "rejected",
+                "conflict",
+                "pending"
+              ]
+            },
+            {
+              "key": "load_ratio",
+              "label": "前置完备时才填条件电流负载率",
+              "unit": "%",
+              "type": "number",
+              "citation_required": true
+            }
+          ],
+          "supplement": {
+            "station": "S35",
+            "source_doc": "演练补证-H08",
+            "parameters": {
+              "1009_1010_rated_current_a": 300,
+              "ambient_derating_factor": 0.9
+            },
+            "item": "V02"
+          }
+        }
+      ]
+    }
+  ]
+}

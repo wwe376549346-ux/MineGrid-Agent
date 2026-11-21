@@ -1,0 +1,330 @@
+{
+  "archive": {
+    "tables": {
+      "report": 7,
+      "reading": 16800,
+      "summary": 2100,
+      "cabinet": 40,
+      "line": 2
+    },
+    "hourly_frames": 168,
+    "start": "2026-11-10 00:00:00",
+    "end": "2026-11-16 23:00:00",
+    "peak": {
+      "device": {
+        "station": "S35",
+        "number": "303",
+        "label": "一回进线",
+        "aliases": [
+          "一回进线",
+          "一号进线",
+          "I回进线",
+          "第一回进线"
+        ],
+        "station_name": "地面35/10 kV变电站"
+      },
+      "metric": "P",
+      "metric_name": "有功功率 P",
+      "unit": "kW",
+      "kind": "statistic",
+      "basis": "hourly",
+      "status": "ok",
+      "day": "2026-11-16",
+      "statistic": "max",
+      "valid_samples": 24,
+      "planned_samples": 24,
+      "value": 4969.78,
+      "time": "2026-11-16 15:00:00",
+      "source": {
+        "file": "1116.xls",
+        "sheet": "New Sheet1",
+        "cell": "D19",
+        "sha256": "1a50c071c9d2bf88ad383578bad1c431584ad227a4b12a380c6ab2f9657689b4"
+      },
+      "tool": "get_daily_statistic",
+      "arguments": {
+        "station": "S35",
+        "cabinet": "303",
+        "metric": "P",
+        "day": "2026-11-16",
+        "statistic": "max",
+        "basis": "hourly"
+      }
+    },
+    "footer": {
+      "device": {
+        "station": "S35",
+        "number": "303",
+        "label": "一回进线",
+        "aliases": [
+          "一回进线",
+          "一号进线",
+          "I回进线",
+          "第一回进线"
+        ],
+        "station_name": "地面35/10 kV变电站"
+      },
+      "metric": "P",
+      "metric_name": "有功功率 P",
+      "unit": "kW",
+      "kind": "statistic",
+      "basis": "footer",
+      "status": "ok",
+      "day": "2026-11-16",
+      "statistic": "max",
+      "value": 5420.9,
+      "source": {
+        "file": "1116.xls",
+        "sheet": "New Sheet1",
+        "cell": "D28",
+        "sha256": "1a50c071c9d2bf88ad383578bad1c431584ad227a4b12a380c6ab2f9657689b4"
+      },
+      "marker": null,
+      "tool": "get_daily_statistic",
+      "arguments": {
+        "station": "S35",
+        "cabinet": "303",
+        "metric": "P",
+        "day": "2026-11-16",
+        "statistic": "max",
+        "basis": "footer"
+      }
+    },
+    "unspecified_daily_max": {
+      "device": {
+        "station": "S35",
+        "number": "303",
+        "label": "一回进线",
+        "aliases": [
+          "一回进线",
+          "一号进线",
+          "I回进线",
+          "第一回进线"
+        ],
+        "station_name": "地面35/10 kV变电站"
+      },
+      "metric": "P",
+      "metric_name": "有功功率 P",
+      "unit": "kW",
+      "kind": "statistic_comparison",
+      "basis": "both",
+      "status": "ok",
+      "day": "2026-11-16",
+      "statistic": "max",
+      "report_footer": {
+        "device": {
+          "station": "S35",
+          "number": "303",
+          "label": "一回进线",
+          "aliases": [
+            "一回进线",
+            "一号进线",
+            "I回进线",
+            "第一回进线"
+          ],
+          "station_name": "地面35/10 kV变电站"
+        },
+        "metric": "P",
+        "metric_name": "有功功率 P",
+        "unit": "kW",
+        "kind": "statistic",
+        "basis": "footer",
+        "status": "ok",
+        "day": "2026-11-16",
+        "statistic": "max",
+        "value": 5420.9,
+        "source": {
+          "file": "1116.xls",
+          "sheet": "New Sheet1",
+          "cell": "D28",
+          "sha256": "1a50c071c9d2bf88ad383578bad1c431584ad227a4b12a380c6ab2f9657689b4"
+        },
+        "marker": null
+      },
+      "hourly_samples": {
+        "device": {
+          "station": "S35",
+          "number": "303",
+          "label": "一回进线",
+          "aliases": [
+            "一回进线",
+            "一号进线",
+            "I回进线",
+            "第一回进线"
+          ],
+          "station_name": "地面35/10 kV变电站"
+        },
+        "metric": "P",
+        "metric_name": "有功功率 P",
+        "unit": "kW",
+        "kind": "statistic",
+        "basis": "hourly",
+        "status": "ok",
+        "day": "2026-11-16",
+        "statistic": "max",
+        "valid_samples": 24,
+        "planned_samples": 24,
+        "value": 4969.78,
+        "time": "2026-11-16 15:00:00",
+        "source": {
+          "file": "1116.xls",
+          "sheet": "New Sheet1",
+          "cell": "D19",
+          "sha256": "1a50c071c9d2bf88ad383578bad1c431584ad227a4b12a380c6ab2f9657689b4"
+        }
+      },
+      "tool": "get_daily_statistic",
+      "arguments": {
+        "station": "S35",
+        "cabinet": "303",
+        "metric": "P",
+        "day": "2026-11-16",
+        "statistic": "max",
+        "basis": "both"
+      }
+    },
+    "incoming_links": [
+      {
+        "kind": "supply",
+        "device": {
+          "station": "C1535",
+          "number": "1101",
+          "label": "一回进线",
+          "aliases": [
+            "一回进线",
+            "一号进线",
+            "I回进线",
+            "第一回进线"
+          ],
+          "station_name": "1535中央变电所"
+        },
+        "status": "ok",
+        "links": [
+          {
+            "from": {
+              "station": "S35",
+              "number": "1009",
+              "label": "I回井下1535",
+              "aliases": [
+                "I回井下1535",
+                "井下1535一回",
+                "下井一回"
+              ],
+              "station_name": "地面35/10 kV变电站"
+            },
+            "to": {
+              "station": "C1535",
+              "number": "1101",
+              "label": "一回进线",
+              "aliases": [
+                "一回进线",
+                "一号进线",
+                "I回进线",
+                "第一回进线"
+              ],
+              "station_name": "1535中央变电所"
+            },
+            "label": "地面站10 kV I段供电线路",
+            "sources": [
+              {
+                "filename": "35KV变电所.png",
+                "captured_at": "2026-11-17 20:29:01",
+                "sha256": "cfbf052ae1068b299e4462c953ad9a628a183f22672794d6abf1ac13fc6dcab5"
+              },
+              {
+                "filename": "中央变电所.png",
+                "captured_at": "2026-11-17 20:29:25",
+                "sha256": "8cebfebf7b3bcfbfe9508f0e9fe8dca7691fe987216b2e93bba111de1a7454e2"
+              }
+            ]
+          }
+        ],
+        "basis": "single_line_diagram_labels",
+        "tool": "get_supply_link",
+        "arguments": {
+          "station": "C1535",
+          "cabinet": "1101",
+          "direction": "upstream"
+        }
+      },
+      {
+        "kind": "supply",
+        "device": {
+          "station": "C1535",
+          "number": "1201",
+          "label": "二回进线",
+          "aliases": [
+            "二回进线",
+            "二号进线",
+            "II回进线",
+            "第二回进线"
+          ],
+          "station_name": "1535中央变电所"
+        },
+        "status": "ok",
+        "links": [
+          {
+            "from": {
+              "station": "S35",
+              "number": "1010",
+              "label": "II回井下1535",
+              "aliases": [
+                "II回井下1535",
+                "井下1535二回",
+                "下井二回"
+              ],
+              "station_name": "地面35/10 kV变电站"
+            },
+            "to": {
+              "station": "C1535",
+              "number": "1201",
+              "label": "二回进线",
+              "aliases": [
+                "二回进线",
+                "二号进线",
+                "II回进线",
+                "第二回进线"
+              ],
+              "station_name": "1535中央变电所"
+            },
+            "label": "地面站10 kV II段供电线路",
+            "sources": [
+              {
+                "filename": "35KV变电所.png",
+                "captured_at": "2026-11-17 20:29:01",
+                "sha256": "cfbf052ae1068b299e4462c953ad9a628a183f22672794d6abf1ac13fc6dcab5"
+              },
+              {
+                "filename": "中央变电所.png",
+                "captured_at": "2026-11-17 20:29:25",
+                "sha256": "8cebfebf7b3bcfbfe9508f0e9fe8dca7691fe987216b2e93bba111de1a7454e2"
+              }
+            ]
+          }
+        ],
+        "basis": "single_line_diagram_labels",
+        "tool": "get_supply_link",
+        "arguments": {
+          "station": "C1535",
+          "cabinet": "1201",
+          "direction": "upstream"
+        }
+      }
+    ],
+    "question_checks": 14
+  },
+  "import": {
+    "safe_retry": true,
+    "conflict_rollback": true,
+    "source_bytes_unchanged": true
+  },
+  "independent_cell_reconciliation": {
+    "matched_original_value_or_marker": 18900
+  },
+  "package_check": {
+    "files": 10,
+    "clean_import": true,
+    "replay_and_query": true,
+    "daily_statistic_bases": true
+  }
+}

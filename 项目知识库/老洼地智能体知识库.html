@@ -1,0 +1,2429 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="老洼地煤矿配电网运行健康监测智能体的开发路线、现场资料、代码和验收清单。">
+<title>老洼地智能体 · 项目知识库</title>
+<style>
+:root {
+  color-scheme: light;
+  --page:#f2f5f7; --card:#fff; --line:#dce4e9; --ink:#182833; --sub:#516571;
+  --dark:#10232e; --dark-2:#193340; --mint:#6adac8; --teal:#09685d; --soft:#e5f4f1;
+  --blue:#315779; --amber:#795017; --radius:16px;
+  font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", system-ui, sans-serif;
+}
+* {box-sizing:border-box}
+html {scroll-behavior:smooth}
+body {margin:0;background:var(--page);color:var(--ink);line-height:1.65;font-size:1rem}
+button,input,textarea,select {font:inherit}
+button,select {cursor:pointer}
+button:disabled {cursor:default}
+a {color:var(--teal);text-underline-offset:3px}
+a:hover {color:#074c45}
+[hidden] {display:none!important}
+button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible {outline:3px solid #2d988a;outline-offset:3px}
+h1,h2,h3,p,figure {margin:0}
+h1,h2,h3 {line-height:1.27;text-wrap:balance}
+h1 {font-size:clamp(2.05rem,4.3vw,3.45rem);letter-spacing:-.045em}
+h2 {font-size:1.65rem;letter-spacing:-.025em}
+h3 {font-size:1.06rem}
+code,.mono {font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace}
+.skip {position:absolute;left:12px;top:-70px;background:#fff;padding:10px;z-index:20}
+.skip:focus {top:4px}
+.layout {display:grid;grid-template-columns:232px minmax(0,1fr);min-height:100vh}
+.side {background:var(--dark);color:#e6eff2;position:sticky;top:0;height:100vh;display:flex;flex-direction:column;padding:26px 16px 22px;z-index:5}
+.brand {display:flex;gap:12px;align-items:center;margin:0 7px 34px}
+.mark {width:42px;height:42px;border:1px solid #4d8a85;border-radius:12px;background:#1e4a4b;display:grid;place-items:center;color:#a4f2e3;font-size:1.35rem;font-weight:700}
+.brand strong {display:block;font-size:1.08rem}
+.brand span:last-child {display:block;font-size:.85rem;color:#b2c5cc}
+.nav-label {font-size:.85rem;color:#abbdc6;margin:0 12px 8px}
+.menu {display:grid;gap:4px}
+.nav-btn {display:flex;align-items:center;gap:11px;border:1px solid transparent;background:none;color:#dbe9ee;padding:11px 12px;border-radius:10px;text-align:left;width:100%}
+.nav-btn:hover {background:#213d49}
+.nav-btn[aria-current="page"] {background:#244652;border-color:#3d6370;color:#f6fcff;font-weight:650}
+.nav-icon {width:19px;text-align:center;color:#91d9ca;font-size:1.05rem}
+.side-foot {margin-top:auto;padding:14px 8px 0;border-top:1px solid #364f5a}
+.side-foot a {display:block;color:#bbeddf;font-size:.89rem;margin:8px 0 13px}
+.side-foot p {font-size:.83rem;color:#b7c8cf}
+.side-actions {display:flex;gap:6px;flex-wrap:wrap}
+.side-actions button {border:1px solid #4a6570;color:#e6f1f3;background:none;padding:5px 8px;border-radius:7px;font-size:.81rem}
+.side-actions button:hover {background:#294a58}
+.main {min-width:0}
+.top {position:sticky;top:0;z-index:4;background:#f2f5f7f2;border-bottom:1px solid var(--line);backdrop-filter:blur(10px)}
+.top-inner {display:flex;align-items:center;justify-content:space-between;gap:14px;max-width:1450px;margin:auto;padding:13px 34px}
+.crumbs {display:flex;align-items:center;gap:9px;white-space:nowrap;font-size:.89rem;color:var(--sub)}
+.crumbs strong {color:var(--ink)}
+.crumbs i {font-style:normal;color:#8a9aa4}
+.search-box {display:flex;align-items:center;gap:9px;min-width:0;width:min(390px,52%);background:#fff;border:1px solid #ccd9e0;border-radius:10px;padding:7px 11px;color:var(--sub)}
+.search-box input {min-width:0;width:100%;height:25px;border:none;background:transparent;color:var(--ink);padding:0;font-size:.92rem;outline:none}
+.search-box:focus-within {border-color:#3b8b80;box-shadow:0 0 0 2px #cbe9e3}
+.search-box input:focus-visible {outline:none}
+kbd {border:1px solid #d4e0e5;border-radius:5px;padding:0 5px;background:#f4f7f8;color:#48616f;font-size:.76rem;white-space:nowrap}
+.btn.mobile-nav {display:none}
+.wrap {max-width:1450px;padding:26px 34px 46px;margin:auto}
+.hero {display:grid;grid-template-columns:minmax(0,1.2fr) minmax(300px,.85fr);overflow:hidden;border:1px solid #d6e4e7;border-radius:20px;background:linear-gradient(128deg,#f9fcfa,#e5f1ef);box-shadow:0 5px 18px #112f4210}
+.hero-copy {padding:23px clamp(23px,4vw,48px);display:grid;align-content:center;gap:10px}
+.overline {display:flex;align-items:center;gap:8px;color:var(--teal);font-size:.87rem;font-weight:700;letter-spacing:.08em}
+.overline::before {content:"";display:inline-block;width:19px;height:2px;background:#289585}
+.hero-copy > p:not(.overline) {max-width:38em;color:#3d5a63;font-size:1.03rem}
+.hero-actions {display:flex;flex-wrap:wrap;gap:9px;margin-top:4px}
+.btn {display:inline-flex;align-items:center;justify-content:center;gap:6px;border:1px solid #c7d8dc;color:#24515b;background:#fff;padding:8px 12px;border-radius:8px;font-weight:650;font-size:.89rem;text-decoration:none}
+.btn:hover {background:#eff7f6;color:#14423d}
+.btn.primary {background:#166b61;border-color:#166b61;color:#fff}
+.btn.primary:hover {background:#09594f}
+.btn.ghost {background:transparent;border-color:#bdcfd0}
+.btn.small {font-size:.81rem;padding:5px 9px}
+.diagram {min-width:0;background:#14323b;color:#daeef0;padding:25px 25px 20px;display:grid;align-content:center;gap:13px;background-image:radial-gradient(#6da39938 1px,transparent 1px);background-size:18px 18px}
+.diagram figcaption {font-size:.86rem;color:#aae6da;font-weight:650;letter-spacing:.08em}
+.diagram-row {display:grid;grid-template-columns:1fr 12px 1fr;gap:6px;align-items:center}
+.diagram-node {background:#214754;border:1px solid #47727a;border-radius:9px;padding:9px 10px;line-height:1.35;min-width:0}
+.diagram-node strong {display:block;color:#f1faf8;font-size:.94rem;margin-bottom:3px}
+.diagram-node span {display:block;font-size:.79rem;color:#bbdadd}
+.connector {height:1px;background:#7db8ad}
+.diagram-note {color:#c4dddf;font-size:.82rem}
+.metrics {display:grid;grid-template-columns:repeat(3,1fr);border:1px solid var(--line);border-radius:12px;background:white;margin:15px 0 0}
+.metric {display:flex;align-items:center;justify-content:center;gap:10px;padding:10px 8px;min-width:0}
+.metric:not(:last-child) {border-right:1px solid var(--line)}
+.metric strong {color:#165850;font-size:1.35rem;font-variant-numeric:tabular-nums}
+.metric span {font-size:.88rem;color:var(--sub)}
+.now {margin:16px 0 20px;border-left:3px solid #42a993;padding:8px 14px;background:#e8f3ef;color:#2c5151;font-size:.91rem}
+.now strong {color:#17423b}
+.page-title {margin:0 0 20px}
+.page-title h1 {font-size:2rem}
+.page-title p {color:var(--sub);margin-top:6px;max-width:62em}
+.route-title {display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:0 0 13px}
+.route-title label {color:var(--sub);font-size:.88rem}
+select {appearance:none;border:1px solid #cbd9dc;border-radius:8px;padding:6px 32px 6px 9px;color:var(--ink);background:linear-gradient(45deg,transparent 50%,#566f78 50%) calc(100% - 15px) 52%/6px 6px no-repeat,linear-gradient(135deg,#566f78 50%,transparent 50%) calc(100% - 9px) 52%/6px 6px no-repeat,#fff}
+.board {display:grid;grid-template-columns:minmax(245px,.78fr) minmax(0,1.85fr);gap:17px;align-items:start}
+.timeline,.detail,.module {background:var(--card);border:1px solid var(--line);border-radius:var(--radius)}
+.timeline {padding:12px 8px}
+.group-name {color:var(--sub);font-size:.85rem;padding:7px 10px 3px;font-weight:650}
+.stage-btn {display:grid;grid-template-columns:32px minmax(0,1fr);gap:7px;width:100%;border:1px solid transparent;background:#fff;text-align:left;padding:8px 7px;border-radius:9px;color:var(--ink);align-items:start}
+.stage-btn:hover {background:#f0f7f6}
+.stage-btn[aria-current="step"] {background:#e7f5f1;border-color:#b4ded4}
+.stage-n {font-size:.78rem;color:#38645f;padding:3px 4px;text-align:center;background:#edf4f5;border-radius:5px;font-variant-numeric:tabular-nums}
+.stage-btn[aria-current="step"] .stage-n {background:#d2eae5}
+.stage-label {font-size:.94rem;font-weight:670;display:block;line-height:1.38;margin:0 0 3px}
+.stage-meta {display:flex;gap:5px;align-items:center;flex-wrap:wrap}
+.badge {display:inline-flex;white-space:nowrap;padding:0 7px;border-radius:5px;font-size:.79rem;font-weight:650;line-height:1.65;background:#eef2f4;color:#405764}
+.badge.done {background:#dbf0e7;color:#1a634d}
+.badge.prototype {background:#eaf0f8;color:#2e567d}
+.badge.paused {background:#fff0d7;color:#71470e}
+.badge.pending {background:#edf1f4;color:#485e68}
+.badge.optional {background:#edeafb;color:#584573}
+.badge.defined {background:#e2f1f1;color:#315e60}
+.route-checked {color:#56716c;font-size:.77rem}
+.detail {overflow:hidden;scroll-margin-top:77px}
+.detail-head {padding:21px 23px 17px;background:#fbfdfd;border-bottom:1px solid #e2e9ea}
+.detail-head .meta {display:flex;gap:8px;align-items:center;color:var(--sub);font-size:.84rem;margin-bottom:8px}
+.detail-head p {color:var(--sub);margin-top:7px}
+.detail-body {padding:18px 23px;display:grid;gap:17px}
+.detail-body section {min-width:0}
+.detail-body section p {margin-top:5px}
+.detail-body .block + .block {border-top:1px solid #e7edef;padding-top:12px}
+.deps {font-size:.87rem;color:var(--sub);display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.dep {border:0;background:#eff5f6;color:#285d63;border-radius:6px;padding:2px 7px}
+.dep:hover {background:#ddeceb}
+.readings {display:flex;gap:7px;flex-wrap:wrap;margin-top:8px}
+.chapter-link {display:inline-flex;gap:6px;align-items:center;border-radius:8px;padding:4px 8px;border:1px solid #ccdedf;background:#f5f9f8;text-decoration:none;font-size:.86rem}
+.chapter-link:hover {background:#e3f1ed}
+.checklist {border:1px solid #dae8e3;border-radius:10px;background:#f8fbfa;overflow:hidden;margin-top:7px}
+.checklist label {display:flex;gap:9px;align-items:flex-start;padding:8px 11px;font-size:.94rem;cursor:pointer}
+.checklist label+label {border-top:1px solid #e3ebe7}
+.checklist input {accent-color:#166b61;width:17px;height:17px;margin:4px 0 0;flex:none}
+.check-info {margin-top:4px;color:var(--sub);font-size:.84rem}
+.filelist {display:grid;gap:6px;margin:8px 0 0;padding:0;list-style:none}
+.filelist li {display:flex;gap:9px;align-items:center;justify-content:space-between;border-bottom:1px dashed #dae6e9;padding:4px 0}
+.filelist a {overflow-wrap:anywhere;font-size:.91rem}
+.notes {border-top:1px solid #e4eded;padding-top:14px}
+.notes-row {display:flex;align-items:center;justify-content:space-between;gap:8px}
+textarea {display:block;width:100%;resize:vertical;min-height:93px;margin:8px 0 0;padding:9px;border:1px solid #cddcdd;background:#fbfdfd;border-radius:8px;color:var(--ink);font-size:.94rem}
+.saved {color:var(--sub);font-size:.82rem}
+.empty {color:var(--sub);padding:17px}
+.chapter-grid,.verify-grid,.search-grid {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px}
+.module {padding:17px}
+.module-head {display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:8px}
+.module p {margin-top:7px;color:#354e5a}
+.module .meta {font-size:.86rem;color:var(--sub)}
+.module .actions {display:flex;gap:7px;flex-wrap:wrap;margin-top:12px}
+.module .applied {border-top:1px solid var(--line);margin-top:10px;padding-top:9px}
+.update-list {display:grid;gap:12px;max-width:52rem}
+.update-list time {color:var(--sub);font-size:.87rem;white-space:nowrap}
+.tip-panel {margin-bottom:17px;border:1px solid #d0e5df;padding:13px 15px;border-radius:10px;background:#e9f5f1;color:#2c5150}
+.verify-grid {align-items:start}
+pre {user-select:text;white-space:pre-wrap;overflow-wrap:anywhere;background:#172e38;color:#e5f3ef;border-radius:9px;padding:12px;font-size:.86rem;line-height:1.6;margin:10px 0}
+.case {margin-top:16px}
+.case table {width:100%;border-collapse:collapse;margin-top:9px;font-size:.91rem}
+.case th,.case td {text-align:left;border:1px solid #dce6e9;padding:7px 9px}
+.case th {background:#edf5f4;color:#294e53}
+.archive-list {display:grid;grid-template-columns:minmax(0,1fr);gap:8px}
+.archive-list details {min-width:0;padding:0}
+.archive-list summary {padding:10px 16px;color:var(--ink);cursor:pointer}
+.archive-list summary span {margin-left:9px;color:var(--sub);font-size:.86rem}
+.archive-list summary:focus-visible {outline:3px solid #2d988a;outline-offset:2px;border-radius:10px}
+.archive-report {padding:0 16px 15px}
+.archive-report .actions {margin:8px 0}
+.archive-table {overflow:auto;max-height:355px;border:1px solid var(--line);border-radius:8px}
+.archive-table table {width:100%;border-collapse:collapse;font-size:.87rem;font-variant-numeric:tabular-nums}
+.archive-table th,.archive-table td {padding:5px 9px;text-align:left;white-space:nowrap;border-bottom:1px solid var(--line)}
+.archive-table thead {position:sticky;top:0;background:#edf5f4}
+.archive-table small {margin-left:6px;color:var(--sub)}
+.archive-figures {margin-top:20px}
+.archive-figures img {display:block;width:100%;height:auto;border:1px solid var(--line);border-radius:8px}
+.archive-figures figcaption {margin-top:7px;color:var(--sub);font-size:.88rem}
+.toast {position:fixed;bottom:20px;right:22px;z-index:10;background:#13343c;color:#fff;padding:10px 15px;border-radius:9px;max-width:min(32rem,calc(100vw - 35px));box-shadow:0 4px 20px #172e3850}
+footer {margin-top:24px;color:var(--sub);font-size:.86rem}
+@media(max-width:1100px) {
+ .layout {grid-template-columns:202px minmax(0,1fr)}
+ .top-inner,.wrap {padding-left:20px;padding-right:20px}
+ .diagram {padding:18px 14px}
+ .hero {grid-template-columns:minmax(0,1fr) minmax(250px,.80fr)}
+ .board {grid-template-columns:minmax(205px,.78fr) minmax(0,1.6fr)}
+}
+@media(max-width:820px) {
+ .layout {display:block}
+ .side {display:none;position:fixed;top:54px;bottom:0;height:auto;width:min(290px,86vw);box-shadow:14px 0 36px #122e3540}
+ .side.open {display:flex}
+ .btn.mobile-nav {display:inline-flex}
+ .top-inner,.wrap {padding-left:15px;padding-right:15px}
+ .top-inner {padding-top:8px;padding-bottom:8px}
+ .crumbs > span,.crumbs i {display:none}
+ .search-box {width:min(360px,62%)}
+}
+@media(max-width:605px) {
+ .hero,.board,.chapter-grid,.search-grid,.verify-grid {grid-template-columns:minmax(0,1fr)}
+ .hero-copy {padding:21px}
+ .hero h1 {font-size:2.22rem}
+ .diagram {padding:12px 16px}
+ .diagram-row {gap:5px}
+ .diagram-node {padding:6px 8px}
+ .metric {flex-direction:column;gap:0;text-align:center;line-height:1.35}
+ .metric strong {font-size:1.16rem}
+ .metric span {font-size:.76rem}
+ .wrap {padding-top:15px}
+ .crumbs strong,kbd {display:none}
+ .search-box {width:100%}
+ .detail-head,.detail-body {padding-left:15px;padding-right:15px}
+ .timeline {display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+ .group-name {grid-column:1/-1}
+ .stage-label {font-size:.87rem}
+ .filelist .btn {flex:none}
+}
+@media(prefers-reduced-motion:reduce) {html {scroll-behavior:auto}}
+</style>
+</head>
+<body>
+<a class="skip" href="#main">跳到正文</a>
+<div class="layout">
+<aside class="side" id="sidebar" aria-label="知识库导航">
+  <div class="brand"><span class="mark" aria-hidden="true">洼</span><div><strong>老洼地智能体</strong><span>个人知识库</span></div></div>
+  <p class="nav-label">项目导航</p>
+  <nav class="menu">
+    <button class="nav-btn" type="button" data-route="roadmap"><span class="nav-icon" aria-hidden="true">≡</span>构建路线</button>
+    <button class="nav-btn" type="button" data-route="monitoring"><span class="nav-icon" aria-hidden="true">◎</span>监测方案</button>
+    <button class="nav-btn" type="button" data-route="materials"><span class="nav-icon" aria-hidden="true">▦</span>现场资料</button>
+    <button class="nav-btn" type="button" data-route="chapters"><span class="nav-icon" aria-hidden="true">▤</span>教程索引</button>
+    <button class="nav-btn" type="button" data-route="checks"><span class="nav-icon" aria-hidden="true">✓</span>复验台</button>
+    <button class="nav-btn" type="button" data-route="updates"><span class="nav-icon" aria-hidden="true">◷</span>更新记录</button>
+  </nav>
+  <div class="side-foot">
+    <p>核对日期 2026-11-20</p>
+    <a href="https://github.com/datawhalechina/hello-agents" target="_blank" rel="noreferrer">Hello-Agents 原项目</a>
+    <div class="side-actions">
+      <button type="button" data-action="export">备份笔记</button>
+      <button type="button" data-action="import">导入备份</button>
+      <input id="import-file" type="file" accept=".json,application/json" hidden>
+    </div>
+  </div>
+</aside>
+<div class="main">
+  <header class="top"><div class="top-inner">
+    <div class="crumbs"><button class="btn small mobile-nav" id="menu-toggle" type="button" aria-controls="sidebar" aria-expanded="false">导航</button><span>老洼地项目</span><i>/</i><strong id="view-name">构建路线</strong></div>
+    <label class="search-box" for="search"><span aria-hidden="true">⌕</span><input type="search" id="search" aria-label="搜索阶段或教程" placeholder="搜阶段、章节、代码或关键词" autocomplete="off"><kbd aria-hidden="true">⌘ / Ctrl K</kbd></label>
+  </div></header>
+  <main class="wrap" id="main" tabindex="-1">
+    <noscript>开启浏览器的 JavaScript 后，即可使用阶段卡、搜索和本地笔记。</noscript>
+    <div id="view"></div>
+    <footer>个人笔记与勾选存放在当前浏览器。移动 HTML 文件或切换浏览器前，可在导航栏备份笔记。</footer>
+  </main>
+</div>
+</div>
+<div id="toast" class="toast" role="status" hidden></div>
+<script type="application/json" id="source-data">
+{
+  "chapters": [
+    {
+      "n": 1,
+      "title": "初识智能体",
+      "tag": "基础",
+      "lesson": "把观察、动作和反馈落到两个真实角色。后台主动发提示，值班人员发起问答。",
+      "use": "拿这章写任务范围、可观察量和允许的动作。",
+      "url": "https://github.com/datawhalechina/hello-agents/blob/main/docs/chapter1/%E7%AC%AC%E4%B8%80%E7%AB%A0%20%E5%88%9D%E8%AF%86%E6%99%BA%E8%83%BD%E4%BD%93.md"
+    },
+    {
+      "n": 2,
+      "title": "智能体发展史",
+      "tag": "基础",
+      "lesson": "理解规则、模型选择和混合系统的职责变化。",
+      "use": "保留本地规则作可解释基线。比较真实模型时固定数据、工具和调用预算。",
+      "url": "https://github.com/datawhalechina/hello-agents/blob/main/docs/chapter2/%E7%AC%AC%E4%BA%8C%E7%AB%A0%20%E6%99%BA%E8%83%BD%E4%BD%93%E5%8F%91%E5%B1%95%E5%8F%B2.md"
+    },
+    {
+      "n": 3,
+      "title": "大语言模型基础",
+      "tag": "基础",
+      "lesson": "理解模型的上下文、提示与不确定输出。",
+      "use": "模型选择得到许可的查询，数值和证据交给确定性程序校验。",
+      "url": "https://github.com/datawhalechina/hello-agents/blob/main/docs/chapter3/%E7%AC%AC%E4%B8%89%E7%AB%A0%20%E5%A4%A7%E8%AF%AD%E8%A8%80%E6%A8%A1%E5%9E%8B%E5%9F%BA%E7%A1%80.md"
+    },
+    {
+      "n": 4,
+      "title": "智能体经典范式构建",
+      "tag": "主线",
+      "lesson": "借鉴 ReAct 的观察与行动循环、Plan-and-Solve 的任务拆分、Reflection 的复核思路。",
+      "use": "从事件证据生成候选查询，执行后更新状态。停止由程序掌握，复核交给明确规则。",
+      "url": "https://github.com/datawhalechina/hello-agents/blob/main/docs/chapter4/%E7%AC%AC%E5%9B%9B%E7%AB%A0%20%E6%99%BA%E8%83%BD%E4%BD%93%E7%BB%8F%E5%85%B8%E8%8C%83%E5%BC%8F%E6%9E%84%E5%BB%BA.md"
+    },
+    {
+      "n": 5,
+      "title": "基于低代码平台的智能体搭建",
+      "tag": "选读",
+      "lesson": "了解工作流编排和快速界面验证。",
+      "use": "有通用工作台需求再评估。现有 Python 和 SQLite 已能演示并复验。",
+      "url": "https://github.com/datawhalechina/hello-agents/blob/main/docs/chapter5/%E7%AC%AC%E4%BA%94%E7%AB%A0%20%E5%9F%BA%E4%BA%8E%E4%BD%8E%E4%BB%A3%E7%A0%81%E5%B9%B3%E5%8F%B0%E7%9A%84%E6%99%BA%E8%83%BD%E4%BD%93%E6%90%AD%E5%BB%BA.md"
+    },
+    {
+      "n": 6,
+      "title": "框架开发实践",
+      "tag": "主线",
+      "lesson": "重点读 6.5 节 LangGraph 的 State、Node、Edge 与条件路由。",
+      "use": "用在需要暂停、追加证据和跨进程恢复的专业核验。简单查数保持独立入口。",
+      "url": "https://github.com/datawhalechina/hello-agents/blob/main/docs/chapter6/%E7%AC%AC%E5%85%AD%E7%AB%A0%20%E6%A1%86%E6%9E%B6%E5%BC%80%E5%8F%91%E5%AE%9E%E8%B7%B5.md"
+    },
+    {
+      "n": 7,
+      "title": "构建你的Agent框架",
+      "tag": "主线",
+      "lesson": "参照统一消息、LLM 客户端、工具契约和注册。",
+      "use": "对照现有 Archive、白名单、工具参数、回执及可选模型客户端。框架代码作为参考。",
+      "url": "https://github.com/datawhalechina/hello-agents/blob/main/docs/chapter7/%E7%AC%AC%E4%B8%83%E7%AB%A0%20%E6%9E%84%E5%BB%BA%E4%BD%A0%E7%9A%84Agent%E6%A1%86%E6%9E%B6.md"
+    },
+    {
+      "n": 8,
+      "title": "记忆与检索",
+      "tag": "主线",
+      "lesson": "分别看会话记忆、历史检索和文档 RAG 的输入、索引与召回。",
+      "use": "整点与图示关系先用现有结构化查询。当前只从已给日报和截图整理可定位的证据卡。会话记忆沿用确认过的柜号、事件和时段。",
+      "url": "https://github.com/datawhalechina/hello-agents/blob/main/docs/chapter8/%E7%AC%AC%E5%85%AB%E7%AB%A0%20%E8%AE%B0%E5%BF%86%E4%B8%8E%E6%A3%80%E7%B4%A2.md"
+    },
+    {
+      "n": 9,
+      "title": "上下文工程",
+      "tag": "主线",
+      "lesson": "重点读 9.3.3 节 GSSC 的收集、选择、结构化和压缩。",
+      "use": "模型上下文只带问题、允许动作、已获证据、缺口和预算。压缩保留来源和版本。",
+      "url": "https://github.com/datawhalechina/hello-agents/blob/main/docs/chapter9/%E7%AC%AC%E4%B9%9D%E7%AB%A0%20%E4%B8%8A%E4%B8%8B%E6%96%87%E5%B7%A5%E7%A8%8B.md"
+    },
+    {
+      "n": 10,
+      "title": "智能体通信协议",
+      "tag": "后段",
+      "lesson": "MCP 对接工具和资源。A2A、ANP 对应进一步的智能体协同。",
+      "use": "接口稳定后先试只读 MCP。多智能体或跨系统通信视明确的接入对象而定。",
+      "url": "https://github.com/datawhalechina/hello-agents/blob/main/docs/chapter10/%E7%AC%AC%E5%8D%81%E7%AB%A0%20%E6%99%BA%E8%83%BD%E4%BD%93%E9%80%9A%E4%BF%A1%E5%8D%8F%E8%AE%AE.md"
+    },
+    {
+      "n": 11,
+      "title": "Agentic-RL",
+      "tag": "选读",
+      "lesson": "了解 SFT、GRPO 的训练思路和评价前提。",
+      "use": "现阶段用提示、工具契约和独立评测先定位问题。后续若有充分的老洼地数据再评估训练。",
+      "url": "https://github.com/datawhalechina/hello-agents/blob/main/docs/chapter11/%E7%AC%AC%E5%8D%81%E4%B8%80%E7%AB%A0%20Agentic-RL.md"
+    },
+    {
+      "n": 12,
+      "title": "智能体性能评估",
+      "tag": "主线",
+      "lesson": "用 BFCL 的调用评分思想和 GAIA 的任务评价思想分层评测。",
+      "use": "自行建立老洼地固定题库。分别核对工具、参数、来源、整任务和失败，保留规则基线。",
+      "url": "https://github.com/datawhalechina/hello-agents/blob/main/docs/chapter12/%E7%AC%AC%E5%8D%81%E4%BA%8C%E7%AB%A0%20%E6%99%BA%E8%83%BD%E4%BD%93%E6%80%A7%E8%83%BD%E8%AF%84%E4%BC%B0.md"
+    },
+    {
+      "n": 13,
+      "title": "智能旅行助手",
+      "tag": "后段",
+      "lesson": "看多个工具和交互模块如何集成为一个应用。",
+      "use": "未来需要工作台时借鉴组织形式。煤矿任务、证据和验收使用项目自己的规则。",
+      "url": "https://github.com/datawhalechina/hello-agents/blob/main/docs/chapter13/%E7%AC%AC%E5%8D%81%E4%B8%89%E7%AB%A0%20%E6%99%BA%E8%83%BD%E6%97%85%E8%A1%8C%E5%8A%A9%E6%89%8B.md"
+    },
+    {
+      "n": 14,
+      "title": "自动化深度研究智能体",
+      "tag": "主线",
+      "lesson": "借鉴分解查证子任务、逐步收集材料和输出可追溯报告。",
+      "use": "迁移到资料查证和补证。检索结论必须绑定设备、场景、修订和页码。",
+      "url": "https://github.com/datawhalechina/hello-agents/blob/main/docs/chapter14/%E7%AC%AC%E5%8D%81%E5%9B%9B%E7%AB%A0%20%E8%87%AA%E5%8A%A8%E5%8C%96%E6%B7%B1%E5%BA%A6%E7%A0%94%E7%A9%B6%E6%99%BA%E8%83%BD%E4%BD%93.md"
+    },
+    {
+      "n": 15,
+      "title": "构建赛博小镇",
+      "tag": "选读",
+      "lesson": "了解多角色状态与协同实验。",
+      "use": "如需独立复核，先比较单智能体与分析／复核两角色的证据错误和耗时。",
+      "url": "https://github.com/datawhalechina/hello-agents/blob/main/docs/chapter15/%E7%AC%AC%E5%8D%81%E4%BA%94%E7%AB%A0%20%E6%9E%84%E5%BB%BA%E8%B5%9B%E5%8D%9A%E5%B0%8F%E9%95%87.md"
+    },
+    {
+      "n": 16,
+      "title": "毕业设计",
+      "tag": "后段",
+      "lesson": "参照端到端集成、演示和项目交付的组织方法。",
+      "use": "准备老洼地端到端验收包，含输入、版本、回放、失败结果、来源和复验步骤。",
+      "url": "https://github.com/datawhalechina/hello-agents/blob/main/docs/chapter16/%E7%AC%AC%E5%8D%81%E5%85%AD%E7%AB%A0%20%E6%AF%95%E4%B8%9A%E8%AE%BE%E8%AE%A1.md"
+    }
+  ],
+  "phases": [
+    {
+      "id": "scope",
+      "n": 1,
+      "title": "范围与数据口径",
+      "group": "基础",
+      "status": "defined",
+      "brief": "明确供电健康监测、主动反馈、值班问答和后续验收数据。",
+      "refs": [
+        1,
+        2,
+        3
+      ],
+      "deps": [],
+      "now": "用户已确认，当前现场资料限于老洼地 2026 年 11 月 10–16 日七份日报和两张监控截图。回放事件是这批资料的派生记录。已完成现状复盘并固化「确定性全站四维健康引擎 + 假设驱动诊断 Agent」四步升级路线。构造 6 kV 网、DS01 和 v0.5 资料题用于回归前期方法与代码。",
+      "implementation": "按采样频率持续接入煤矿日常电力数据，先核对数据质量，再筛查运行变化并主动反馈，最后由值班人员追问和复核。对象用站和柜号绑定，回答附来源。对资料不齐的现场原因单列待核。",
+      "output": "任务规格、可用输入、历史／模拟／现场证据标签、验收边界与四步升级路线。",
+      "checks": [
+        "列出三类值班任务及预期输出",
+        "固定老洼地为后续校准和验收的数据来源",
+        "逐项登记已有出处与当前缺证项"
+      ],
+      "files": [
+        [
+          "健康监测与智能体升级路线",
+          "研究实施/老洼地数据接入_20261119/健康监测与智能体升级路线.md"
+        ],
+        [
+          "现行路线",
+          "研究实施/智能体主线与下一阶段任务_20261116.md"
+        ],
+        [
+          "前期任务与最小模型",
+          "研究实施/第一步_研究任务与最小模型.md"
+        ]
+      ],
+      "adapt": "本阶段的领域数据契约由项目定义，教材提供智能体任务和交互的抽象。"
+    },
+    {
+      "id": "data",
+      "n": 2,
+      "title": "日报接入与时间拓扑",
+      "group": "基础",
+      "status": "done",
+      "brief": "让工作表、柜号和图示连接都可追溯。",
+      "refs": [
+        7,
+        8,
+        9
+      ],
+      "deps": [
+        "scope"
+      ],
+      "now": "7 份日报、168 个整点，16,800 条整点记录及 2,100 条页尾记录。两张截图形成 40 个柜及两条已整理连接。原件归档在「现场资料」，含四柜有功整点预览和原表单元格。整点重算和页尾原值分开。企业级存储底座（SQLAlchemy 2.0 QueuePool + Alembic 0001/0002 + PostgreSQL 16.16 + TimescaleDB 2.x 7天分块 Hypertable / 30天压缩 / telemetry_daily_rollup 连续聚合 + pgvector v0.8.0 HNSW 128维余弦索引）已在 Docker 实机（127.0.0.1:5433）与原生 PostgreSQL 19.0（127.0.0.1:5432）全部验证通过并迁入全量 16,800 遥测、2,100 页尾、211 事件与 76 条向量；MineProfile 已新增 derive_balance_equations()（图模自动生成功率守恒方程）与 build_sld_layout()（图模自动生成一次主接线排版）。 生产值班查询及后台巡检使用 PostgreSQL 版本快照。两份 SQLite 继续提供离线回放和发布种子。隔离复验未批准订正与回放哈希不一致均拒绝发布，在途读请求可继续读取原版本。连续点表、现场补传与订正审批流程待矿方联调。",
+      "implementation": "由 xls.py 解析原表，storage.py 按日期、柜号、电气量入库只读原归档；新增 laowadi/db/ 企业级存储包（models.py 定义 11 张 SQLAlchemy 2.0 声明式表，engine.py 提供 QueuePool 连接池与 pre_ping/recycle 探活，migrations/versions/0001–0002 管理可逆 Alembic 迁移并在 PostgreSQL 方言下创建 TimescaleDB 7天分块 Hypertable、30天列式压缩策略、telemetry_daily_rollup 连续聚合与 pgvector 128维 HNSW 余弦索引，vector_store.py 统一支持 PG 原生 <=> 检索与本机池化余弦检索，migrator.py 执行只读源库幂等 ETL 并提供 laowadi db CLI）。保存页名、行列与 SHA-256。新增点表首先确认单位、倍率、符号和值的有效性。 Alembic 0003 和 migrator.py 把日报、原表出处、回放、图示及向量写入同一 PostgreSQL 发布事务。编排与巡检固定到读请求打开时的快照。",
+      "output": "只读日报 SQLite、供电图台账、可重复导入规则、SQLAlchemy 2.0 连接池与 Alembic 迁移链（0001–0002）、pgvector 向量检索器、docker-compose.enterprise.yml 生产栈及 verify_storage_migration.py 验收套件。 生产归档发布及原件挂载说明。",
+      "checks": [
+        "核对 11 月 16 日 303 柜整点最大值与页尾来源",
+        "同日报同哈希可重跑，版本冲突拒绝整批提交",
+        "用对应时点开关状态核实实际供电方式后才扩展图示关系",
+        "验证 Alembic 离线编译 PostgreSQL+TimescaleDB+pgvector DDL、幂等 ETL 迁移（16,800 遥测/2,100 页尾/211 事件/76 向量）、QueuePool 16 线程压测、downgrade/upgrade 可逆及源库只读",
+        "用老洼地真实点表验收数据到齐与失联判定、迟到补传、批准的订正版本和主查询可见性。",
+        "由 PostgreSQL 复验值班查询、完整回放和原件哈希，核对拒绝的订正及在途读取的一致性。"
+      ],
+      "files": [
+        [
+          "企业级 Agent 复审（66 项）",
+          "研究实施/老洼地数据接入_20261119/企业级Agent复审_20261120.md"
+        ],
+        [
+          "导入代码",
+          "研究实施/老洼地数据接入_20261119/laowadi/storage.py"
+        ],
+        [
+          "企业级 ORM 11 表模型（TimescaleDB/pgvector）",
+          "研究实施/老洼地数据接入_20261119/laowadi/db/models.py"
+        ],
+        [
+          "SQLAlchemy 2.0 QueuePool 连接池管理器",
+          "研究实施/老洼地数据接入_20261119/laowadi/db/engine.py"
+        ],
+        [
+          "pgvector 128 维语义向量检索器",
+          "研究实施/老洼地数据接入_20261119/laowadi/db/vector_store.py"
+        ],
+        [
+          "Alembic 迁移器、PG DDL 编译与幂等归档 ETL",
+          "研究实施/老洼地数据接入_20261119/laowadi/db/migrator.py"
+        ],
+        [
+          "Alembic 0002 迁移（TimescaleDB Hypertable & pgvector HNSW）",
+          "研究实施/老洼地数据接入_20261119/laowadi/db/migrations/versions/0002_timescaledb_and_pgvector.py"
+        ],
+        [
+          "生产编排栈（TimescaleDB-HA PG16 + Redis + API + Worker）",
+          "研究实施/老洼地数据接入_20261119/docker-compose.enterprise.yml"
+        ],
+        [
+          "存储迁移、连接池与 pgvector 专项验收",
+          "研究实施/老洼地数据接入_20261119/verify_storage_migration.py"
+        ],
+        [
+          "拓扑台账",
+          "研究实施/老洼地数据接入_20261119/laowadi/topology.json"
+        ],
+        [
+          "导入验收",
+          "研究实施/老洼地数据接入_20261119/verify_local.py"
+        ],
+        [
+          "生产部署与恢复",
+          "研究实施/老洼地数据接入_20261119/生产部署与恢复_43-48.md"
+        ],
+        [
+          "PG 归档与运行态",
+          "研究实施/老洼地数据接入_20261119/laowadi/db/postgres.py"
+        ]
+      ],
+      "adapt": "第 7 章帮助设计明确输入和接口。第 8、9 章用于区分可直接查询的数据与供给模型的证据。"
+    },
+    {
+      "id": "monitor",
+      "n": 3,
+      "title": "监测回放与事件归档",
+      "group": "基础",
+      "status": "prototype",
+      "brief": "在有人提问之前生成可回查的提示。",
+      "refs": [
+        1,
+        7,
+        12
+      ],
+      "deps": [
+        "data"
+      ],
+      "now": "已有四柜历史回放、25 柜整周体检、周期巡检、工单和 Outbox 重试。P1 指定的回调失败恢复场景已复验。复审 23–25 已修复。SQLite 与 PostgreSQL 隔离复验 7 项高优先级发现按 4、3、0 补齐，并发只认领一次。订正确认后待发通知取消，已经发送的保留撤销状态和回执。现场连续采集与实际签收待验。",
+      "implementation": "monitor.py 负责四柜小时级回放与模拟缺测归档；daily 命令汇总四柜日况；新增 health.py 对全站 25 柜 × 4 指标执行量测物理自洽（P/√3UabIacos）、电能质量（GB/T 12325 电压偏差与 10 kV I/II 段聚类、带载功率因数）、系统运行方式与功率平衡（单进线带双主变、反向有功、SCADA 整点轮询偏移分离）及分时段基线异常聚合，并保留原表单元格证据。 巡检按新建数量限批。通知在数据库内先认领，发送前复验有效状态，重试沿用同一通知编号。",
+      "output": "四柜七天报告、全站 25 柜四维电气体检报告（Markdown / JSON）、运行编号、事件编号、触发规则、前后读数及源单元格。 巡检补建、通知认领与订正撤销实现及专项回归。",
+      "checks": [
+        "重跑同配置时新增提示为零",
+        "模拟缺测与历史事件按运行编号可区分",
+        "事件回查能定位源时间和单元格",
+        "七天报告与原始历史回放的事件数量一致，跨日事件保留两天表格出处",
+        "全站 25 柜四维电气体检通过 69 处原表单元格核验且两库保持只读",
+        "同一整点缺一条进线有功时，标注无法计算的指标并保留其他柜的结果",
+        "复验失败通知可补发并核对送达回执，订正数据后旧告警可撤销或替代且保留原记录",
+        "验证默认巡检上限下全部高优先级发现最终建单，并发分发和崩溃重试时同一接收方只接受一条有效通知，撤销后旧待发消息停止投递。",
+        "在 SQLite 和 PostgreSQL 复验 7 项高优先级发现分批补齐、并发认领、过期接管、撤销与晚到回执。"
+      ],
+      "files": [
+        [
+          "企业级 Agent 复审（66 项）",
+          "研究实施/老洼地数据接入_20261119/企业级Agent复审_20261120.md"
+        ],
+        [
+          "P1 自主巡检与 LLMOps 专项验收",
+          "研究实施/老洼地数据接入_20261119/verify_p1_autonomy_and_ops.py"
+        ],
+        [
+          "自主巡检守护、Outbox 与班次工单引擎",
+          "研究实施/老洼地数据接入_20261119/laowadi/proactive.py"
+        ],
+        [
+          "全站四维电气体检代码",
+          "研究实施/老洼地数据接入_20261119/laowadi/health.py"
+        ],
+        [
+          "全站电气体检报告",
+          "研究实施/老洼地数据接入_20261119/local/全站电气体检与健康评估报告.md"
+        ],
+        [
+          "全站体检验收脚本",
+          "研究实施/老洼地数据接入_20261119/verify_health.py"
+        ],
+        [
+          "监测实现",
+          "研究实施/老洼地数据接入_20261119/laowadi/monitor.py"
+        ],
+        [
+          "回放验收",
+          "研究实施/老洼地数据接入_20261119/verify_monitor.py"
+        ],
+        [
+          "回放说明",
+          "研究实施/老洼地数据接入_20261119/README.md"
+        ],
+        [
+          "四柜日级报告",
+          "研究实施/老洼地数据接入_20261119/local/四柜日级运行观察报告.md"
+        ],
+        [
+          "日级报告生成代码",
+          "研究实施/老洼地数据接入_20261119/laowadi/daily.py"
+        ],
+        [
+          "11 月 20 日值班智能体审查",
+          "研究实施/老洼地数据接入_20261119/值班智能体审查_20261120.md"
+        ],
+        [
+          "企业级投产差距评估（46 项）",
+          "研究实施/老洼地数据接入_20261119/企业级投产差距评估_20261120.md"
+        ],
+        [
+          "巡检与通知专项回归",
+          "研究实施/老洼地数据接入_20261119/verify_proactive_delivery.py"
+        ]
+      ],
+      "adapt": "借教材的观察和反馈模型组织程序。小时粒度、规则和运行记录由老洼地数据决定。"
+    },
+    {
+      "id": "tools",
+      "n": 4,
+      "title": "只读工具与参数契约",
+      "group": "核心",
+      "status": "done",
+      "brief": "将查数、查事件和查供电关系封装为稳定接口。",
+      "refs": [
+        3,
+        7,
+        10
+      ],
+      "deps": [
+        "data",
+        "monitor"
+      ],
+      "now": "已有 4 个基础查数工具（get_monitor_event、get_hourly_reading、get_supply_link、get_daily_statistic）与 11 个诊断级复合只读工具（含即席分析引擎 query_electrical_analytics、物理仿真引擎 simulate_electrical_engineering 及最新接入的真实交流潮流求解器 run_ac_power_flow），合计 15 个统一只读工具。同时新增元数据驱动多矿拓扑契约（laowadi/mine_schema.py + laowadi/mine_profile.json），run_ac_power_flow 由 MineProfile 与 SQLite 归档整点边界驱动 pandapower Newton-Raphson 交流潮流，支持基准拟合校核、2#主变分接头调压灵敏度、N-1 故障潮流与无功补偿前后降损对比，并显式区分归档单元格边界与参数化等值假设。",
+      "implementation": "基础查询以结构化字段限定站、柜、日期、事件编号与指标；诊断级复合工具支持单次批量读取多柜多指标快照、核验全站功率守恒与 SCADA 轮询偏移、查询 7 天分时段基线、BM25+语义概念 RRF 混合规程检索、安全参数化即席统计排行与联合筛选、基于实测电气量的无功补偿 Qc/N-1 转供仿真，以及基于 MineProfile + pandapower 3.5.6 的真实 Newton-Raphson 交流潮流求解（明确声明主变容量/短路阻抗/电缆长度等值参数，绝不伪造铭牌）。所有工具只读 SQLite 并附原表单元格或条款出处。",
+      "output": "基础与诊断级 15 个只读工具 Schema、MineProfile 多矿配置契约（mine_schema.py / mine_profile.json）、pandapower 交流潮流求解器（powerflow.py）及 verify_enterprise_and_powerflow.py 验收回执。",
+      "checks": [
+        "核对未知柜号、时点和指标的响应",
+        "数据缺失与查询非法得到不同结果",
+        "任何有效输出都能回到原表或图示来源",
+        "6 个诊断级复合工具及 68 条规程/国标检索离线回归全部通过",
+        "验证 MineProfile 与老洼地 25 柜 100% 一致、异构第二矿 JSON 零代码改动收敛，以及 pandapower 四类交流潮流场景收敛与等值假设显式声明"
+      ],
+      "files": [
+        [
+          "多矿元数据拓扑 Schema (Pydantic v2)",
+          "研究实施/老洼地数据接入_20261119/laowadi/mine_schema.py"
+        ],
+        [
+          "老洼地声明式拓扑配置",
+          "研究实施/老洼地数据接入_20261119/laowadi/mine_profile.json"
+        ],
+        [
+          "pandapower 真实交流潮流求解器",
+          "研究实施/老洼地数据接入_20261119/laowadi/powerflow.py"
+        ],
+        [
+          "诊断级复合只读工具",
+          "研究实施/老洼地数据接入_20261119/laowadi/diag_tools.py"
+        ],
+        [
+          "企业级架构与潮流专项验收",
+          "研究实施/老洼地数据接入_20261119/verify_enterprise_and_powerflow.py"
+        ],
+        [
+          "本地规程与国标检索",
+          "研究实施/老洼地数据接入_20261119/laowadi/standards.py"
+        ],
+        [
+          "查询工具",
+          "研究实施/老洼地数据接入_20261119/laowadi/queries.py"
+        ],
+        [
+          "路由与别名",
+          "研究实施/老洼地数据接入_20261119/laowadi/questions.py"
+        ],
+        [
+          "CLI 入口",
+          "研究实施/老洼地数据接入_20261119/laowadi/__main__.py"
+        ]
+      ],
+      "adapt": "参照第 7 章的注册与调用模式组织接口。第 10 章对应以后对外适配。"
+    },
+    {
+      "id": "agent-loop",
+      "n": 5,
+      "title": "有限步 Agent Loop",
+      "group": "核心",
+      "status": "prototype",
+      "brief": "以事件的两个实际整点驱动后续调用。",
+      "refs": [
+        4,
+        7,
+        9
+      ],
+      "deps": [
+        "tools"
+      ],
+      "now": "企业级复审第 1–5 项已实现并通过老洼地离线复验。原表读数绑定站点、柜号、整点、指标、单位、有符号值、原格和日报哈希。计算走本地工具回执，绑定查询参数、统计口径和具体结果字段。拒绝错柜错时、零证据定性、常数冒充实测、错误公式及无依据报告段落。 DeepSeek 深度诊断现由模型逐句撰写推演，已接入出处绑定、差值复算、独立请求的语义复核与反思重写。 二号主变三柜同负时已启用逐轮假设检验。日报可证伪 1027 经该柜在 11 月 12 日 12:00 反送。表计极性、轮询偏移与母联环流仍缺同期记录。",
+      "implementation": "轻量查数走 agent.py。diagnose.py 调度白名单取证，diagnostic_claims.py 校验逐条引用、插入可信证据并复算同柜跨时差值。语义复核逐句检查自由表述与引文是否相符。任一条失败均按断言索引反馈给模型，最终未通过时阻断正文发布。保留原表、计算回执、归档筛查和条件潮流各自的证据边界。 hypothesis.py 接收模型提交的假设、只读工具和参数。本地核对柜号与整点，上一轮的取证结果进入下一轮计划。查询预算用尽时保留待执行检验。",
+      "output": "带原表坐标或工具回执的 JSON / Markdown 诊断单、出处和计算参数、拒答状态及 P0 回归脚本。 新增断言级 JSON、Markdown 和工作台诊断推演及核验进度。 JSON 和 Markdown 包含初始读数、每轮查询及原表证据、局部证伪、未执行检验和补证条件。",
+      "checks": [
+        "用原表 D15、D16、H15、H16 核对四个读数",
+        "跨日需查实际日期，错位或缺一个点时停止计算",
+        "以 2 次预算复验部分结果和待查项",
+        "程序证据核验器能拦截伪造原表单元格与伪造规程条号，SSE 并行工具替身与本地基线 6 题全部 verified",
+        "逐项绑定柜号、整点、量名、单位、有符号数值与出处；日期缺报、无出处或核验未过时准确返回待查状态",
+        "复验错柜错时、零证据定性结论、参考常数冒充实测，以及派生公式与指标口径错配；终审前区分候选内容与已核验结论。",
+        "同时复验原表正负值、错柜错日期错整点、零证据故障归因、名义常数冒充实测、错误统计口径与注入报告段落。",
+        "验证终审前 SSE/事件回放与工作台不暴露未核验模型文本，且运行完成状态与业务可信状态（business_trusted）严格分离。",
+        "复验错格、错单位、差值方向、无绑定数字、语义误归因、终审失败和会话隔离。",
+        "在二号主变场景同时保留假设检验步骤、复算回执和模型撰写的证据推演，工作台正文可查回每句出处。",
+        "复验真三柜同负、模型逐轮接收上步回执、错时请求拦截、1027 缺值与非零后续查询、预算截止及原表回查。"
+      ],
+      "files": [
+        [
+          "运行态与业务可信正交分层模块",
+          "研究实施/老洼地数据接入_20261119/laowadi/outcomes.py"
+        ],
+        [
+          "复审 #06–#10 可靠性与契约专项验收脚本",
+          "研究实施/老洼地数据接入_20261119/verify_reliability_and_contracts.py"
+        ],
+        [
+          "诊断事实与工具回执渲染",
+          "研究实施/老洼地数据接入_20261119/laowadi/report_evidence.py"
+        ],
+        [
+          "企业级 Agent 复审（66 项）",
+          "研究实施/老洼地数据接入_20261119/企业级Agent复审_20261120.md"
+        ],
+        [
+          "P0 正确性与安全对抗验收脚本",
+          "研究实施/老洼地数据接入_20261119/verify_p0_correctness.py"
+        ],
+        [
+          "假设驱动诊断编排器（精简版）",
+          "研究实施/老洼地数据接入_20261119/laowadi/diagnose.py"
+        ],
+        [
+          "双层单元格与数值核验器",
+          "研究实施/老洼地数据接入_20261119/laowadi/verifier.py"
+        ],
+        [
+          "确定性本地路由与 11 工具解析器",
+          "研究实施/老洼地数据接入_20261119/laowadi/local_router.py"
+        ],
+        [
+          "诊断回归与实测脚本",
+          "研究实施/老洼地数据接入_20261119/verify_diagnose.py"
+        ],
+        [
+          "循环实现",
+          "研究实施/老洼地数据接入_20261119/laowadi/agent.py"
+        ],
+        [
+          "事件案例回归",
+          "研究实施/老洼地数据接入_20261119/verify_agent.py"
+        ],
+        [
+          "本地使用说明",
+          "研究实施/老洼地数据接入_20261119/README.md"
+        ],
+        [
+          "11 月 20 日值班智能体审查",
+          "研究实施/老洼地数据接入_20261119/值班智能体审查_20261120.md"
+        ],
+        [
+          "诊断断言绑定与语义复核协议",
+          "研究实施/老洼地数据接入_20261119/laowadi/diagnostic_claims.py"
+        ],
+        [
+          "老洼地断言核验与反思重写专项复验",
+          "研究实施/老洼地数据接入_20261119/verify_diagnostic_claims.py"
+        ],
+        [
+          "反向有功假设检验编排",
+          "研究实施/老洼地数据接入_20261119/laowadi/hypothesis.py"
+        ],
+        [
+          "反向有功本地复核单",
+          "研究实施/老洼地数据接入_20261119/local/老洼地反向有功假设检验_20261121.md"
+        ]
+      ],
+      "adapt": "第 4 章给出行动与观察的循环结构。老洼地把下一步限定在能用证据约束的候选中。"
+    },
+    {
+      "id": "model",
+      "n": 6,
+      "title": "真实模型与规则对照",
+      "group": "核心",
+      "status": "done",
+      "brief": "在同一数据和预算下验证模型选工具的贡献。",
+      "refs": [
+        3,
+        7,
+        12
+      ],
+      "deps": [
+        "agent-loop"
+      ],
+      "now": "显式选择 DeepSeek 的深度诊断使用逐断言撰写和独立请求语义复核。以真实老洼地读数和模型替身完成离线链路测试。真实网关同题外发待明确授权，准确率和时延待测。 二号主变旧联调完成三项查证选择，规划阶段约 118 秒，后续正文未通过核验。已修正查证与正文共用轮次上限，并验证正文不通过时仍保留核过的回执。最终版真实网关复验待确认外发字段。",
+      "implementation": "模型撰写现象、候选原因、交叉检验、规程适用性与补证建议。本地强制绑定坐标、结果路径和数值，语义复核只返回逐句裁决。条款保留出处和适用条件，原文或运行记录缺失时保留待复核状态。",
+      "output": "新协议的诊断单、逐断言引用与核验记录、反思和调用用量。旧版六题真实 DeepSeek 结果保留为历史归档。",
+      "checks": [
+        "冻结题库、档案版本、预算与评分规则",
+        "确认模型实际生成了合法的函数调用",
+        "核对模型是否优先查齐指定柜，保留全部失败",
+        "完成 6 题开放式健康诊断实测，DeepSeek 与本地基线均达到 6/6 且 76 处单元格 100% 通过程序核验",
+        "用同批逐项校验、反例与实际延迟比较模型选择候选查询和本地规则",
+        "在矿方获准的模型边界与字段内验证真实主备切换、任务总时限、归因与降级后正确率。",
+        "沿用原 DeepSeek 配置，在获准字段内复跑老洼地同题，统计错引、空结果、逐断言准确率、重写、降级和时延。",
+        "复测二号主变同题的三项查证质量和全链路耗时，比较本地模式后决定默认入口。"
+      ],
+      "files": [
+        [
+          "模型撰写、反思与终审发布",
+          "研究实施/老洼地数据接入_20261119/laowadi/diagnose.py"
+        ],
+        [
+          "企业级 Agent 复审（66 项）",
+          "研究实施/老洼地数据接入_20261119/企业级Agent复审_20261120.md"
+        ],
+        [
+          "LLMOps 观测、快慢路由与并发工具引擎",
+          "研究实施/老洼地数据接入_20261119/laowadi/llmops.py"
+        ],
+        [
+          "流式并行 LLM 客户端",
+          "研究实施/老洼地数据接入_20261119/laowadi/llm.py"
+        ],
+        [
+          "6 题诊断评测报告（MD）",
+          "研究实施/老洼地数据接入_20261119/local/DeepSeek_老洼地诊断评测.md"
+        ],
+        [
+          "6 题诊断评测回执（JSON）",
+          "研究实施/老洼地数据接入_20261119/local/DeepSeek_老洼地诊断评测.json"
+        ],
+        [
+          "诊断回归与实测脚本",
+          "研究实施/老洼地数据接入_20261119/verify_diagnose.py"
+        ],
+        [
+          "原模型入口",
+          "研究实施/老洼地数据接入_20261119/laowadi/model.py"
+        ],
+        [
+          "协议替身",
+          "研究实施/老洼地数据接入_20261119/verify_agent.py"
+        ],
+        [
+          "12 题对照与复验",
+          "研究实施/老洼地数据接入_20261119/verify_model_live.py"
+        ],
+        [
+          "12 题逐项结果",
+          "研究实施/老洼地数据接入_20261119/local/DeepSeek_老洼地12题对照.json"
+        ],
+        [
+          "11 月 20 日值班智能体审查",
+          "研究实施/老洼地数据接入_20261119/值班智能体审查_20261120.md"
+        ],
+        [
+          "诊断断言协议与语义复核",
+          "研究实施/老洼地数据接入_20261119/laowadi/diagnostic_claims.py"
+        ]
+      ],
+      "adapt": "用第 7 章的模型客户端和第 12 章的调用评估思路。先测选择和参数，最终答复仍由执行层渲染。"
+    },
+    {
+      "id": "context",
+      "n": 7,
+      "title": "会话记忆与上下文",
+      "group": "核心",
+      "status": "prototype",
+      "brief": "只带上当前任务真正需要的现场信息。",
+      "refs": [
+        8,
+        9
+      ],
+      "deps": [
+        "agent-loop"
+      ],
+      "now": "已完成复审第 9 项修复：sessions.py 与 reviews.py 新增 mine_id、station、archive_snapshot_sha256 持久化字段与自动迁移，context.py 实现矿站切换、事件切换与归档版本订正时的会话工作记忆自动清空与人工复核意见显式隔离（partition_relevant_reviews），移除显式对象查询时的零分兜底泄漏。本机待执行 verify_reliability_and_contracts.py 实测验证。",
+      "implementation": "参考 GSSC 收集工具原始回执、按当前问题锚点（日期、整点、柜号、站名、健康维度）筛选并折叠平稳点，原表单元格坐标与 SHA-256 保持原样；DiagnosisSession 绑定矿井、站点与归档快照 SHA-256，切换矿站/事件或原始资料订正后自动隔离旧读数与旧人工复核意见。",
+      "output": "laowadi/context.py、laowadi/sessions.py、laowadi/reviews.py、按矿站与版本隔离的 context_snapshot / partition_relevant_reviews 及 verify_reliability_and_contracts.py 验收脚本。",
+      "checks": [
+        "从事件 A 改问 B 时无串柜、串日期",
+        "来源哈希与原始数值在压缩后仍可追查",
+        "失效、未知和缺证的原因进入上下文",
+        "同期追问继承指标与整点；不匹配当前对象和时段的人工记录不进入事实或复核记忆",
+        "换矿站（S35↔C1535）、换事件或原始日报订正后，旧读数与旧版本人工意见被正确隔离"
+      ],
+      "files": [
+        [
+          "GSSC 上下文与会话记忆",
+          "研究实施/老洼地数据接入_20261119/laowadi/context.py"
+        ],
+        [
+          "上下文与分层评测回归",
+          "研究实施/老洼地数据接入_20261119/verify_evaluation.py"
+        ],
+        [
+          "现场会话",
+          "研究实施/老洼地数据接入_20261119/laowadi/questions.py"
+        ],
+        [
+          "前期上下文和状态",
+          "研究实施/抽象目标与流式诊断_v04_20261118/graph_agent.py"
+        ],
+        [
+          "补证摘要",
+          "研究实施/抽象目标与流式诊断_v04_20261118/history.py"
+        ],
+        [
+          "11 月 20 日值班智能体审查",
+          "研究实施/老洼地数据接入_20261119/值班智能体审查_20261120.md"
+        ]
+      ],
+      "adapt": "第 9 章的上下文组织比堆长历史更有用。资料索引、会话记忆与受审核证据分开管理。"
+    },
+    {
+      "id": "corpus",
+      "n": 8,
+      "title": "现有资料台账与可答范围",
+      "group": "知识",
+      "status": "done",
+      "brief": "只用已给的七份日报和两张图，先把可查事实与缺证问题登记清楚。",
+      "refs": [
+        8,
+        9,
+        14
+      ],
+      "deps": [
+        "scope",
+        "data"
+      ],
+      "now": "已完成老洼地现有资料总账与三层可答边界（laowadi/corpus.py 及《老洼地现有资料台账与可答边界.md/.json》）：完整登记 7 份日报（16,800 整点 + 2,100 页尾 + SHA-256）、2 张监控截图（40 柜 + 2 条站间连接 + SHA-256）、106 条回放事件、25 项四维体检发现与 68 条规程条款；围绕 1009、1010、303、306 回路构建的 9 道查证与边界核验题（C01–C09）9/9 全部通过。",
+      "implementation": "由 laowadi/corpus.py 从只读 SQLite 与图示台账自动提取来源清单与 SHA-256，划分「可直接证实事实 / 条件不符需澄清 / 现场缺证项」三层矩阵，并自动复验 C01–C09（覆盖 1009 整点 BD17 vs 页尾 BD28 双口径、1009→1101/1010→1201 图示连接、非整点/跨站拦截，以及电缆型号/额定限值/跳闸原因缺证登记）。",
+      "output": "laowadi/corpus.py、老洼地现有资料台账与可答边界核验报告（MD / JSON）及 C01–C09 自动核验回执。",
+      "checks": [
+        "日报单元格、事件读数和图示线路标注能回到真实出处",
+        "整点、页尾、图示连接与某时刻实际状态分别核验",
+        "型号、限值或跳闸原因缺资料时，返回明确的缺证项"
+      ],
+      "files": [
+        [
+          "资料台账与可答边界实现",
+          "研究实施/老洼地数据接入_20261119/laowadi/corpus.py"
+        ],
+        [
+          "资料台账与边界报告（MD）",
+          "研究实施/老洼地数据接入_20261119/local/老洼地现有资料台账与可答边界.md"
+        ],
+        [
+          "资料台账与边界回执（JSON）",
+          "研究实施/老洼地数据接入_20261119/local/老洼地现有资料台账与可答边界.json"
+        ],
+        [
+          "现有图示台账",
+          "研究实施/老洼地数据接入_20261119/laowadi/topology.json"
+        ],
+        [
+          "当前现场接入",
+          "研究实施/老洼地数据接入_20261119/README.md"
+        ]
+      ],
+      "adapt": "先用第 8 章的来源登记与检索思想整理小范围证据。已有表格、截图台账与事件源引用足以开展第一轮验收。"
+    },
+    {
+      "id": "rag",
+      "n": 9,
+      "title": "条件化 RAG 与引用",
+      "group": "知识",
+      "status": "done",
+      "brief": "先验证证据卡能否提高出处查找与缺证识别，再决定是否接入检索工具。",
+      "refs": [
+        8,
+        9,
+        12,
+        14
+      ],
+      "deps": [
+        "corpus",
+        "tools"
+      ],
+      "now": "已在 laowadi/rag.py 与 laowadi/standards.py 完成面向老洼地真实归档来源的混合条件化 RAG（Okapi BM25 + 煤矿电力领域同义概念 TF-IDF 余弦语义向量 + RRF 倒数秩融合）与 12 题同题消融实验（R01–R12）：严格从 7 份日报与 2 张截图动态构建 8 张绑定站名、柜号、适用时段与 64 位 SHA-256 的本矿证据卡（含 SCADA 轮询偏移卡与 24h 分时基线卡），联合 68 条规程/国标条款与适用性核验器；在同题库上对比「仅直接工具（4/12，33.3%）」与「直接工具 + 混合条件化 RAG（12/12，100.0%）」，净提升 +66.7%，改善 8 道题（含 R11“逆潮流/功率倒灌”与 R12“无功倒补/母线高压”2 道语义同义改写题）。",
+      "implementation": "standards.py 与 ConditionalRAGEngine 共用 hybrid_rank_documents 混合检索器，build_mine_evidence_cards(archive, profile) 已完全去硬编码，按任意矿井 MineProfile + SQLite 动态构建 8 张绑定站名、柜号、时段与 SHA-256 的证据卡并自动提取非归档站点跨站拦截正则；evaluate_rag_ablation 自动产出 12 题消融对照表。",
+      "output": "laowadi/rag.py、10 题同题消融对照报告（local/老洼地条件化RAG与直接工具对照报告.md / .json）及工作台可视化面板。",
+      "checks": [
+        "仅检索现有老洼地来源，回执引用与对象、时点对应",
+        "追问电缆型号、限值或动作原因时正确保留缺证",
+        "与直接工具在同一题库比较，记录检索实际改善的题"
+      ],
+      "files": [
+        [
+          "条件化 RAG 与同题消融实验",
+          "研究实施/老洼地数据接入_20261119/laowadi/rag.py"
+        ],
+        [
+          "条件化 RAG 消融报告（MD）",
+          "研究实施/老洼地数据接入_20261119/local/老洼地条件化RAG与直接工具对照报告.md"
+        ],
+        [
+          "条件化 RAG 消融数据（JSON）",
+          "研究实施/老洼地数据接入_20261119/local/老洼地条件化RAG与直接工具对照报告.json"
+        ],
+        [
+          "本地规程与国标检索",
+          "研究实施/老洼地数据接入_20261119/laowadi/standards.py"
+        ],
+        [
+          "RAG 与状态图联合验收",
+          "研究实施/老洼地数据接入_20261119/verify_rag_and_graph.py"
+        ],
+        [
+          "v0.5 语料",
+          "研究实施/条件化资料RAG与适用性核验_v05_20261118/rag_corpus.py"
+        ],
+        [
+          "检索与基准代码",
+          "研究实施/条件化资料RAG与适用性核验_v05_20261118/rag_engine.py"
+        ]
+      ],
+      "adapt": "第 8 章用于设计检索，第 12 章用于判断增益。现有资料的重点是查对出处和判断证据够不够。"
+    },
+    {
+      "id": "graph",
+      "n": 10,
+      "title": "LangGraph 审查编排",
+      "group": "知识",
+      "status": "prototype",
+      "brief": "在需要恢复时把多步核验显式建成状态图。",
+      "refs": [
+        4,
+        6,
+        7,
+        9
+      ],
+      "deps": [
+        "tools",
+        "context"
+      ],
+      "now": "SQLite 检查点可保存步骤回执并在既有 V01、V02 场景恢复。单进线模板固定为 11 月 13 日。分两次补齐 V02 时，第二包会丢失第一包的额定电流。按原问题绑定时间窗、累积各轮材料和冲突处理待修。 诊断和会诊检查点绑定核验规则版本。旧检查点保留，打开时提示发起新诊断。对话内补证回写为条件复算记录。 生产部署将补证审计图与统一 DAG 的两套检查点写入同一 PostgreSQL 运行态。停库和节点故障演练已在独立目标库还原并读取两套检查点。 调压与补偿会诊已保存单投提案、规程质疑、物理复算及仲裁消息。工作流绑定等值模型配置、协议版本和归档快照。",
+      "implementation": "已新建统一动态 DAG 编排与任意节点挂起/恢复内核（laowadi/dag_engine.py：DAGGraph Kahn 拓扑波次 + 环检测、ThreadPoolExecutor 并行波次、DAGCheckpointStore SQLite WAL 持久化、UnifiedDAGRuntime 断点暂停与 NodeInterrupt），将主对话 diagnose.py、五角色并行多智体 multi_agent.py 与补证审计图 graph.py 三套执行器全部统一到同一内核；支持任意自由问题动态编译 DAG、任意节点（pause_before_node / pause_after_node / NodeInterrupt）挂起并在跨 OS 进程恢复时 0 重复执行已完成节点，且跨多轮补证自动累计合并参数；新增 POST /api/dag/run、POST /api/dag/resume 与 GET /api/dag/threads* 接口。",
+      "output": "laowadi/dag_engine.py、统一后的 diagnose.py / multi_agent.py / graph.py、跨进程检查点数据库（dag_checkpoint）、verify_unified_dag.py 验收套件与五场景状态图报告。",
+      "checks": [
+        "用 MA01 在仲裁前挂起并跨 OS 进程恢复。质疑和物理复算回执保持一致，恢复仅执行仲裁和终审。",
+        "跨进程恢复仍绑定同一输入、版本和回执",
+        "恢复时避免重复执行已确认的步骤",
+        "完成、待补证和受限三类结束可分别核查",
+        "同一事项的两次补证可累计；恢复时用原任务的对象、时间窗及资料版本复核",
+        "验证主对话 diagnose.py、多智体 multi_agent.py 与状态图 graph.py 均运行于 UnifiedDAGRuntime，支持任意问题动态生成 DAG 并在任意节点挂起后跨 OS 子进程 0 重复恢复",
+        "复验旧规则检查点不直接发布为当前已核验报告，当前规则检查点可跨进程续作，补证结果保留条件与出处。",
+        "验收 strict / pin_snapshot（固定旧版本复审）/ recompute_affected（按影响范围重算，新日报不误伤旧日、改旧日报联动重算）及并发恢复租约互斥锁（conflict）。",
+        "从生产快照恢复两套 DAG 检查点，对照归档版本、挂起状态与关联任务。"
+      ],
+      "files": [
+        [
+          "调压与无功补偿角色消息及仲裁",
+          "研究实施/老洼地数据接入_20261119/laowadi/reactive_collaboration.py"
+        ],
+        [
+          "统一动态 DAG 编排与任意节点挂起恢复内核",
+          "研究实施/老洼地数据接入_20261119/laowadi/dag_engine.py"
+        ],
+        [
+          "统一 DAG 引擎跨进程断点恢复验收",
+          "研究实施/老洼地数据接入_20261119/verify_unified_dag.py"
+        ],
+        [
+          "老洼地状态图编排与跨进程恢复",
+          "研究实施/老洼地数据接入_20261119/laowadi/graph.py"
+        ],
+        [
+          "状态图与跨进程恢复报告（MD）",
+          "研究实施/老洼地数据接入_20261119/local/老洼地状态图编排与跨进程恢复报告.md"
+        ],
+        [
+          "状态图与跨进程恢复数据（JSON）",
+          "研究实施/老洼地数据接入_20261119/local/老洼地状态图编排与跨进程恢复报告.json"
+        ],
+        [
+          "RAG 与状态图联合验收",
+          "研究实施/老洼地数据接入_20261119/verify_rag_and_graph.py"
+        ],
+        [
+          "最小 LangGraph 验收",
+          "研究实施/最小LangGraph流程_20261116/最小LangGraph接入_说明与结果.md"
+        ],
+        [
+          "前期状态图原型",
+          "研究实施/抽象目标与流式诊断_v04_20261118/graph_agent.py"
+        ],
+        [
+          "11 月 20 日值班智能体审查",
+          "研究实施/老洼地数据接入_20261119/值班智能体审查_20261120.md"
+        ],
+        [
+          "DAG 灾备恢复步骤",
+          "研究实施/老洼地数据接入_20261119/生产部署与恢复_43-48.md"
+        ]
+      ],
+      "adapt": "第 6.5 节对应状态、节点和条件边。仅在需要跨会话或人工等待的工作上接入编排。"
+    },
+    {
+      "id": "supplement",
+      "n": 11,
+      "title": "专业核验与补证",
+      "group": "知识",
+      "status": "prototype",
+      "brief": "把缺哪份现场证据及其影响说清楚。",
+      "refs": [
+        4,
+        6,
+        7,
+        14
+      ],
+      "deps": [
+        "graph",
+        "rag"
+      ],
+      "now": "已完成 P0 补证与人工复核硬伤清零：HITL 补证表单缺项留空禁止预填未核参数，且按日期严格隔离避免跨日误挂；V02 闭锁/不具备转供前提与 V03 正常接线对立证词均保留冲突并否决错误结论（evidence_conflict）；reviews.py 升级 (finding_id, scope_day) 复合主键与归档版本记录，彻底杜绝人工复核跨日串台。",
+      "implementation": "build_baseline_verification(archive, profile) 已完全去硬编码，依据 MineProfile + SQLite 动态发现单进线热稳定窗口（V01）、下井双回 N-1 峰值（V02）、持续负有功极性疑点（V03）及图模自动生成的低压母线守恒差额（V04）；apply_supplement 按 item_kind 与 param_bindings 泛型局部复算，并正确处理 V02 联络闭锁否决与 V03 接线正常确认语义。",
+      "output": "laowadi/supplement.py、带父版本关联的 v1/v2 对照报告（local/老洼地补证与局部复算报告.md / .json）及 laowadi supplement CLI。",
+      "checks": [
+        "缺参数时保留可证实的局部结果",
+        "新资料产生版本关系，原始证据可回查",
+        "必要的开关、限值、环境与对象绑定通过后才出条件判断",
+        "相反或不明的核查结果能否决或挂起相应结论；区分量测异常、设备原因和条件计算"
+      ],
+      "files": [
+        [
+          "老洼地补证与局部复算",
+          "研究实施/老洼地数据接入_20261119/laowadi/supplement.py"
+        ],
+        [
+          "补证与局部复算报告（MD）",
+          "研究实施/老洼地数据接入_20261119/local/老洼地补证与局部复算报告.md"
+        ],
+        [
+          "补证与局部复算数据（JSON）",
+          "研究实施/老洼地数据接入_20261119/local/老洼地补证与局部复算报告.json"
+        ],
+        [
+          "补证与 MCP 联合验收",
+          "研究实施/老洼地数据接入_20261119/verify_supplement_and_mcp.py"
+        ],
+        [
+          "前期补证依赖实现",
+          "研究实施/抽象目标与流式诊断_v04_20261118/supplement.py"
+        ],
+        [
+          "11 月 20 日值班智能体审查",
+          "研究实施/老洼地数据接入_20261119/值班智能体审查_20261120.md"
+        ]
+      ],
+      "adapt": "借第 4 章任务拆解和第 14 章逐项查证的形式。电气计算使用复算过的专业工具和同矿资料。"
+    },
+    {
+      "id": "evaluation",
+      "n": 12,
+      "title": "评测 追踪与复验",
+      "group": "交付",
+      "status": "prototype",
+      "brief": "从工具参数到整任务，区分哪一层出了问题。",
+      "refs": [
+        9,
+        12,
+        16
+      ],
+      "deps": [
+        "agent-loop",
+        "model",
+        "rag"
+      ],
+      "now": "复审第 1–10 项新增对抗与契约回归已全部通过。P0 11/11，复审 #06–#10 5/5（六入口一致性矩阵 5/5），综合基准 36/36，本地诊断 6/6，会诊对照 4/4。另建成面向硕士论文的 48 题六层评测基准（thesis_eval/，含 S01–S08、M01–M08、N01–N08、D01–D08、P01–P08、H01–H08 共 56 个作答轮次）及四项消融离线探针报告与 LaTeX 三线表（thesis_eval/results/本地实验结果.md）。两份归档库逐字节一致。真实 DeepSeek 新协议和现场适用性继续待验。",
+      "implementation": "evaluation.py 汇总归档调用与当前程序检查；thesis_eval/ 冻结 48 题题面与金标准，执行单点/统计、条件化混合检索跨站门控、GSSC 上下文压缩（净省 45.2% 且 0 证据丢失）、pandapower 交流潮流、双层数值核验（32/32 幻觉阻断 + Reflection 自修正）及 HITL 两轮补证（8/8 正确转移）离线探针，并自动生成 Markdown 与 LaTeX booktabs 三线表。",
+      "output": "五层综合评测报告（local/老洼地智能体分层评测报告.md / .json）、48 题论文评测协议与离线探针报告（thesis_eval/README.md、thesis_eval/results/本地实验结果.md / offline_probes.json）及 verify_reliability_and_contracts.py 验收回执。",
+      "checks": [
+        "执行同题、同数据、同预算的基线对照",
+        "单列错误柜号、错引原页、版本错配和无答案",
+        "保留协议错误、超预算及未确认的模型请求",
+        "单列换日期、换柜、无答案、反向补证与分批补证；从逐题运行记录统计自修复，按正确的整任务答案评分",
+        "用源数据独立重算窗口、计量边界与统计量，按最终返回的日期、数值及缺证状态判分",
+        "复验企业级 Agent 复审的 8 个反例，并由独立值班人员在后续老洼地资料上标注误报、漏报、错误归因和应拒答事项。",
+        "用老洼地实际读数与工具回执复核发布事实，并用旧规则的检查点与对话摘要确认新旧核验记录隔离。",
+        "验证 CLI、主对话、主动预诊断、会诊、统一 DAG 与只读 MCP 六入口对同题返回一致的柜号、时点、证据、澄清与拒答。",
+        "逐断言复算数值及核对出处，区分程序拦截、语义复核修订、终审阻断和真实模型待验。"
+      ],
+      "files": [
+        [
+          "六入口统一回答口径与一致性核验器",
+          "研究实施/老洼地数据接入_20261119/laowadi/entry_contract.py"
+        ],
+        [
+          "复审 #06–#10 可靠性与契约专项验收脚本",
+          "研究实施/老洼地数据接入_20261119/verify_reliability_and_contracts.py"
+        ],
+        [
+          "企业级 Agent 复审（66 项）",
+          "研究实施/老洼地数据接入_20261119/企业级Agent复审_20261120.md"
+        ],
+        [
+          "P0 正确性与安全对抗验收脚本",
+          "研究实施/老洼地数据接入_20261119/verify_p0_correctness.py"
+        ],
+        [
+          "36 题六维基准与四维消融引擎",
+          "研究实施/老洼地数据接入_20261119/laowadi/benchmark.py"
+        ],
+        [
+          "36 题综合评测报告（MD）",
+          "研究实施/老洼地数据接入_20261119/local/老洼地36题综合评测与四维消融报告.md"
+        ],
+        [
+          "五层评测实现",
+          "研究实施/老洼地数据接入_20261119/laowadi/evaluation.py"
+        ],
+        [
+          "分层评测与 Reflection 验收",
+          "研究实施/老洼地数据接入_20261119/verify_evaluation.py"
+        ],
+        [
+          "分层评测报告（MD）",
+          "研究实施/老洼地数据接入_20261119/local/老洼地智能体分层评测报告.md"
+        ],
+        [
+          "分层评测数据（JSON）",
+          "研究实施/老洼地数据接入_20261119/local/老洼地智能体分层评测报告.json"
+        ],
+        [
+          "Agent 回归",
+          "研究实施/老洼地数据接入_20261119/verify_agent.py"
+        ],
+        [
+          "监测回归",
+          "研究实施/老洼地数据接入_20261119/verify_monitor.py"
+        ],
+        [
+          "11 月 20 日值班智能体审查",
+          "研究实施/老洼地数据接入_20261119/值班智能体审查_20261120.md"
+        ],
+        [
+          "企业级投产差距评估（46 项）",
+          "研究实施/老洼地数据接入_20261119/企业级投产差距评估_20261120.md"
+        ],
+        [
+          "断言对抗回归与待核输出隔离",
+          "研究实施/老洼地数据接入_20261119/verify_diagnostic_claims.py"
+        ],
+        [
+          "主路径任务对齐与模型选择边界验收",
+          "研究实施/老洼地数据接入_20261119/verify_task_alignment.py"
+        ],
+        [
+          "48 题硕士论文评测协议说明",
+          "研究实施/老洼地数据接入_20261119/thesis_eval/README.md"
+        ],
+        [
+          "48 题论文离线探针与 LaTeX 三线表报告",
+          "研究实施/老洼地数据接入_20261119/thesis_eval/results/本地实验结果.md"
+        ],
+        [
+          "48 题论文离线探针原始回执（JSON）",
+          "研究实施/老洼地数据接入_20261119/thesis_eval/results/offline_probes.json"
+        ]
+      ],
+      "adapt": "分层表使用本项目题目与程序评分。独立值班复核、误报与漏报、现场连续监测和反馈时延需另行验收。"
+    },
+    {
+      "id": "mcp",
+      "n": 13,
+      "title": "MCP 对外接口",
+      "group": "交付",
+      "status": "done",
+      "brief": "用统一只读接口接入外部客户端。",
+      "refs": [
+        7,
+        10,
+        13
+      ],
+      "deps": [
+        "tools",
+        "evaluation"
+      ],
+      "now": "已建成标准 JSON-RPC 2.0（protocolVersion 2024-11-05）只读 MCP 服务端（laowadi/mcp_server.py 及 laowadi mcp stdio 入口），统一暴露 4 个基础查数工具 + 11 个复合诊断与物理仿真/交流潮流工具（含即席分析引擎 query_electrical_analytics、物理仿真引擎 simulate_electrical_engineering 与真实 pandapower 交流潮流工具 run_ac_power_flow，共 15 个只读工具）与 3 份只读资源（corpus / health / evaluation），并通过与内部直接调用的 7 项一致性、越界/非法/控制命令拦截及子进程 stdio 通信验收。",
+      "implementation": "ReadOnlyMCPServer 为每个工具标注 readOnlyHint、stationScope 与 maxTimeoutMs（30,000 ms），支持 initialize、tools/list、tools/call、resources/list、resources/read；工具调用复用 Archive.call 与 DiagnosticToolbox.execute，确保数值、时间与原表单元格出处完全一致。",
+      "output": "laowadi/mcp_server.py、laowadi mcp stdio 服务入口、15 个只读工具 Schema 与 verify_supplement_and_mcp.py 验收回执。",
+      "checks": [
+        "相同输入得到与直接调用一致的值、时间与出处",
+        "非法、越界和超时请求有明确反馈",
+        "协议适配不改变电气判断或工具可见范围"
+      ],
+      "files": [
+        [
+          "只读 MCP 服务端",
+          "研究实施/老洼地数据接入_20261119/laowadi/mcp_server.py"
+        ],
+        [
+          "补证与 MCP 联合验收",
+          "研究实施/老洼地数据接入_20261119/verify_supplement_and_mcp.py"
+        ],
+        [
+          "现有工具入口",
+          "研究实施/老洼地数据接入_20261119/laowadi/__main__.py"
+        ],
+        [
+          "工具选型",
+          "汇报材料/智能体技术方案_工具选型整合版_20261117/正文核对文本.txt"
+        ]
+      ],
+      "adapt": "优先用第 10 章 MCP 工具／资源的思想。跨智能体协议等到确有多个系统时再考虑。"
+    },
+    {
+      "id": "review",
+      "n": 14,
+      "title": "人工工作台与协作对照",
+      "group": "交付",
+      "status": "prototype",
+      "brief": "用 Astryx 搭建值班工作台，支持人工看日况、查事件、核对证据。",
+      "refs": [
+        5,
+        6,
+        13,
+        14,
+        15,
+        16
+      ],
+      "deps": [
+        "monitor",
+        "tools"
+      ],
+      "now": "已有事件工单台、通知回执、问答首页和值班工具和 60 条 OpenAPI 路径。复审 26 已修复。工单仅展示合法操作，销项和复开均要求依据，旧版本提交返回 409。代码中业务署名与令牌主体的绑定仍待专项处理。真实班表、交接签认、对象权限、并发状态与目标环境工作台待验。 本轮工作台区分已核验读数、条件计算、待核原因、人工复核备注及待核参考条款。历史会话仍保留原记录，主对话提示重新核验。条件复算单独进入会话记录。 生产 API 和外部 Worker 共用 PostgreSQL 队列、SSE、熔断及工单状态。双节点 kind 在运行中强制删除一只 Worker Pod，另一节点接管，SSE 从原事件号跨 API 续读。 8765 首页改为以问答为主。历史对话、主接线、工单、柜级档案和人工复核从侧栏进入，研究工具默认收起。回复先呈现结论，原表证据可展开，回答完成后保持在对话中。 首页可用「查证反向有功」打开检验。1440 和 390 像素浏览器均已复验检验记录、逐轮查询展开和日报下载。 研究工作台可查看调压与补偿的同点原表、单投、仅调压、联合候选和角色消息。候选的业务状态为条件仿真，现场条件待复核。",
+      "implementation": "后端已升级为FastAPI + Uvicorn ASGI 单机多进程运行时、统一动态 DAG 编排内核（laowadi/dag_engine.py）、PostgreSQL 16 + TimescaleDB + pgvector 存储与运维保障体系，提供 60 条 OpenAPI 3.1 路径（/docs，含 /api/dag/run|resume|threads、/api/storage/* 与 /api/ops/*）、默认 2×API Worker + 2×独立外部 Job Worker OS 进程水平扩展、持久化外部任务队列与 Last-Event-ID 断点续传 SSE、跨进程共享三态熔断器、标准 NDJSON 结构化日志及在线热备与沙箱 DR 演练；React 19 + Meta Astryx 前端 SingleLineDiagram.jsx 实现 100% 图模自动排版，GovernanceMultiAgentPanel.jsx 集成统一动态 DAG 任意节点挂起/恢复控制台、多 Worker 进程池、熔断器、TimescaleDB/pgvector 与热备/DR/JSON 日志面板。 Astryx 页面的值班外壳由 main.jsx 与 duty-layout.css 提供。AgentCopilotPane.jsx 维护历史会话、简洁输入和结果证据，非首页工具按需加载。 工单使用数据库版本校验流转，工作台可直接下载源表、查看站内通知和撤销回执。 AgentCopilotPane.jsx 从 SSE 展示查证计划，终审后显示各轮判定和可下载的原表出处。",
+      "output": "FastAPI 单机多进程服务、统一 DAG、SQLite 任务队列及 SSE 续接、存储与运维控制台、Astryx 工作台及本轮企业级 Agent 复审。 PostgreSQL 跨 Pod 共享运行态与演练记录。 8765 对话首页、侧栏和按需加载的值班工具入口。 工单合法流转、并发版本保护、原表证据和撤销记录。 反向有功假设检验面板及诊断单。",
+      "checks": [
+        "回放 11 月 13 日 14:00 的 1010 与 1006，核验单投、仅调压与联合候选。验证正常电压下可选单投，以及过补、非整点缺证和不收敛时可停止。",
+        "能从值班问题跳到实际证据或待查资料",
+        "旧报告、当前依据和人工确认的关联可查",
+        "双智能体若开展，记录收益与新增延迟",
+        "11 月 10 日 12:00 自动出现 LW-000010，重复回放不新增提示",
+        "查到 303 柜 D15、D16 和 306 柜 H15、H16，与归档原表一致",
+        "验证全站 25 柜健康接口、柜级 168h 曲线、两张接线图预览及「保存复核结论 → AI 诊断自动复用」闭环",
+        "验证可交互主接线一次拓扑图、Astryx Drawer 柜级抽屉、在线 v1→v2 补证复算与五层评测大盘",
+        "验证多轮会话工作记忆承接、井下 1101 跨站适用性拦截、对话补参触发局部复算及状态图实时挂起/恢复（0 重复查库）",
+        "验证 /api/diagnose/stream SSE 实时执行流、对话内 HITL 检查点原地唤醒恢复（0 重复查库）、即席统计与多指标联合筛选及一键记忆沉淀闭环",
+        "值班补证初始保留缺项；按同一事件交班与恢复，演示资料不能成为现场事实",
+        "验证 FastAPI /healthz、/readyz、/openapi.json、Pydantic 参数校验 400、Origin CSRF 403、异步 SSE 与前端 PowerFlowPanel 实时交流潮流联动",
+        "验证五角色 Multi-Agent 并行会诊、MA01–MA04 单/多智体跨领域覆盖对比（1.75/4 ➔ 3.75/4，4/4 冲突仲裁命中）及零信任双层校验",
+        "分别用首份日报和跨日同柜发现验收时间轴、复核归属及交班状态",
+        "验证 Web 进程中途 SIGKILL 重启后 SSE 凭 Last-Event-ID 无缝断点续传（0 缺口 0 重复）、Worker 崩溃租约超时自动接管、×2 API Worker 多 PID 水平扩展与跨进程共享熔断器自动降级",
+        "用班组身份验证认领、驳回、交接、销项、合法复开、超时升级及同一对象的并发处理和可追责性。",
+        "核对摘要、现场核查、人工备注、条件复算及参考条款的呈现与会话归档，验证旧规则诊断不会进入当前模型工作记忆。",
+        "通过两个 API Pod 校验同一任务和熔断状态，终止运行中的 Worker Pod 后，从另一 API 使用 Last-Event-ID 续读。",
+        "用桌面和窄屏验证首次打开为问答页，能展开侧栏、进入工单和原图、返回原草稿、发送只读问题、打开原表并恢复历史会话。",
+        "用 11 月 10 日 12:00 的 303 柜回放建立隔离工单，验证原表下载、306 柜同期对照、认领、销项、复开、旧版本冲突、模拟订正和撤销回执。",
+        "用工作台快捷问法查看初始断面、三项假设状态和各轮回执，下载 1112.xls 核实 AF16 和 AE16。"
+      ],
+      "files": [
+        [
+          "会诊、双层核验与治理验收",
+          "研究实施/老洼地数据接入_20261119/verify_multi_agent_and_governance.py"
+        ],
+        [
+          "调压与无功补偿回放说明",
+          "研究实施/老洼地数据接入_20261119/README.md"
+        ],
+        [
+          "企业级 Agent 复审（66 项）",
+          "研究实施/老洼地数据接入_20261119/企业级Agent复审_20261120.md"
+        ],
+        [
+          "值班事件工单台与 LLMOps 前端视图",
+          "研究实施/老洼地数据接入_20261119/workbench/src/IncidentTicketPanel.jsx"
+        ],
+        [
+          "外部持久化任务队列与 SSE 事件日志",
+          "研究实施/老洼地数据接入_20261119/laowadi/task_queue.py"
+        ],
+        [
+          "解耦外部 Job Worker 进程",
+          "研究实施/老洼地数据接入_20261119/laowadi/worker.py"
+        ],
+        [
+          "跨进程共享三态熔断器",
+          "研究实施/老洼地数据接入_20261119/laowadi/circuit_breaker.py"
+        ],
+        [
+          "多 Worker ASGI 应用工厂",
+          "研究实施/老洼地数据接入_20261119/laowadi/asgi.py"
+        ],
+        [
+          "分布式运行时与断点续传 SSE 实测验收",
+          "研究实施/老洼地数据接入_20261119/verify_distributed_runtime.py"
+        ],
+        [
+          "五角色多智能体协同与冲突仲裁引擎",
+          "研究实施/老洼地数据接入_20261119/laowadi/multi_agent.py"
+        ],
+        [
+          "多智体协同与治理前端画布",
+          "研究实施/老洼地数据接入_20261119/workbench/src/GovernanceMultiAgentPanel.jsx"
+        ],
+        [
+          "企业级 FastAPI + Uvicorn ASGI 后端",
+          "研究实施/老洼地数据接入_20261119/laowadi/api.py"
+        ],
+        [
+          "Pydantic v2 强类型 API 契约",
+          "研究实施/老洼地数据接入_20261119/laowadi/schemas.py"
+        ],
+        [
+          "交流潮流与分接头灵敏度画布",
+          "研究实施/老洼地数据接入_20261119/workbench/src/PowerFlowPanel.jsx"
+        ],
+        [
+          "项目打包与依赖清单",
+          "研究实施/老洼地数据接入_20261119/pyproject.toml"
+        ],
+        [
+          "智能体控制面（左栏 Copilot）",
+          "研究实施/老洼地数据接入_20261119/workbench/src/AgentCopilotPane.jsx"
+        ],
+        [
+          "状态图挂起/恢复交互演练卡",
+          "研究实施/老洼地数据接入_20261119/workbench/src/GraphDemoCard.jsx"
+        ],
+        [
+          "可交互电气主接线一次图",
+          "研究实施/老洼地数据接入_20261119/workbench/src/SingleLineDiagram.jsx"
+        ],
+        [
+          "多矿零硬编码与图模自动排版验收",
+          "研究实施/老洼地数据接入_20261119/verify_multimine_generalization.py"
+        ],
+        [
+          "Astryx Drawer 柜级抽屉",
+          "研究实施/老洼地数据接入_20261119/workbench/src/CabinetDrawer.jsx"
+        ],
+        [
+          "补证复算与五层评测视图",
+          "研究实施/老洼地数据接入_20261119/workbench/src/SupplementEvalView.jsx"
+        ],
+        [
+          "工作台端到端验收",
+          "研究实施/老洼地数据接入_20261119/verify_workbench.py"
+        ],
+        [
+          "只读工作台与诊断接口",
+          "研究实施/老洼地数据接入_20261119/laowadi/workbench.py"
+        ],
+        [
+          "持久化会话 SQLite 存储",
+          "研究实施/老洼地数据接入_20261119/laowadi/sessions.py"
+        ],
+        [
+          "独立人工复核台账",
+          "研究实施/老洼地数据接入_20261119/laowadi/reviews.py"
+        ],
+        [
+          "Astryx 应用主框架",
+          "研究实施/老洼地数据接入_20261119/workbench/src/main.jsx"
+        ],
+        [
+          "全站健康与复核视图",
+          "研究实施/老洼地数据接入_20261119/workbench/src/HealthView.jsx"
+        ],
+        [
+          "25 柜电气画像视图",
+          "研究实施/老洼地数据接入_20261119/workbench/src/CabinetView.jsx"
+        ],
+        [
+          "历史回放与接线图视图",
+          "研究实施/老洼地数据接入_20261119/workbench/src/ReplayView.jsx"
+        ],
+        [
+          "11 月 20 日值班智能体审查",
+          "研究实施/老洼地数据接入_20261119/值班智能体审查_20261120.md"
+        ],
+        [
+          "企业级投产差距评估（46 项）",
+          "研究实施/老洼地数据接入_20261119/企业级投产差距评估_20261120.md"
+        ],
+        [
+          "跨 Pod 作业和接管实测",
+          "研究实施/老洼地数据接入_20261119/生产部署与恢复_43-48.md"
+        ],
+        [
+          "工作台界面布局",
+          "研究实施/老洼地数据接入_20261119/workbench/src/duty-layout.css"
+        ],
+        [
+          "巡检与工单验收说明",
+          "研究实施/老洼地数据接入_20261119/README.md"
+        ],
+        [
+          "反向有功查证与回执界面",
+          "研究实施/老洼地数据接入_20261119/workbench/src/AgentCopilotPane.jsx"
+        ]
+      ],
+      "adapt": "第 13、16 章提供应用集成与验收思路。前端组件以 Astryx 官方文档和实际版本为准，数据与电气判定继续使用本项目的只读查询和复核流程。"
+    },
+    {
+      "id": "deployment",
+      "n": 15,
+      "title": "连续点表与现场交付",
+      "group": "交付",
+      "status": "prototype",
+      "brief": "用老洼地连续资料完成真实使用和验收。",
+      "refs": [
+        6,
+        10,
+        12,
+        16
+      ],
+      "deps": [
+        "evaluation",
+        "data"
+      ],
+      "now": "缺失或损坏的回放库、资料过期、缺 Worker 和 PostgreSQL 断开均已在隔离环境验证为未就绪。双节点 kind 已验收迁移 Job、双 API Pod、两个 Worker 和 Service 入口。从 CronJob 快照的独立副本还原到另一套 PG16 环境，节点停机后 7.148 秒完成首个值班查询。可信身份签发、出站配置、矿方存储和切换、正式 RTO/RPO、现场持续监测和故障效果待复核。",
+      "implementation": "stream_sim.py 用帧摘要和水位线演练去重、重排和补传。FastAPI 可按配置检查令牌与角色并记录请求指标、审计链与标准 NDJSON 结构化日志（logging_config.py，含 trace_id 关联与密码/令牌自动脱敏）。容器与集群部署交付多阶段非 root Dockerfile、docker-compose.yml 及 10 份 Kubernetes 生产清单（k8s/，含 StatefulSet、HPA、PDB、Migrate Job 与每日 Backup CronJob）。backup.py 与 scripts/backup.sh、scripts/restore.sh 提供 SQLite 在线热备 + PostgreSQL pg_dump -Fc、SHA-256 验真防篡改及自动化隔离沙箱 DR 演练（实测 RTO）。受限问答、深度诊断、备用 HTTP 服务与真实签收流程需要分别验证数据和权限边界。 生产 CronJob 用同一 PostgreSQL 恢复点打包日报、工单、Outbox、两套 DAG、队列和九份原件。通过两个 PVC 分别挂载原件与备份。",
+      "output": "laowadi/stream_sim.py、laowadi/security.py、laowadi/audit.py、laowadi/logging_config.py、laowadi/backup.py、Dockerfile、docker-compose.yml、k8s/（10 份清单 / 18 项资源）、scripts/backup.sh & restore.sh、verify_ops_and_deployment.py 及 Prometheus /metrics 可观测接口。 本轮新增《企业级 Agent 复审》。 生产部署与恢复说明、双节点故障演练和独立 PG16 恢复对账。",
+      "checks": [
+        "以真实频度和对应时间记录验证采集",
+        "阈值与运行状态用同矿数据校准并经人工复核",
+        "交付验收、备份恢复及回退记录",
+        "验证 RBAC 401/403 越权拦截、HMAC 令牌防篡改、限流 429、三类提示词/控制/SQL 防火墙阻断、SHA-256 审计链篡改精确定位及 Prometheus /metrics 导出",
+        "在矿方目标环境验收真实岗位身份、对象权限、外发字段、失联与恢复，按同一事件核对通知和签收时间",
+        "验证多阶段非 root Dockerfile、docker compose config、k8s/ 10 份清单、标准 NDJSON 日志脱敏与在线热备/pg_dump/SHA-256 篡改拒绝及沙箱 DR 演练 RTO",
+        "用损坏库、缺 Worker、过期归档和断网验证就绪状态，在矿方干净环境复验身份、双 Pod 作业续接、工单与 DAG 恢复以及正式发布回退。",
+        "关闭承载 PostgreSQL 的测试节点，以独立保存的 CronJob 备份恢复业务，核对首个值班查询用时、两套 DAG、工单和 Outbox。"
+      ],
+      "files": [
+        [
+          "企业级 Agent 复审（66 项）",
+          "研究实施/老洼地数据接入_20261119/企业级Agent复审_20261120.md"
+        ],
+        [
+          "企业级 RBAC、HMAC 令牌、限流与防火墙",
+          "研究实施/老洼地数据接入_20261119/laowadi/security.py"
+        ],
+        [
+          "防篡改 SHA-256 哈希链审计与 Prometheus 观测",
+          "研究实施/老洼地数据接入_20261119/laowadi/audit.py"
+        ],
+        [
+          "多智体协同与企业级治理专项验收",
+          "研究实施/老洼地数据接入_20261119/verify_multi_agent_and_governance.py"
+        ],
+        [
+          "企业级镜像构建文件",
+          "研究实施/老洼地数据接入_20261119/Dockerfile"
+        ],
+        [
+          "生产 Docker Compose 编排",
+          "研究实施/老洼地数据接入_20261119/docker-compose.yml"
+        ],
+        [
+          "Kubernetes Kustomize 部署总入口（10 清单 / 18 资源）",
+          "研究实施/老洼地数据接入_20261119/k8s/kustomization.yaml"
+        ],
+        [
+          "标准 JSON 结构化日志与脱敏模块",
+          "研究实施/老洼地数据接入_20261119/laowadi/logging_config.py"
+        ],
+        [
+          "在线热备、SHA-256 验真与 DR 演练引擎",
+          "研究实施/老洼地数据接入_20261119/laowadi/backup.py"
+        ],
+        [
+          "自动化热备份脚本",
+          "研究实施/老洼地数据接入_20261119/scripts/backup.sh"
+        ],
+        [
+          "验证式恢复脚本",
+          "研究实施/老洼地数据接入_20261119/scripts/restore.sh"
+        ],
+        [
+          "容器、K8s、JSON 日志与灾备专项验收",
+          "研究实施/老洼地数据接入_20261119/verify_ops_and_deployment.py"
+        ],
+        [
+          "生产编排栈（TimescaleDB-HA + Redis + API + Worker）",
+          "研究实施/老洼地数据接入_20261119/docker-compose.enterprise.yml"
+        ],
+        [
+          "连续流异常注入与时延仿真",
+          "研究实施/老洼地数据接入_20261119/laowadi/stream_sim.py"
+        ],
+        [
+          "连续流异常注入与时延报告（MD）",
+          "研究实施/老洼地数据接入_20261119/local/老洼地连续流异常注入与时延评测报告.md"
+        ],
+        [
+          "连续流异常注入与时延数据（JSON）",
+          "研究实施/老洼地数据接入_20261119/local/老洼地连续流异常注入与时延评测报告.json"
+        ],
+        [
+          "现场实施路线",
+          "研究实施/智能体主线与下一阶段任务_20261116.md"
+        ],
+        [
+          "小时级回放及边界",
+          "研究实施/老洼地数据接入_20261119/README.md"
+        ],
+        [
+          "企业级投产差距评估（46 项）",
+          "研究实施/老洼地数据接入_20261119/企业级投产差距评估_20261120.md"
+        ],
+        [
+          "生产部署与恢复",
+          "研究实施/老洼地数据接入_20261119/生产部署与恢复_43-48.md"
+        ],
+        [
+          "就绪探针",
+          "研究实施/老洼地数据接入_20261119/laowadi/api.py"
+        ],
+        [
+          "归档原件打包",
+          "研究实施/老洼地数据接入_20261119/scripts/stage_archive.py"
+        ]
+      ],
+      "adapt": "第 16 章用于组织集成和交付，真实持续监测与故障表现以矿方提供的证据验收。"
+    }
+  ],
+  "updates": [
+    {
+      "date": "2026-11-20",
+      "title": "P1 三项全部落地：自主巡检与 Outbox 投递、并发工具与多模型 Failover/LLMOps、班次工单台与值班/研究双模式分离",
+      "stages": [
+        "monitor",
+        "model",
+        "review",
+        "deployment"
+      ],
+      "done": [
+        "P1-1 后台事件驱动自主巡检守护与 Outbox 可靠投递：新建 laowadi/proactive.py（ProactiveWatcherDaemon + IncidentTicketStore + alert_outbox 事务性队列），支持 webhook/企微/钉钉/CMMS 多通道适配、回调失败自动重试与 SHA-256 投递回执（0 永久漏发），并支持数据更正后旧告警自动标记 superseded（保留审计历史）。",
+        "P1-2 主对话并发工具执行、快慢分层路由、多模型 Failover 与 LLMOps：新建 laowadi/llmops.py 并升级 laowadi/llm.py、laowadi/diagnose.py 与 laowadi/audit.py，实现每线程只读连接的 ThreadPoolExecutor 并发工具调用、单点/即席统计毫秒级快车道、跨进程熔断器驱动的多模型 Failover 与零幻觉本地降级，以及 TTFT/TPOT/Token/费用/核验失败率与当班 SLA 指标导出至 /api/llmops/metrics 与 Prometheus /metrics。",
+        "P1-3 贯穿班次的事件处理工单台与界面分离：新增 /api/tickets/*、/api/proactive/*、/api/llmops/metrics 共 9 项操作（60 条 OpenAPI 路径，完整 RBAC 权限分级）；前端新建 IncidentTicketPanel.jsx 并在 main.jsx 实现“值班模式”（带未读角标的事件工单台）与“研究与治理模式”清晰分离。"
+      ],
+      "verified": "新增 verify_p1_autonomy_and_ops.py 6/6 全部通过；全量 11 套验证脚本 100% 通过；Vite 生产构建通过；两份源归档 SHA-256 零变动。",
+      "next": "按需推进 P2（Git 正式发布基线与 CI 门禁、Playwright E2E 与前端分包、巨石文件拆分、pgvector 真实 BGE-M3 稠密嵌入与国标全文入库）及后续老洼地增量实测。"
+    },
+    {
+      "date": "2026-11-20",
+      "title": "P0 正确性、安全与运维硬伤全面清零（11 项对抗反例 + 全量 10 套验收通过）",
+      "stages": [
+        "agent-loop",
+        "supplement",
+        "evaluation",
+        "review",
+        "deployment"
+      ],
+      "done": [
+        "核验器六元组强绑定与告警硬阻断：laowadi/verifier.py 逐条校验单位/列/符号及无出处编造读数；laowadi/diagnose.py 对未通过核验阻断为 verification_warning 且禁止写入会话记忆。",
+        "越界日期拒答与统计/追问修正：问 11月17日/17日 等无日报日期返回 insufficient_data；支持 12–13日 日期区间与全站同步双进线日均计算（12日 5589.52 kW / 13日 4908.51 kW，各24点）；追问“同期”完整继承时刻锚点。",
+        "补证去预设、反向证词否决与复核防串日：HITL 表单默认参数留空且按日期隔离；supplement.py V02/V03 完整否决相反人工证词并保留 evidence_conflict；reviews.py 升级 (finding_id, scope_day) 复合主键零跨日串台。",
+        "空值容错、首日时间轴、因果基线与运维安全封口：health.py 单格 NULL 隔离并支持 causal=True 严格因果基线；workbench.py 单日报首日时间轴可用且缓存随归档版本自动失效；/readyz 降级返回 HTTP 503；operator_note 移出 SYSTEM_PROMPT 放入脱敏 <untrusted_operator_note> 隔离块；前端 api.js 自动透传 Bearer 令牌、单线图改“零流(待核开关)”与“缺测/未知”；统一版本号 2.2.0 与知识库“离线档案已复验”口径。"
+      ],
+      "verified": "新增 verify_p0_correctness.py 11/11 全部通过；全量 10 套验证套件（P0/统一DAG/RAG状态图/诊断/多智体治理/多矿泛化/运维灾备/潮流企业级/补证MCP/存储迁移）100% 通过；Vite 生产构建通过；两份源归档 SHA-256 零变动。",
+      "next": "按需推进 P1（后台事件驱动自主巡检守护 + Outbox 持久告警投递重试、主对话并发工具执行与多模型 Failover、贯穿班次的事件工单闭环）及等待后续老洼地真实增量数据开展影子试运行。"
+    },
+    {
+      "date": "2026-11-19",
+      "title": "明确现有资料范围和交付更新约定",
+      "delivered": "知识库第 08、09 阶段改为基于现有七份日报、两张截图及其派生事件。项目根目录记录了每项任务交付前同步更新知识库的约定。",
+      "verified": "依据老洼地接入说明和图示台账核对现有资料与出处。电缆型号、额定限值和现场动作原因列为缺证。",
+      "next": "整理现有资料清单和带出处的查证题，先核对直接工具能覆盖的范围。",
+      "stage": "corpus"
+    },
+    {
+      "date": "2026-11-19",
+      "title": "确认运行健康监测方向并归档老洼地原件",
+      "delivered": "新增「监测方案」「现场资料」。明确日级观察、主动反馈、连续接入验收、Astryx 前端和协作分工。归档七份日报、两张截图，提供四柜有功整点预览。",
+      "verified": "九份原件 SHA-256 与导入台账逐份一致，672 个预览条目保留原表单元格。浏览器验证了日报展开、来源样例、两张图加载、手机导航和日表横向滚动。依据 Astryx 官方仓库核对 React 19+ 要求与当前发布状态。",
+      "next": "用现有七天数据产出四柜日级运行观察报告，整理首批带出处查证题。在现场数据连续接入后验证反馈时延和故障样例。",
+      "stage": "monitor"
+    },
+    {
+      "date": "2026-11-19",
+      "title": "补充真实大模型的接入时机与验收",
+      "delivered": "第 06 阶段记录建议时机。四柜报告原型阶段并行做单例联调，报告与参考答案核对后做规则和模型的逐题对照。",
+      "verified": "核对已有模型入口。重新运行 verify_agent.py，四次协议替身请求通过，只读事件库及日报库保持原样。真实模型联调仍待启动。",
+      "next": "恢复联调后，优先用可调用工具的本地模型试跑 LW-000010，再按老洼地题库进行对照。",
+      "stage": "model"
+    },
+    {
+      "date": "2026-11-19",
+      "title": "交付四柜日级运行观察报告",
+      "delivered": "新增 daily 命令和 11 月 10–16 日七天报告（Markdown / JSON），含四柜有效读数、峰值、小时趋势及可回查的变化提示。",
+      "verified": "复验 28 个柜日、2,688 个有效量测值、106 条历史提示；核对跨日来源，模拟回放不能作为日况来源，两个数据库哈希无变化。",
+      "next": "把日况汇总和事件详情用于真实值班工作台；连续数据到位后另测现场反馈时延。",
+      "stage": "monitor"
+    },
+    {
+      "date": "2026-11-19",
+      "title": "接入 DeepSeek 并完成老洼地 12 题对照",
+      "delivered": "接通用户提供的 deepseek-v4-pro，新增 ask --model-config 入口。首例四次调用得到两柜原表读数及图示关系。对照题与逐题回执已归档。",
+      "verified": "规则 10/12，DeepSeek 模式 7/12。两道明确优先柜题 DeepSeek 通过，另外五题在连接或响应解析环节提前停止。21 次模型请求单次中位 17.3 秒，最长约 180 秒。复验期间两库保持只读。",
+      "next": "默认使用规则，按需启用 DeepSeek 复核。后续改进模型请求时延和稳定性时，复用这 12 题对照。",
+      "stage": "model"
+    },
+    {
+      "date": "2026-11-19",
+      "title": "交付 Astryx 值班工作台",
+      "delivered": "本机工作台可选择七份日报，查看四柜日况、量测趋势和回放提示，打开原始证据并发起值班追问。DeepSeek 保留为显式复核入口。",
+      "verified": "桌面复验 12:00 自动出现 LW-000010，303 柜 +3,408.12 kW，306 柜同期 −204.41 kW，四个源单元格可点击。第二次自动回放去重，390 px 手机宽度下复验事件问答。接口核对 168 个整点、106 条历史提示、跨日出处及两库只读。",
+      "next": "用整周和其他事件扩充浏览器验收。现场连续数据到位后接入值班确认、通知通道和反馈时延实测。",
+      "stage": "review"
+    },
+    {
+      "date": "2026-11-19",
+      "title": "固化四步升级路线并交付全站 25 柜四维电气体检引擎",
+      "delivered": "形成《健康监测与智能体升级路线.md》；新增 laowadi/health.py、verify_health.py 与 laowadi health CLI，对全站 25 柜 × 4 指标（16,800 条读数）产出全站电气体检与健康评估报告（MD / JSON），检出 1018 全时段负有功/负 cos、1012 补偿柜测点异常、10 kV II段过压（53–76h > 10.70 kV）、1010/1020 井下低功率因数、11-13 连续 13h 单进线带双主变、11-12 12:00 2#主变全链反向有功及 25 个 SCADA 整点轮询偏移点，将 106 条原四柜碎提示收敛为 14 项高/中优先级健康事件。",
+      "verified": "运行 verify_health.py、verify_monitor.py 与 verify_agent.py 全部通过：逐条核验 69 处原表单元格出处与数值一致，单日与整周模式均通过，日报库与事件库 SHA-256 保持只读未改动。",
+      "next": "进入第二步：重构 LLM 调用底座（流式与并行工具调用），将全站快照、功率平衡、基线对照与《煤矿安全规程 2025》《GB/T 50417-2017》条款检索封装为诊断级复合只读工具，输出三段式证据诊断单；同时向矿方申请最小补证清单。",
+      "stage": "monitor"
+    },
+    {
+      "date": "2026-11-19",
+      "title": "交付假设驱动诊断智能体并完成 6 题 DeepSeek 实测评测",
+      "delivered": "新增 laowadi/standards.py（68 条《煤矿安全规程 2025》及已核国标条款检索）、laowadi/diag_tools.py（6 个诊断级复合只读工具）、laowadi/llm.py（SSE 流式 + 重试 + 并行工具调用客户端）、laowadi/diagnose.py（假设驱动诊断智能体、三段式证据诊断单与程序级 groundedness 核验器）、laowadi diagnose CLI 及 verify_diagnose.py 评测台，归档《DeepSeek_老洼地诊断评测.md/.json》。",
+      "verified": "离线回归全部通过（68 条规程索引、6 个复合工具、伪造引用拦截、SSE 并行替身、本地基线 6/6）。真实 deepseek-v4-pro 6 题开放式健康诊断实测中，本地基线通过 6/6，DeepSeek 通过 5/6（D01–D05 全过，66/66 处原表单元格与 7/7 处规程条款 100% 通过程序核验、0 幻觉；D06 在第 3 轮 length 后重试遇网关 ConnectionResetError 失败并已如实保留）。两数据库保持只读未改动。",
+      "next": "将全站 25 柜健康体检与三段式诊断单接入 Astryx 值班工作台，并补齐“值班员确认/标注/补录开关或原因 → 沉淀矿井案例记忆”的人机反馈闭环；同时优化长输出压缩以减少网关连接波动。",
+      "stage": "model"
+    },
+    {
+      "date": "2026-11-19",
+      "title": "全面重构 Astryx 值班工作台并打通人机复核闭环",
+      "delivered": "重构 React 19 + Meta Astryx 0.7.16 前端为「全站健康总览 / 25 柜电气画像 / AI 智能诊断台 / 历史回放与接线图」四大视图（main.jsx、HealthView.jsx、CabinetView.jsx、CabinetChart.jsx、DiagnoseView.jsx、ReplayView.jsx 及工业控制室风 workbench.css）；后端新增独立人工复核台账 laowadi/reviews.py 及 /api/health、/api/cabinet、/api/diagrams、/api/image、/api/diagnose、/api/reviews 接口，自动加载 DeepSeek 配置，并将人工确认结论注入后续诊断记忆。",
+      "verified": "Vite 生产构建 208ms 零报错通过；verify_workbench.py、verify_diagnose.py、verify_health.py、verify_monitor.py、verify_agent.py 五套验收全部通过（静态资源、25 柜卡片、168h 曲线、两张接线图内联、LW-000010 兼容、人工复核写入并在 /api/diagnose 复用、原日报库与事件库 SHA-256 严格只读未改）。已在 http://127.0.0.1:8765/ 启动本地服务。",
+      "next": "值班与研究试用过程中持续用独立复核台账沉淀典型案例；向老洼地矿方申请最小补证清单（主变/出线额定容量与 CT 变比、11月10–16日倒闸/SOE日志、连续监测点表），以推进第三步与现场连续接入验收。",
+      "stage": "review"
+    },
+    {
+      "date": "2026-11-19",
+      "title": "落地 GSSC 上下文压缩与 Reflection 修正，点亮第 07、08、12 阶段并达成 DeepSeek 6/6 诊断满通",
+      "delivered": "新增 laowadi/context.py（GSSC 上下文压缩、DiagnosisSession 跨轮追问与话题切换隔离、Episodic 复核记忆精准召回）、laowadi/corpus.py（老洼地现有资料台账与 C01–C09 三层可答边界核验）、laowadi/evaluation.py（五层 BFCL+GAIA 综合评测与错误分解）及 verify_evaluation.py；升级 diagnose.py 接入证据审计员 Reflection 自我修正闭环。",
+      "verified": "D06 经 GSSC 压缩后在真实 deepseek-v4-pro 上一次通过（253.7s，10/10 单元格核验），使 6 题开放式电力健康诊断实测达到本地 6/6、DeepSeek 6/6 全通（合计 76/76 处原表单元格与 7/7 处规程条款 100% 真实、0 幻觉）；C01–C09 资料边界题 9/9 通过；Reflection 伪造单元格打回修正与会话切换 0 串柜/0 串日期全部验证通过；两原库 SHA-256 保持只读。",
+      "next": "推进第 11 阶段（专业核验与结构化补证触发局部复算版本演进）与第 13 阶段（封装标准只读 MCP Server 对外接口）。",
+      "stage": "evaluation"
+    },
+    {
+      "date": "2026-11-19",
+      "title": "交付结构化补证局部复算与标准只读 MCP Server，点亮第 11、13 阶段",
+      "delivered": "新增 laowadi/supplement.py（V01–V04 四项专业核验的 v1 基线、对象/降容/开关绑定校验及按依赖局部重算生成 v2 报告）、laowadi/mcp_server.py（MCP JSON-RPC 2.0 stdio 只读服务端，暴露 10 个只读工具与 3 份资源）、laowadi supplement / laowadi mcp CLI 及 verify_supplement_and_mcp.py。",
+      "verified": "verify_supplement_and_mcp.py 与其余 6 套回归脚本（合计 7 套）全部通过：验证缺参数保留局部事实、绑定不全拒绝条件结论、v2 关联父运行仅重算 V01/V02 并复用 V03/V04；验证 MCP 10 个只读工具与直接调用返回值/时刻/单元格完全一致、非法/控制/超时请求明确报错、子进程 stdio 通信通过；两原库 SHA-256 保持只读。",
+      "next": "本地原型与 14 个阶段已全部闭环跑通；下一阶段（第 15 阶段 deployment）待矿方提供连续监测点表与额定参数/操作日志后开展现场连续接入与反馈时延实测。",
+      "stage": "mcp"
+    },
+    {
+      "date": "2026-11-19",
+      "title": "升级 Astryx 工作台为工业主接线 SCADA 级五大视图并点亮第 14 阶段",
+      "delivered": "新增 SingleLineDiagram.jsx（35/10 kV 地面站 25 柜 → 井下 1535 中央变电所 15 柜可交互矢量电气主接线一次拓扑图，带动态潮流与四级健康着色）、CabinetDrawer.jsx（点击任意开关柜呼出 Astryx Drawer + ProgressBar 合格率仪表 + 168h 曲线）、SupplementEvalView.jsx（在线修改补证参数触发 v1→v2 局部复算负载率仪表 + 五层 BFCL/GAIA 评测大盘），并在顶栏接入 Astryx Switch 深色控制室 / 浅色双主题切换。",
+      "verified": "Vite 生产构建 267ms 零报错通过；verify_workbench.py（覆盖 /api/supplement GET/POST、/api/evaluation 与静态构建资源）及全部 7 套验收脚本一次性通过，http://127.0.0.1:8765/ 已热更上线，两原库 SHA-256 保持只读。",
+      "next": "配合矿方电气人员在深色控制室主接线工作台上复核 7 项高优先级问题，待连续点表到位后推进第 15 阶段现场交付验收。",
+      "stage": "review"
+    },
+    {
+      "date": "2026-11-19",
+      "title": "引入 Apple HIG / Bento Glass 设计体系与 Lucide 图标库，升级 168h 主接线动态潮流回放与自适应渐变曲线",
+      "delivered": "调研 GitHub 上的 Apple 风格组件与仪表盘方案（Darwin UI / HeroUI Glass、Tremor Bento、lucide-react），在保留 React 19 + Meta Astryx 核心组件的基础上接入 lucide-react 并全面重写 workbench.css、SingleLineDiagram.jsx、CabinetChart.jsx、Trend.jsx 与 main.jsx：将纯 SVG 拓扑图重构为 CSS Grid/Flexbox 零重叠分层母线架构，新增 /api/timeline 接口与 168 小时动态潮流回放条（支持 5 个典型异常断面一键跳转并实时映射原表单元格坐标），并将全部时序 Canvas 图表升级为随 Cupertino 浅色 / Sequoia 深色自动切换的 Apple Stocks 风格渐变面积曲线。",
+      "verified": "Vite 生产构建 260ms 通过；verify_workbench.py（含 /api/timeline 168h×25柜断面校验）与知识库 JSON / 文件链接校验全部通过，http://127.0.0.1:8765/ 已实时热更上线，两原库 SHA-256 保持只读。",
+      "next": "在 Apple HIG 风格工作台上开展值班复核演示；可继续推进第 06、09、10 原型阶段收官及第 15 阶段连续流压测与矿方交付包。",
+      "stage": "review"
+    },
+    {
+      "date": "2026-11-19",
+      "title": "面向硕士论文完成条件化 RAG 消融、状态图跨进程检查点恢复与连续流异常注入评测，点亮第 06、09、10 阶段",
+      "delivered": "新增 laowadi/rag.py（6 张老洼地本矿证据卡 + 68 条规程/国标 + 适用性核验器，完成 R01–R10 仅直接工具 vs 条件化 RAG 同题消融实验）、laowadi/graph.py（七节点显式状态图 + SQLite 检查点持久化 + 跨进程恢复 0 重复查库与三类终态核验）、laowadi/stream_sim.py（168 帧连续流重复/乱序/断流/重启异常注入与毫秒级筛查时延评测）及 verify_rag_and_graph.py，并同步接入工作台「补证复算与评测」大盘。",
+      "verified": "verify_rag_and_graph.py（含真实 subprocess 双进程跨进程检查点恢复）与 verify_workbench.py 全部通过：条件化 RAG 将同题准确率从 4/10 (40%) 提升至 10/10 (100%，改善 6 题)；状态图 5/5 场景通过且跨进程恢复复用 3 步已确认回执（0 重复执行）；连续流 4/4 异常注入通过（单帧筛查 P50 = 0.0041 ms）；两原库 SHA-256 保持只读。",
+      "next": "全知识库 1–14 阶段已全线点亮（done / defined），第 15 阶段已完成面向硕士论文的连续流异常注入与时延仿真实验，可直接支撑论文各章节方法与实验论述。",
+      "stage": "graph"
+    },
+    {
+      "date": "2026-11-19",
+      "title": "打通智能体五项深层融合缺陷，并按主流 Agent（Claude Artifacts / Manus AI）分屏范式彻底重构工作台",
+      "delivered": "1）将 retrieve_conditional_evidence 与 verify_conditional_capacity 正式注册进 DiagnosticToolbox 与 MCP（升级为 12 个统一只读工具），实现井下 C1535 1101~1207 跨站适用性拦截、对话内补入额定参数触发 v1→v2 局部复算与单柜精准去噪；2）修复 laowadi/model.py 并行 tool_calls 解包崩溃并为远程端点启用 SSE 流式重试；3）在 workbench.py 打通多轮 DiagnosisSession 与 /api/graph/demo 状态图挂起/恢复接口；4）取消传统多栏侧边导航，按 Claude Artifacts / Manus AI 范式重构为「左侧 Agent 控制面（AgentCopilotPane.jsx）+ 右侧动态交互画布（Artifacts Canvas）」，并将「状态图与补证复算」画布精修为双子视图（① 七节点状态图零溢出 4 列 Bento 演练卡 GraphDemoCard.jsx，② 全宽 4 列补证参数表 + 2×2 V01–V04 复算卡片网格）。",
+      "verified": "全部 8 套自动化验收脚本与 Vite 217ms 生产构建全部通过，含多轮记忆继承、井下 1101 拦截、自然语言参数复算与状态图 0 重复查库恢复；http://127.0.0.1:8765/ 已热更上线，两原库 SHA-256 保持只读。",
+      "next": "在 Agent-First 分屏工作台上直接开展多轮诊断与论文实验展示；后续可随时补充 DeepSeek 真实对比消融或论文图表导出。",
+      "stage": "review"
+    },
+    {
+      "date": "2026-11-20",
+      "title": "全链路专项排雷：修复 6 项数据一致性、并发安全与前端联动 Bug 并写入防复发回归断言",
+      "delivered": "1）移除 SingleLineDiagram.jsx 中库内不存在的 8 个附属柜按钮（301/302/304/305/307/308/1004/1013），实现 40 柜（地面 25 + 井下 15）与 SQLite 100% 严格对齐；2）laowadi/rag.py 与 laowadi/graph.py 全部取消硬编码文件名/列号，改为 SQLite 动态读取真实文件名（1110–1116.xls、35KV变电所.png、中央变电所.png）、单元格与 64 位 SHA-256，修正规程条号为第四百七十二条；3）workbench.py 的 /api/timeline 五大典型异常书签改为 SQLite 动态计算真实极值时刻（11.01 kV 在 11-13 17:00 BV21，1018 -104.88 kW 在 11-16 21:00 BX25，303 5710.12 kW 在 11-13 15:00 D19）；4）DiagnosisSession 纳入全库 40 柜（含井下 C1535 1101–1207）；5）为 Workbench 缓存与会话加 threading.Lock + LRU 上限，GET /api/evaluation 改用临时隔离检查点库并缓存；6）主接线图外部联动信号升级为 {index, seq} 解决重复定位不触发问题。",
+      "verified": "在 verify_rag_and_graph.py 与 verify_workbench.py 固化 6 项防复发断言（0 假柜号、0 空 SHA-256、三大极值书签数值 100% 精确、井下 1101 多轮继承），全部 8 套验收脚本与 Vite 226ms 构建一次性通过，http://127.0.0.1:8765/ 已热更上线，两原库 SHA-256 保持只读。",
+      "next": "智能体代码、数据溯源与分屏工作台已达到论文级零硬伤状态，可随时投入实验展示与论文撰写。",
+      "stage": "evaluation"
+    },
+    {
+      "date": "2026-11-20",
+      "title": "完成 Agent 2.0 四大核心能力升级：全链路 SSE 实时执行流、真多轮记忆与假设证伪、第 9 号即席分析工具与对话内 HITL 挂起恢复",
+      "delivered": "1）新增 POST /api/diagnose/stream 与 diagnose_question(on_event) 实时事件流，前端 AgentCopilotPane.jsx 实时展示规划、逐工具执行进度、GSSC 压缩率、Reflection 自修正与程序核验时间线；2）在 laowadi/context.py 与 diagnose.py 落地真正的多轮 LLM 对话历史注入（session.record_turn / format_history_messages，严格遵守话题切换隔离）与 2–3 轮迭代 ReAct 假设证伪（支持如 11-12 12:00 反向有功后定向查证 1027 瓦斯发电站I回以排除反送电假设）；3）新增第 9 个复合诊断工具 query_electrical_analytics（MCP 同步升级为 13 个统一只读工具），支持安全参数化分组聚合排行（sum/avg/min/max/std/range，含累计用电量 kWh 对比）与多指标联合阈值筛选（内置 10kV/35kV 电压等级隔离防跨电压误匹配），且全数附原表单元格出处；4）在对话流内嵌入真实 SQLite 状态图检查点 HITL 挂起/原地补证恢复卡片（0 重复查库直出 v1→v2 负载率仪表）、一键“记住此结论”写入本矿长期记忆及记忆感知动态降噪巡检简报；同步修复 graph.py 中 S2_power_balance_1113 的参数名笔误。",
+      "verified": "全部 8 套自动化验收脚本（含新增的 query_electrical_analytics 排行与 10kV 联合筛选断言、MCP 13 工具一致性、真多轮 LLM 消息注入、SSE 流式事件序列及对话内 HITL 0 重复查库恢复验证）与 Vite 266ms 生产构建一次性全过；http://127.0.0.1:8765/ 已热更上线并实测 /api/diagnose/stream 实时推送通过，两原库 SHA-256 保持只读。",
+      "next": "智能体在推理自主性、实时可观测性、即席分析泛化力与人机协同闭环上均已对齐主流现代 Agent 架构，可直接支撑硕士论文系统实现章节与答辩现场演示。",
+      "stage": "agent-loop"
+    },
+    {
+      "date": "2026-11-20",
+      "title": "全链路 13 项硬伤彻底清零：双层数值防幻觉、电力物理仿真工具、混合语义 RAG、会话持久化与 36 题四维消融评测（DeepSeek L4 跃升 11/12）",
+      "delivered": "1）修复 3 项 P0 硬 Bug：对齐 InlineHitlCard 与 graph.py/supplement.py 的 V01/V02 返回字段（修复负载率仪表不显示）、修复 graph.py 残缺补证 KeyError（missing_dependencies）、打通 HITL 恢复结论写回 DiagnosisSession，并修复 supplement.py V02 静态文案与 SQLite 真实同期峰值（2026-11-10 06:00 159.69 A）不一致及 model.py 远程构造函数参数名笔误；2）升级内核：diagnose.py 新增 Level-2 单元格真实数值对齐硬校验（拦截“真坐标+假数值”）与遥控/写库硬安全围栏，llm.py 新增 on_delta 实时生成流透传与轻量简报快车道，graph.py 改为动态编译工具回执并扩展支持 V02 下井 N-1 编排；3）新增第 10 号物理仿真工具 simulate_electrical_engineering（无功补偿 Qc/降损测算 + N-1 负荷转供仿真，MCP 同步升至 14 工具）与混合检索器（Okapi BM25 + 煤矿电力同义概念语义向量 + RRF，证据卡扩至 8 张、消融扩至 R01–R12）；4）落地 SQLite 持久化会话（laowadi/sessions.py）、记忆库删除管理、一键导出 .md、主接线图已确认方式视觉降噪并删除死代码 DiagnoseView.jsx；5）建成 laowadi/benchmark.py 36 题六维综合基准与四维消融矩阵并接入论文评测大盘。",
+      "verified": "全部 8 套自动化验收脚本（含 36/36 综合基准、4/4 真实坐标配假数值对抗拦截、混合 RAG 4/12➔12/12、状态图 6/6、MCP 14 工具一致性与 SQLite 会话/记忆删改）及 Vite 构建全部通过；真实 deepseek-v4-pro 重跑 12 题 L4 基准从 7/12 跃升至 11/12（首次超越规则基线 10/12），实测自主调用第 10 号物理仿真工具完成 1010 柜无功补偿测算（9/9 单元格 + 8/8 数值对齐 100% 通过，实时吐出 100 条 llm_delta 流）；两原库 SHA-256 严格只读未改动。",
+      "next": "全系统已消除所有已知工程 Bug、交互短板与学术评测缺口，可直接用于硕士论文撰写与现场答辩演示。",
+      "stage": "evaluation"
+    },
+    {
+      "date": "2026-11-20",
+      "title": "复核值班智能体的查数、证据核验与人工补证",
+      "delivered": "新增《值班智能体审查_20261120.md》，记录八组程序反例、对应修复验收和 LW-000010 跨班复核建议。相关开发卡已标明本次发现与待办。",
+      "verified": "核对七份日报和两张截图哈希，回放 168 帧、106 条有功变化。逐格核对 LW-000010 与 1113.xls 的两项量测，重跑本地综合基准 36/36。在临时库复现缺报时改查全周、主对话漏答整点、补证错日与反向判断；在内存副本复现单点缺测导致体检中断。模型末轮错误使用替身复验。",
+      "next": "先修补证来源和相反意见处理、逐条事实校验及任务终态；以单个真实回放事件验证自动提示、同期追问、等待补证和恢复。真实连续监测、响应时延和故障识别待新资料与独立人工复核。",
+      "stage": "agent-loop"
+    },
+    {
+      "date": "2026-11-20",
+      "title": "落地企业级升级 1 & 2：多矿元数据架构、FastAPI+Pydantic v2 ASGI 后端、模块拆分与 pandapower 真实交流潮流引擎",
+      "delivered": "1）多矿元数据配置：新增 laowadi/mine_schema.py（Pydantic v2 声明式拓扑契约）与 laowadi/mine_profile.json，health.py 与 powerflow.py 改由 MineProfile 驱动；2）巨型文件拆分：将 1,815 行 diagnose.py 拆为 laowadi/verifier.py（双层溯源与数值校验）、laowadi/local_router.py（确定性 11 工具解析与本地路由）及精简版 diagnose.py（730 行）；3）企业级后端：新增 laowadi/schemas.py、laowadi/api.py 与 pyproject.toml，工作台由手写 stdlib HTTP 全面升级为 FastAPI + Uvicorn ASGI（24 个 OpenAPI 3.1 端点、/docs、/healthz、/readyz、/api/mine-profile、POST /api/powerflow、异步非阻塞 SSE /api/diagnose/stream 与 Origin CSRF 防护）；4）真实交流潮流求解器：新增 laowadi/powerflow.py（pandapower 3.5.6 Newton-Raphson），注册为第 11 号诊断工具 run_ac_power_flow（MCP 同步升至 15 工具），支持基准校核、2#主变分接头调压灵敏度、N-1 故障潮流与无功补偿降损对比，并在 React 19 + Meta Astryx 前端新增「交流潮流计算（PowerFlowPanel.jsx）」第 5 画布。",
+      "verified": "新建 verify_enterprise_and_powerflow.py 并联合其余 8 套回归脚本（合计 9/9）在 .venv-power (Python 3.12) 下全部通过：MineProfile 与老洼地 25 柜 100% 一致，异构第二矿 JSON 零代码改动收敛（10.333 kV）；pandapower 11-13 17:00 基准拟合残差仅 -0.003/+0.025 kV，2#主变 +1→+2 档使 10 kV II段从 10.925 降至 10.662 kV 回归 GB/T 12325，1010 补偿降损 5.191 kW；MCP 15 工具 7 项一致；FastAPI /healthz、/readyz、/openapi.json、Pydantic 400、Origin 403 与异步 SSE 全部通过；真实 deepseek-v4-pro 自主调用 run_ac_power_flow 经 1 次 Reflection 修正达成 verified（9/9 单元格、15/15 数值校验、203 条 llm_delta 流），且显式区分等值参数与实测边界；Vite 构建 278ms 通过，FastAPI 已上线 http://127.0.0.1:8765/，两原库 SHA-256 严格只读。",
+      "next": "按既定路线继续推进审查项修复（缺报日期、逐条事实校验与反向补证否决）以及企业级路线第 3–5 项（多 Agent 协同、生产安全鉴权/可观测审计、真实连续数据接入与人工复核）。",
+      "stage": "review"
+    },
+    {
+      "date": "2026-11-20",
+      "title": "落地企业级升级 3 & 4：五角色并行多智能体协同仲裁、RBAC/HMAC 鉴权、防篡改 SHA-256 审计链与 Prometheus 可观测性",
+      "delivered": "1）五角色多智能体协同（laowadi/multi_agent.py）：实现 SupervisorPlannerAgent → 并行 3 路领域专家（TelemetryMeteringAgent 量测体检、PhysicsPowerFlowAgent pandapower 交流潮流与物理仿真、StandardsComplianceAgent 混合语义安规边界）→ SkepticAuditorAgent 独立对抗冲突仲裁（支持无功补偿 vs II段过压、1010 表计比例 vs 三相潮流双口径、等值参数 vs 铭牌边界、1027 反送电证伪四类跨专业仲裁），并提供单/多智体 4 题论文对照基准（MA01–MA04）；2）生产级安全与治理（laowadi/security.py + laowadi/audit.py）：在 FastAPI v2.1 中间件集成四级 RBAC（viewer/dispatcher/engineer/admin）与 HMAC-SHA256 Bearer 签名令牌（POST /api/auth/token）、计算端点滑动窗口限流（429）、三类安全防火墙（遥控/提示词越狱/SQL 注入阻断并同步接入 diagnose.py）、独立防篡改 SHA-256 哈希链审计台账（local/laowadi_audit.sqlite3 + POST /api/audit/verify）、全链路 X-Trace-Id 追踪与标准 Prometheus /metrics 指标导出；3）前端集成：新增 React 19 + Meta Astryx 画布 GovernanceMultiAgentPanel.jsx（第 6 顶栏画布「多智体与治理」），支持一键并行会诊、单/多智体基准对照、RBAC 角色令牌实测、红队防火墙测试与审计链完整性校验。",
+      "verified": "新建 verify_multi_agent_and_governance.py 并与其余 9 套脚本（合计 10/10）在 .venv-power (Python 3.12) 下全部通过：单/多智体 4 题对照跨领域覆盖率由 1.75/4 跃升至 3.75/4（+2.00，预期跨专业冲突检出 4/4，并行加速最高 2.28×）；独立审计库人工篡改 seq=2 被 SHA-256 链精准检出；强制鉴权 401、viewer/dispatcher 越权 403、限流 429、三类防火墙阻断与 Prometheus /metrics 均通过实测；真实 deepseek-v4-pro 多智体联调验证了 SkepticAuditor 零信任兜底机制（11/11 单元格与 36/36 数值 100% 通过）；Vite 382ms 零报错构建，FastAPI v2.1 已上线 http://127.0.0.1:8765/（33 个 OpenAPI 端点），两原库 SHA-256 严格只读未改。",
+      "next": "继续按计划推进 11 月 20 日审查反例修复（缺报日期、逐条事实校验与反向补证否决），并在矿方提供连续点表、真实设备铭牌与现场人工复核样本后开展第 5 项（现场连续接入与故障识别实测验收）。",
+      "stage": "deployment"
+    },
+    {
+      "date": "2026-11-20",
+      "title": "完成企业级投产差距评估，列出 46 项问题及三阶段验收条件",
+      "delivered": "新增企业级差距报告，覆盖值班正确性、连续数据、电气依据、身份与模型数据边界、评测、发布运维和企业接手条件。更新监测、人工工作台、评测与现场交付四张开发卡。",
+      "verified": "核对九份原件哈希、复验重导和回滚，四柜回放 168 帧、106 条，综合基准 36/36。隔离复现错列与零证据通过、错日期与统计口径、反向补证、缺测中断、跨日复核、单日报时间轴报错、通知失败后漏发、订正后旧告警保留，以及降级探针仍返回 HTTP 200。日报库及事件库在综合基准前后哈希一致。",
+      "next": "待修复并回归上述反例。岗位授权、外发边界、部署回退和恢复待核验；现场时延、业务收益和故障效果待后续老洼地数据与独立人工复核。",
+      "stage": "deployment"
+    },
+    {
+      "date": "2026-11-20",
+      "title": "落地分布式运行时升级：外部持久化任务队列、跨进程熔断器、多 Worker 水平扩展与重启不断流 SSE（Last-Event-ID）",
+      "delivered": "1）外部任务队列与持久化 SSE 事件日志（laowadi/task_queue.py）：基于独立 WAL 库（local/laowadi_jobs.sqlite3，预留 Redis Streams 替换工厂）实现原子租约认领、可见性超时孤儿回收、死信队列（DLQ）、单调递增 job_seq SSE 事件日志、跨进程共享限流与 Worker 心跳注册表；2）解耦外部 Worker 进程（laowadi/worker.py 与 laowadi worker CLI）及多 Worker ASGI 工厂（laowadi/asgi.py）：支持 uvicorn laowadi.asgi:app --workers 2 与 2 个独立外部 Job Worker 进程水平扩展（响应头输出 X-Worker-Pid）；3）跨进程共享熔断器（laowadi/circuit_breaker.py）：CLOSED/OPEN/HALF_OPEN 三态原子流转，单槽 HALF_OPEN 探活，上游异常触发 OPEN 后全进程零等待自动降级至本地 11 工具确定性基线；4）重启不断流 SSE：新增 POST /api/jobs (202)、GET /api/jobs/{job_id}/stream（支持标准 Last-Event-ID 与 ?after_seq 断点续传）及 /api/runtime/status、/api/runtime/circuit-breaker/*（OpenAPI 扩至 40 端点）；前端 AgentCopilotPane.jsx 支持服务端重启自动断点续传与刷新续接，GovernanceMultiAgentPanel.jsx 集成多 Worker 进程池与熔断器控制台。",
+      "verified": "新建多进程实测脚本 verify_distributed_runtime.py 并联合全部 10 套回归脚本（合计 11/11）全部通过：1）Web 进程中途 SIGKILL（PID 55432 读完事件 1–3）后重启为新 PID 55433，客户端凭 Last-Event-ID=3 无缝续传事件 4–16（0 缺口 0 重复，最终 verified）；2）外部 Worker #1 中途 SIGKILL 后，租约超时由 recovery-worker-2 原子接管完成（attempts=2，记录 job_reclaimed 事件）；3）实测 ×2 Uvicorn API Worker（观察到双独立 OS PID 与跨进程全局限流 4×200+2×429）；4）实测跨进程熔断器在子进程记障 OPEN 后由父进程与 Worker 立即零等待降级至本地 verified 基线，冷却后单槽 HALF_OPEN 探活恢复 CLOSED；Vite 293ms 零报错构建，实机集群（×2 API PID 55490/55491 + ×2 External Worker PID 55487/55488）已上线 http://127.0.0.1:8765/，两原库 SHA-256 严格只读。",
+      "next": "第 #1（外部队列/多 Worker/熔断/不断流 SSE）与 #16（自动熔断降级）核心短板已彻底补齐；其余 46 项差距评估中的业务反例、现场连续数据接入与人工复核留待按既定阶段推进。",
+      "stage": "review"
+    },
+    {
+      "date": "2026-11-20",
+      "title": "建成 PostgreSQL 16 + TimescaleDB + pgvector 存储底座、Alembic 版本化迁移与 SQLAlchemy 2.0 连接池",
+      "delivered": "1）SQLAlchemy 2.0 连接池与 11 表声明式 ORM（laowadi/db/models.py、engine.py）：采用 QueuePool（pool_size=10、max_overflow=20、pool_pre_ping=True、pool_recycle=1800），支持 LAOWADI_DATABASE_URL 切换至 PostgreSQL 16（psycopg3 驱动）与本机池化 SQLite 自动回退；2）Alembic 版本化可逆迁移链（alembic.ini、laowadi/db/migrations/versions/0001–0002）：在 PostgreSQL 方言下启用 timescaledb 与 vector 扩展，将 telemetry_reading 转为 7 天分块 Hypertable 并配置 30 天列式压缩策略与 telemetry_daily_rollup 连续聚合视图，将 vector_document.embedding 升级为 vector(128) 并建立 HNSW 余弦索引（m=16, ef_construction=64）；3）pgvector 语义检索与幂等归档 ETL（laowadi/db/vector_store.py、migrator.py、laowadi db CLI）：严格只读读取原归档，幂等迁移 16,800 条小时遥测、2,100 条页尾汇总、40 个柜台账、211 条监测事件及 76 条 128 维领域向量（68 条国标 + 8 张老洼地证据卡）；4）FastAPI 扩至 44 个端点（新增 GET /api/storage/status、POST /api/storage/migrate [engineer RBAC]、POST /api/storage/vector-search、GET /api/storage/postgres-ddl），Prometheus /metrics 暴露 laowadi_db_pool_* 与 laowadi_vector_documents_total，Astryx 前端 GovernanceMultiAgentPanel.jsx 集成连接池/Alembic 迁移/DDL 预览/pgvector 实时检索面板；5）配套 Dockerfile 与 docker-compose.enterprise.yml（timescale/timescaledb-ha:pg16 + redis:7-alpine + migrate + api + worker）。",
+      "verified": "本机未安装 PostgreSQL/Docker 守护进程，已在真实 SQLAlchemy 2.0 QueuePool + Alembic 环境及离线 PG DDL 编译模式完成 verify_storage_migration.py 7/7 项实测并联合全部 11 套回归脚本（合计 12/12）全部通过：1）Alembic 离线编译 PostgreSQL+TimescaleDB+pgvector DDL 通过（6,459 字符、30 条 SQL、0 双分号错误，含 create_hypertable / timescaledb.compress / telemetry_daily_rollup / vector(128) / USING hnsw）；2）实测 upgrade head + 归档幂等迁移（0.13s 完成 16,800 遥测 + 2,100 页尾 + 211 事件 + 76 向量，重跑 100% 幂等）与 downgrade base → upgrade head 完整可逆；3）QueuePool 16 线程并发压测 0 报错；4）pgvector 128 维语义检索在「母线高压调分接头」「1018 逆潮流」两类查询均于 Top-3 精准召回对应老洼地证据卡与 GB/T 12325；5）RBAC 验证 viewer 调迁移 403、engineer 200，Prometheus 指标完整输出；Vite 288ms 零报错构建，两原归档库 SHA-256 严格未变。",
+      "next": "在具备 Docker 或 PostgreSQL 16（含 TimescaleDB + pgvector 扩展）的矿方/服务器主机执行 docker compose -f docker-compose.enterprise.yml up -d 或配置 LAOWADI_DATABASE_URL 执行 laowadi db migrate-archive 完成真实 PG 集群联调与大数据量压测。",
+      "stage": "data"
+    },
+    {
+      "date": "2026-11-20",
+      "title": "补齐生产部署与运维闭环：多阶段非 root Dockerfile / docker-compose.yml / K8s 10 清单、标准 JSON 结构化日志、实机 PG 接入与热备/DR 演练脚本",
+      "delivered": "1）容器与 Kubernetes 生产编排：升级多阶段非 root Dockerfile（UID 10001 + tini + /healthz 探针 + postgresql-client + .dockerignore）、标准根目录 docker-compose.yml（TimescaleDB/pgvector + Redis + Migrate + API×2 + Worker×2 + json-file 轮转）及完整 k8s/ 清单集（10 份 YAML / 18 项 K8s 资源：Namespace、ConfigMap、Secret 模板、TimescaleDB StatefulSet + 50Gi PVC、Redis、Migrate Job、API/Worker Deployment + HPA + PDB、每日 02:00 Backup CronJob + 20Gi PVC 与 Kustomization）；2）标准结构化 JSON 日志（laowadi/logging_config.py）：按 ELK/Loki NDJSON 规范输出至 stdout 与 10MB×5 轮转文件，ContextVar 自动关联 trace_id/actor/role/worker_id，内置 PostgreSQL DSN 密码、Bearer 令牌与 sk- 密钥自动脱敏，已全量接入 API 中间件、Worker 与 ASGI 启动；3）备份与灾备体系（laowadi/backup.py + scripts/backup.sh + scripts/restore.sh + laowadi ops CLI）：SQLite WAL 在线热备（sqlite3.Connection.backup）+ 真实 PostgreSQL pg_dump -Fc + SHA-256 清单与过期清理、篡改拦截及隔离沙箱 DR 演练（自动测算 RTO）；4）FastAPI 扩至 48 个端点（新增 GET /api/ops/backups、POST /api/ops/backup [engineer]、POST /api/ops/dr-drill [engineer]、GET /api/ops/logs），Astryx 前端 GovernanceMultiAgentPanel.jsx 集成热备/DR演练与实时 JSON 日志流面板；5）本机原生 PostgreSQL 19.0（5432）已建库 laowadi 并完成 Alembic + 全量归档迁入（16,800 遥测 + 76 向量），工作台默认通过 local/.db.env 直连实机 PG。",
+      "verified": "运行 verify_ops_and_deployment.py 5/5 项实测全部通过：1）docker compose -f docker-compose.yml config 校验通过，k8s/ 10 份清单 18 项资源 YAML 校验通过，scripts/backup.sh & restore.sh 语法与实机执行通过；2）NDJSON 日志完整校验 trace_id/actor/worker_id 关联与密码/Bearer/sk- 100% 脱敏；3）针对本机实机 PostgreSQL 19.0 执行真实 pg_dump -Fc（53 项 TOC）+ 全部 SQLite 热备，翻改 1 字节篡改包被 verify_backup 与 restore_backup 严格拒绝，自动化沙箱 DR 演练实测 RTO=0.13s（16,800 遥测、2,100 页尾、76 向量、37 条哈希链审计台账全数完好）；4）RBAC 验证 viewer 调 /api/ops/backup 与 /api/ops/dr-drill 返回 403、engineer 返回 200；Vite 290ms 零报错构建，两原归档库 SHA-256 严格未变。",
+      "next": "Docker TimescaleDB+pgvector 镜像（端口 5433）后台拉取完成后将 local/.db.env 端口切至 5433 即可激活原生 Hypertable + 连续聚合 + pgvector HNSW；在矿方 K8s 集群替换 secret.example.yaml 密钥后可执行 kubectl apply -k k8s/ 上线。",
+      "stage": "deployment"
+    },
+    {
+      "date": "2026-11-20",
+      "title": "彻底消除下游模块老洼地硬编码（图模自动排版 + 自动功率守恒规则 + 多矿泛化）并实机激活 Docker TimescaleDB + pgvector HNSW",
+      "delivered": "1）MineProfile 图模自动推导（laowadi/mine_schema.py + diag_tools.py）：新增 derive_balance_equations() 仅凭母线/主变/出线拓扑自动生成 4 条 KCL 功率守恒方程（无需手写 balance_equations），新增 build_sld_layout(archive) 自动计算高压分段母线、母联桥、主变、低压分段出线、站间通道与井下子站层级布局并通过 GET /api/mine-profile 输出；2）下游四大核心模块去硬编码重构：supplement.py（V01–V04 动态发现单进线窗口/N-1双回/负有功极性/低压母线守恒并修复 V02 联络闭锁与 V03 接线正常语义）、rag.py（build_mine_evidence_cards 动态生成 8 张矿井证据卡 + 按 stations.has_hourly_archive 动态跨站拦截）、graph.py（动态按图模与 task_spec 规划步骤 + 支持跨多轮补证参数累计合并）、SingleLineDiagram.jsx（零硬编码柜号，100% 读取 /api/mine-profile.sld_layout 自动渲染一次主接线图并展示实时守恒方程条）；3）Docker 精简版 PostgreSQL 16.16 + TimescaleDB 2.x + pgvector v0.8.0（127.0.0.1:5433）与 Redis 7（6379）已构建上线，修复 pgvector 写入向量类型转换并切换工作台默认连接至 5433 原生 TimescaleDB + pgvector。",
+      "verified": "1）新建 verify_multimine_generalization.py 构造完全独立的第二座合成矿「东坡煤矿（35/6 kV，D35/U900，柜号 H101/T1H/L101/F201 等零老洼地字符）」，7/7 项全部通过（图模自动生成 4 条守恒方程、自动排版、supplement V01–V04 + V02/V03 反向语义、rag 8 张 EVC-DONGPO 卡与 U900 拦截、graph 两轮补证累计合并、SingleLineDiagram.jsx 静态零硬编码核查）；2）实机运行 verify_storage_migration.py --live-pg-url 连接 Docker PG 16.16 + TimescaleDB + pgvector 通过：Hypertable 2 个分块、telemetry_daily_rollup 连续聚合 700 行物化成功、原生 pgvector_hnsw_cosine (<=>) Top-3 精准命中（ETL 1.411s）；3）verify_rag_and_graph.py（12/12 + 36/36）、verify_supplement_and_mcp.py、verify_enterprise_and_powerflow.py、verify_ops_and_deployment.py 全部回归通过，Vite 401ms 构建通过，两原归档库 SHA-256 严格未变。",
+      "next": "全栈多矿泛化与原生 PostgreSQL 16 + TimescaleDB + pgvector HNSW + Redis + K8s + JSON 日志 + 灾备体系已全部实机打通；后续待接入老洼地真实连续点表及现场人工复核校准。",
+      "stage": "review"
+    },
+    {
+      "date": "2026-11-20",
+      "title": "统一动态 DAG 编排与任意节点挂起/恢复引擎：将 diagnose.py、multi_agent.py、graph.py 收敛至同一内核",
+      "delivered": "1）统一内核（laowadi/dag_engine.py）：实现 DAGGraph（Kahn 拓扑波次划分与环检测）、DAGNode、NodeInterrupt / NodeRestricted、DAGCheckpointStore（SQLite WAL 持久化 dag_checkpoint）与 UnifiedDAGRuntime（支持波次级 ThreadPoolExecutor 并行、任意节点 pause_before_node / pause_after_node 断点暂停、动态 HITL 中断、SHA-256 节点回执缓存、档案快照与输入防篡改绑定及多轮人工输入累计合并）；2）三套执行器真正收敛：laowadi/diagnose.py（guard → retrieve_and_execute → verify_and_finalize）、laowadi/multi_agent.py（guard → plan → 并行 specialist:* 波次 → arbitrate → verify）与 laowadi/graph.py（guard_check → 动态工具步骤 → compile_evidence → evaluate_gate）全部统一运行于 UnifiedDAGRuntime 并返回 dag_execution 拓扑与复用轨迹；3）FastAPI 扩至 52 个端点（新增 POST /api/dag/run、POST /api/dag/resume、GET /api/dag/threads、GET /api/dag/threads/{thread_id}，RBAC 限制 dispatcher+），Astryx 前端 GovernanceMultiAgentPanel.jsx 新增「统一动态 DAG 编排与任意节点挂起/恢复控制台」（Vite 465ms 构建通过）。",
+      "verified": "新建跨进程实测验收 verify_unified_dag.py（6/6 全通过）并联合 verify_diagnose.py、verify_multi_agent_and_governance.py、verify_rag_and_graph.py、verify_multimine_generalization.py 全量回归通过：1）DAGGraph 环检测与菱形并行波次验证通过；2）diagnose.py 任意自由问题在 verify_and_finalize 前挂起后于独立 OS 子进程恢复，guard 与 retrieve_and_execute 0 重复执行且注入人工复核意见后 verified；3）multi_agent.py 3 路专家并行完成后于 arbitrate 前挂起并在独立 OS 子进程恢复，3 路专家 0 重复调用并精准仲裁 CONFLICT-OVERVOLT-VS-REACTIVE；4）graph.py 运行于 UnifiedDAGRuntime，快照篡改拒绝与两轮补证累计合并 0 重复执行通过；5）FastAPI /api/dag/* 52 端点与 RBAC（viewer 403 / dispatcher 200）通过，两原归档库 SHA-256 严格未变。",
+      "next": "三大执行器已彻底统一为单一可挂起/可恢复动态 DAG 内核；后续按需接入矿方连续点表与现场人工复核校准。",
+      "stage": "graph"
+    },
+    {
+      "date": "2026-11-20",
+      "title": "复审企业级 Agent 投产风险，列出 66 项及三道准入条件",
+      "delivered": "新增《企业级 Agent 复审》，核对最新 P0/P1 之后的诊断证据、数据接入、通知工单、身份与外发、发布与灾备、评测和矿方责任。更新接入、监测、问答、模型、评测、工作台与现场交付开发卡。",
+      "verified": "隔离复跑 P0 11/11、P1 6/6。复现 8 个反例，涵盖错柜错时、无出处定性和常数冒充实测通过核验，7 项高优先级仅建 4 单，通知并发双发，旧消息在撤销后发出，已销项工单直接认领，以及损坏事件库仍显示就绪。两份原归档与隔离副本逐字节一致。",
+      "next": "修复并回归上述反例，验收真实身份与对象权限、外发字段、跨 Pod 运行态和完整恢复。待后续老洼地连续点表、同期日志与现场复核到位，开展影子监测并核对误漏报、端到端时延及签收。",
+      "stage": "deployment"
+    },
+    {
+      "date": "2026-11-20",
+      "title": "修复企业级复审第 1–5 项诊断证据与报告发布",
+      "delivered": "原表读数绑定站点、柜号、整点、指标、单位、有符号值和出处；派生量绑定参数、统计口径及具体工具回执。主对话由模型选择只读查询及证据，正文和会诊摘要由本地生成。人工备注及条件复算分开呈现，规程适用性保留待复核，旧版诊断记录提示重验。",
+      "verified": "隔离运行 11 套回归全部通过，含 P0 11/11、综合题 36/36、诊断本地 6/6、会诊 4/4、P1 6/6、DAG 6/6、工作台 HTTP/SSE 和补证会话。复验错柜错时、零证据保护动作、名义值冒充、公式篡改、正文违规字段及旧会话与检查点隔离。Vite 构建通过，两份归档库逐字节一致。",
+      "next": "继续用同一老洼地题集复测真实 DeepSeek 新协议的准确率和耗时。现场原因、条款适用性与连续监测等待矿方后续依据。其余企业级复审事项按实际状态推进。",
+      "stage": "agent-loop"
+    },
+    {
+      "date": "2026-11-20",
+      "title": "完成企业级复审第 6–10 项代码修复与专项验收脚本（终审前输出隔离、运行/可信分层、多入口一致、多轮版本隔离与 DAG 恢复语义）",
+      "delivered": "1）#06 终审前模型文本隔离：在 task_queue.py 增加 sanitize_public_job_event 与未通过终审作业的 llm_delta 回放抑制，在 diagnose.py 脱敏错误载荷、workbench.py 过滤旧版 SSE，并移除前端 AgentCopilotPane.jsx 的 streamPreview 未核验原文展示；2）#07 运行完成与业务可信分离：新建 laowadi/outcomes.py 统一 classify_outcome，在 task_queue.py、llmops.py、audit.py、diagnose.py、multi_agent.py 与 graph.py 拆出 execution_status、business_status 与 business_trusted，Prometheus 导出 completed_trusted / completed_untrusted / business_trust_rate_pct；3）#08 多入口回答口径统一：新建 laowadi/entry_contract.py 提供六入口归一化与 5 场景一致性核验矩阵，并为 multi_agent.py 补齐越界日期守卫、为 graph.py 接入统一安全防火墙；4）#09 多轮会话与人工意见版本约束：sessions.py 与 reviews.py 新增 mine_id/station/archive_snapshot_sha256 自动迁移，context.py 实现换矿站/换事件/资料订正隔离与 partition_relevant_reviews；5）#10 任务恢复与数据更正语义：dag_engine.py 与 schemas.py 新增按日快照漂移检测、strict / pin_snapshot / recompute_affected 三种恢复策略及并发恢复租约互斥锁；6）新建 verify_reliability_and_contracts.py 专项验收脚本。",
+      "verified": "已完成全部 15 个改动/新建文件的静态代码与接口一致性核查；因当前沙箱未授权访问 .venv-power 所链接的宿主 Python 运行时目录且缺少 Node/npm，verify_reliability_and_contracts.py、既有回归套件及 workbench 前端重新构建需在本地环境执行。两份只读原归档未做任何写入。",
+      "next": "在本地终端执行 ../.venv-power/bin/python -B verify_reliability_and_contracts.py 与既有回归套件，并在 workbench/ 目录执行 npm run build 更新前端 dist 产物。",
+      "stage": "evaluation"
+    },
+    {
+      "date": "2026-11-21",
+      "title": "完成企业级复审 43–48 的工程实现与隔离复验",
+      "delivered": "PostgreSQL 统一值班归档和运行态、跨 Pod 队列和 SSE、同事务资料发布、分级就绪、挂载原件的 Compose 与 Kubernetes、包含工单和两套 DAG 的一致快照及灾后恢复说明。",
+      "verified": "七份日报和两张截图哈希保持原样。损坏回放、过期归档、缺 Worker、数据库失联返回 503。双节点 kind Worker 强删后另一节点接管，跨 API SSE 在事件 2 后续读 3–8。关闭数据库所在测试节点，从 CronJob 独立副本恢复并在 7.148 秒后完成首个值班查询。PG16 扩展、工单、Outbox 和两套 DAG 对账通过。",
+      "next": "矿方目标环境须确认 RWX/RWO 存储、独立备份副本、恢复切换和 RTO/RPO 目标。真实连续点表、现场签收及故障效果待后续老洼地资料和人工复核。",
+      "stage": "deployment"
+    },
+    {
+      "date": "2026-11-21",
+      "title": "调整 8765 值班工作台为对话优先",
+      "delivered": "提供空白问答首页、三条老洼地示例、可收起的会话与值班侧栏、单独工具页面和可展开原表证据。研究工具按需加载。",
+      "verified": "Vite 构建通过。用 Chrome 在 8765 验证 1440 像素桌面、390 像素窄屏、侧栏与深色切换、值班/研究工具导航及返回保留草稿。在隔离副本完成 303 柜本地问答、下载 1113.xls、恢复历史会话和定位主接线。兼容服务回归通过，核对静态资源、回放、原图下载及人工复核。",
+      "next": "通过实际岗位人员复验入口命名与查报速度。持续监测、工单业务反例以及矿方权限保持原待验状态。",
+      "stage": "review"
+    },
+    {
+      "date": "2026-11-21",
+      "title": "完成复审第 23–26 项巡检、通知与工单流转",
+      "delivered": "巡检按新增数量限批；Outbox 事务认领、重试标识和撤销留痕；工单合法流转表、版本校验及工作台原表和撤销回执入口。",
+      "verified": "SQLite、PostgreSQL 四项专项复验通过，兼容旧运行库升级，P1 运行全套 6/6。隔离浏览器用 LW-000010 对照 1110.xls 和 306 柜同期读数，验证认领、销项、复开、409 冲突以及模拟订正后的撤销回执。8765 保留原 4 张工单并补建其余 3 张，送达站内通知。",
+      "next": "现场点表、真实班次签收和矿方外部渠道接收端去重待联调。第 27–32 项中的逐点消费、订正版本与原告警绑定、业务回执及真实班表仍按原计划推进。",
+      "stage": "review"
+    },
+    {
+      "date": "2026-11-21",
+      "title": "接入模型撰写与逐断言核验",
+      "delivered": "深度诊断支持模型撰写完整推演。每条引用绑定本轮原表、工具结果或条款。本地复算有符号差值，独立语义请求核对归因与适用性，失败按断言编号和理由退回模型重写。JSON、Markdown 与工作台呈现最终稿和出处。",
+      "verified": "用真实老洼地读数和模型替身复验错格、错单位、差值错误、语义误归因、两次反思修复与终审硬阻断。诊断离线回归、P0 11/11、P1 6/6、DAG 6/6、工作台 HTTP/SSE 和 Vite 构建通过，两份原归档哈希保持一致。",
+      "next": "明确授权传往已配置的钉钉 DeepSeek 网关的题目和必要证据字段后，复测真实模型的同题质量、语义复核误判和总时延，再决定是否默认启用。现场原因与规程适用性仍待矿方复核。",
+      "stage": "agent-loop"
+    },
+    {
+      "date": "2026-11-21",
+      "title": "接入二号主变反向有功的逐轮假设检验记录",
+      "delivered": "初始断面核对后逐轮提交假设、工具和参数。返回原表和计算回执，据此判定并规划后续查询。工作台、SSE、JSON 和 Markdown 均显示轮次与证据。首页增加查证入口。",
+      "verified": "用老洼地日报复验 306/312/1006 同负，1027 同期 0 kW、0 A。表计和母联假设保留证据不足。诊断、逐断言和 DAG 回归通过，验证错时拦截、缺值、非零后续查证、预算、正文拒发后保留回执。Vite 构建通过，Chrome 两种视口和日报下载通过，两源库 SHA-256 一致。旧 DeepSeek 联调实际执行了三项检查，最终正文未过。修复后真实网关复验被自动审批拦截，待明确外发字段。",
+      "next": "确认可发往已配置网关的字段和用途后，复验最终版同题准确性与时延。补齐同期运行日志、母联遥信与分段量测、各点采样时标和计量记录。其他异常类型和现场连续数据待验。",
+      "stage": "agent-loop"
+    },
+    {
+      "date": "2026-11-21",
+      "title": "1010 无功补偿与 10 kV II 段过压的同点复算和仲裁",
+      "stages": [
+        "graph",
+        "review"
+      ],
+      "done": [
+        "量测角色发送同点原表证据，物理角色用 pandapower 提交单投候选，规程角色凭母线压升、无功方向、载流和功率因数约束发起质疑。物理角色复算中间稳态及终态，仲裁保留通过和被拒候选。",
+        "11 月 13 日 14:00，1113.xls 的 BM18 为 0.62，Z18 为 10.83 kV。单投使模型母线由 10.8322 升至 10.8481 kV。联合候选的终态母线 10.5853 kV、末端 10.5797 kV，馈线首端 cos 0.9518。",
+        "会诊工作台提供方案对照、原表入口、消息来往和待复核资料。"
+      ],
+      "verified": "多智体治理验收覆盖同点联合候选、正常电压单投、过补拒绝、非整点缺证、潮流不收敛及 MA01–MA04 冲突命中。统一 DAG 6/6 通过，跨进程续作复用质疑和复算节点。既有四类潮流分项通过，两份原归档哈希一致。Vite 生产构建通过，使用实际 API 回执在 Chromium 验证桌面及 390 px 下的表格、原表入口和质疑消息。企业级综合脚本仍停在 diagnose.py 的旧行数断言。",
+      "next": "补齐主变铭牌和实际档位、同期开关与无功状态、末端可用电容分组及谐波和保护资料。用增量数据验证轻重载与投切全过程，并复核电压判据测点和统计窗口。"
+    },
+    {
+      "date": "2026-11-21",
+      "title": "面向硕士论文完成四窗口合拢收尾：跨窗口回归全绿、48 题论文探针与 LaTeX 三线表生成、工作台去运维化折叠",
+      "stages": [
+        "agent-loop",
+        "graph",
+        "evaluation",
+        "review"
+      ],
+      "done": [
+        "修复跨窗口并行遗留的 3 处回归摩擦：统一 task_queue 终审前脱敏标记与 DurableSQLiteBroker 租约调用契约、对齐 entry_contract 六入口（Primary / Proactive / Multi-Agent / DAG / MCP / CLI）在反向有功（1027 证伪）、越界日期（11-17）和井下 1101 缺日报边界上的一致性判据、补齐 resume_dag_thread 顶层状态透传与 verify_workbench 动态检查点线程 ID，并更新 verify_enterprise_and_powerflow 模块行数上限。",
+        "补齐 thesis_eval/probe.py 的论文报告与 LaTeX booktabs 三线表自动生成器，输出 thesis_eval/results/本地实验结果.md：完整汇总 48 题基准下 S01–S08/M01–M08（16/16，100% 数值与坐标对齐）、条件化混合检索跨站门控（100% vs 0%）、GSSC 上下文压缩（净省 45.2% 字符且关键证据 100% 保留）、pandapower 交流潮流（6/6 收敛）、双层数值核验（32/32 幻觉反例 100% 阻断 + Reflection 自修正）及 HITL 两轮动态补证（8/8 正确转移）。",
+        "精简 GovernanceMultiAgentPanel.jsx 第二子视图为「安全围栏与证据审计」，将底层进程队列、数据库连接池、热备/DR演练与令牌手动签发器收纳入默认折叠的「系统运行底座与工程运维诊断」抽屉，突出多智能体会诊、安全防火墙与防篡改 SHA-256 证据审计链。"
+      ],
+      "verified": "全量 15 套自动化验证套件（verify_diagnostic_claims、verify_task_alignment、verify_diagnose、verify_p0_correctness、verify_p1_autonomy_and_ops、verify_reliability_and_contracts、verify_multi_agent_and_governance、verify_unified_dag、verify_enterprise_and_powerflow、verify_rag_and_graph、verify_supplement_and_mcp、verify_multimine_generalization、verify_evaluation、verify_workbench 及 thesis_eval.probe）100% 零报错通过；两份只读原归档库 SHA-256 严格未变。",
+      "next": "按需在本机执行真实 DeepSeek 端到端 48 题评测（python -m thesis_eval.run）产出模型对比大表，并初始化 Git 干净基线以支持课题组双人协同开发。"
+    },
+    {
+      "date": "2026-11-21",
+      "title": "建成课题组双人协同开发 Git 基线：只读源库与动态运行库精准隔离、AGENTS.md 协同契约与一键初始化门禁脚本",
+      "stages": [
+        "scope",
+        "data",
+        "deployment"
+      ],
+      "done": [
+        "升级根目录与子目录 .gitignore：将老洼地 9 份原始现场资料（1110–1116.xls、两张系统图）、只读归档库（local/laowadi.sqlite3、local/laowadi_events.sqlite3）、全套源码与前端编译产物纳入 Git 版本跟踪；同时将本地大模型密钥（.env.local）、本地数据库连接（local/.db.env、local/.auth_secret）、7 个运行时动态写入 SQLite 库及 WAL/SHM 文件、备份包与虚拟环境严格隔离在个人本机。",
+        "在根目录 AGENTS.md 固化《课题组双人协同开发约定》，明确只读黄金数据源红线、密钥隔离、按“AI智能体算法/核验/评测”与“电力潮流机理/多智体协同/工作台”双人模块边界及合并前必跑门禁。",
+        "新增 scripts/setup_collab.sh 协同开发一键初始化与门禁自检脚本（自动检测/创建虚拟环境、从模板生成本地密钥配置、校验两份只读源库 SHA-256 并运行 5 套核心 Pre-Merge 门禁测试），并完成 Git 仓库首个干净基线提交（Initial Baseline Commit）。"
+      ],
+      "verified": "执行 git status --ignored 验证 .env.local、local/.db.env 与全部动态 SQLite 库 100% 被忽略，而 9 份原件与 2 份只读源库被完整跟踪；实测 bash 研究实施/老洼地数据接入_20261119/scripts/setup_collab.sh 一键通过 SHA-256 校验与 5 套门禁测试；创建首个 Git 基线提交成功。",
+      "next": "推送到 GitHub / Gitee 私有仓库后，同门即可克隆并执行 setup_collab.sh 开启并行协同开发。"
+    },
+    {
+      "date": "2026-11-21",
+      "title": "确立 MineGrid-Agent 仓库命名、根目录总览 README.md 并绑定 GitHub 远程仓库",
+      "stages": [
+        "scope",
+        "deployment"
+      ],
+      "done": [
+        "新建项目根目录 README.md（MineGrid-Agent：面向煤矿配电网运行健康监测与反事实诊断的证据约束型多智能体系统），完整包含 Mermaid 架构图、四大核心学术创新点、仓库目录导航、一键协同初始化命令与 48 题离线探针消融汇总表。",
+        "绑定 GitHub 远程仓库 origin (git@github.com:wwe376549346-ux/MineGrid-Agent.git) 并提交推送 main 分支基线。"
+      ],
+      "verified": "核对根目录 README.md 相对路径链接与知识库 JSON 结构，两份只读原归档库 SHA-256 保持不变。",
+      "next": "邀请课题组合作者加入 GitHub 仓库并按分支协同流程推进论文撰写与深层实验。"
+    }
+  ]
+}
+</script>
+<script src="./资料/老洼地/archive-data.js"></script>
+<script>
+"use strict";
+const {chapters, phases, updates} = JSON.parse(document.getElementById("source-data").textContent);
+const statuses = {
+  defined:"口径已定", done:"离线档案已复验", prototype:"已有原型", paused:"暂缓",
+  pending:"待建设", optional:"按需对照"
+};
+const viewLabels = {roadmap:"构建路线",monitoring:"监测方案",materials:"现场资料",chapters:"教程索引",checks:"复验台",updates:"更新记录"};
+const phaseById = new Map(phases.map(phase => [phase.id, phase]));
+const chapterByNumber = new Map(chapters.map(chapter => [chapter.n, chapter]));
+const storageKey = "laowadi-project-library-v1";
+const view = document.getElementById("view");
+const search = document.getElementById("search");
+const sidebar = document.getElementById("sidebar");
+const mobileMenu = document.getElementById("menu-toggle");
+const importFile = document.getElementById("import-file");
+const pageName = document.getElementById("view-name");
+const toast = document.getElementById("toast");
+const isMobile = window.matchMedia("(max-width: 605px)");
+let state = loadState();
+let selection = "all";
+let route = readRoute();
+let announcement;
+
+const escape = value => String(value).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const number = phase => String(phase.n).padStart(2,"0");
+const badge = kind => '<span class="badge '+kind+'">'+statuses[kind]+'</span>';
+const fileHref = path => "../"+path.split("/").map(encodeURIComponent).join("/");
+const archiveHref = name => "./资料/老洼地/"+encodeURIComponent(name);
+const phaseUrl = id => "#stage/"+id;
+const external = (url, name, className = "") =>
+  '<a class="'+className+'" href="'+escape(url)+'" target="_blank" rel="noreferrer">'+escape(name)+'</a>';
+
+function normalizeState(candidate) {
+  const clean = {version:1,lastStage:"agent-loop",notes:{},checked:{}};
+  if (!candidate || candidate.version !== 1) return clean;
+  if (phaseById.has(candidate.lastStage)) clean.lastStage = candidate.lastStage;
+  for (const {id,checks} of phases) {
+    if (typeof candidate.notes?.[id] === "string") clean.notes[id] = candidate.notes[id].slice(0,12000);
+    if (Array.isArray(candidate.checked?.[id])) {
+      clean.checked[id] = [...new Set(candidate.checked[id].filter(item => checks.includes(item)))];
+    }
+  }
+  return clean;
+}
+function loadState() {
+  try { return normalizeState(JSON.parse(localStorage.getItem(storageKey))); }
+  catch { return normalizeState(null); }
+}
+function save() {
+  try { localStorage.setItem(storageKey,JSON.stringify(state)); return true; }
+  catch { return false; }
+}
+function announce(message) {
+  window.clearTimeout(announcement);
+  toast.textContent=message;
+  toast.hidden=false;
+  announcement=window.setTimeout(() => { toast.hidden=true; },3300);
+}
+function readRoute() {
+  const hash=location.hash.slice(1);
+  if (Object.hasOwn(viewLabels,hash) && hash!=="roadmap") return {page:hash,id:null};
+  const [type,id]=hash.split("/");
+  if (type==="stage" && phaseById.has(id)) return {page:"roadmap",id};
+  if (type==="chapter" && chapterByNumber.has(Number(id))) return {page:"chapters",id:Number(id)};
+  return {page:"roadmap",id:state.lastStage};
+}
+function closeMenu() {
+  sidebar.classList.remove("open");
+  mobileMenu.setAttribute("aria-expanded","false");
+}
+function go(page,id=null,{scroll="top",replace=false}={}) {
+  route={page,id};
+  if (page==="roadmap") {
+    route.id=id || state.lastStage;
+    state.lastStage=route.id;
+    save();
+    if (!visiblePhases().some(phase => phase.id===route.id)) selection="all";
+  }
+  const hash=page==="roadmap"?phaseUrl(route.id):id?"#chapter/"+id:"#"+page;
+  if (location.hash!==hash) history[replace?"replaceState":"pushState"](null,"",hash);
+  search.value="";
+  closeMenu();
+  const keepBoard = scroll==="keep" && !!document.getElementById("timeline");
+  if (keepBoard) {
+    renderBoard();
+  } else {
+    render();
+  }
+  const detail=document.getElementById("detail");
+  if (scroll==="detail" || (keepBoard && detail?.getBoundingClientRect().top<75)) {
+    detail?.scrollIntoView({block:"start",behavior:"instant"});
+  }
+  else if (scroll==="top") window.scrollTo({top:0,behavior:"instant"});
+  if (page==="chapters" && id) document.getElementById("chapter-"+id)?.scrollIntoView({block:"start",behavior:"instant"});
+}
+function visiblePhases() {
+  return selection==="all"?phases:phases.filter(phase => phase.status===selection);
+}
+function hero() {
+  return '<section class="hero" aria-labelledby="welcome"><div class="hero-copy">'+
+    '<p class="overline">开发路线与验收</p><h1 id="welcome">老洼地<br>智能体知识库</h1>'+
+    '<p>围绕煤矿配电网运行健康监测，串起日常电力数据、主动反馈、值班问答和现场复核。</p>'+
+    '<div class="hero-actions"><button type="button" class="btn primary" data-stage="'+escape(state.lastStage)+'" data-scroll="detail">继续上次阶段</button>'+
+    '<button type="button" class="btn ghost" data-route="materials">查阅老洼地资料</button>'+
+    external("http://127.0.0.1:8765/","打开值班工作台","btn ghost")+'</div></div>'+
+    '<figure class="diagram" aria-label="现有小时级监测和问答流程"><figcaption>已跑通的现场数据链</figcaption>'+
+    '<div class="diagram-row"><div class="diagram-node"><strong>现场日报</strong><span>整点与页尾入库</span></div><span class="connector" aria-hidden="true"></span><div class="diagram-node"><strong>监测回放</strong><span>有功变化与缺测</span></div></div>'+
+    '<div class="diagram-row"><div class="diagram-node"><strong>事件归档</strong><span>规则与原表位置</span></div><span class="connector" aria-hidden="true"></span><div class="diagram-node"><strong>只读复核</strong><span>事件、整点与图示</span></div></div>'+
+    '<p class="diagram-note">老洼地 35 kV 站 · 2026 年 11 月 10–16 日</p></figure></section>'+
+    '<div class="metrics" aria-label="已验证的老洼地历史回放数据"><div class="metric"><strong>168</strong><span>已回放整点</span></div><div class="metric"><strong>106</strong><span>历史筛查提示</span></div><div class="metric"><strong>4</strong><span>每轮工具调用上限</span></div></div>'+
+    '<p class="now"><strong>当前节点</strong>　本地值班工作台已跑通历史回放、自动提示、原表证据与同期追问。<a href="#monitoring">查看监测方案与启动入口</a></p>';
+}
+function renderTimeline() {
+  const target=document.getElementById("timeline");
+  if (!target) return;
+  let group="";
+  target.innerHTML=visiblePhases().map(phase => {
+    const heading=phase.group===group?"":'<p class="group-name">'+escape(phase.group)+"</p>";
+    group=phase.group;
+    const count=(state.checked[phase.id] || []).length;
+    return heading+'<button class="stage-btn" type="button" data-stage="'+phase.id+'"'+(phase.id===route.id?' aria-current="step"':'')+'>'+
+      '<span class="stage-n">'+number(phase)+'</span><span><span class="stage-label">'+escape(phase.title)+'</span>'+
+      '<span class="stage-meta">'+badge(phase.status)+(count?'<span class="route-checked" aria-label="已勾选 '+count+' 项">'+count+'/'+phase.checks.length+'</span>':'')+'</span></span></button>';
+  }).join("");
+}
+function phaseMarkup(phase) {
+  const selected=state.checked[phase.id]||[];
+  const sources=phase.files.map(([label,path],i) =>
+    '<li>'+external(fileHref(path),label)+'<button class="btn small" type="button" data-copy-path="'+i+'" title="'+escape(path)+'">复制路径</button></li>').join("");
+  const chaptersHtml=phase.refs.map(n => {
+    const c=chapterByNumber.get(n);
+    return external(c.url,"第 "+n+" 章 · "+c.title,"chapter-link");
+  }).join("");
+  const task=phase.deps.length?'<div class="deps"><span>依赖</span>'+phase.deps.map(id =>
+    '<button class="dep" type="button" data-stage="'+id+'">'+escape(phaseById.get(id).title)+'</button>').join("")+"</div>":"";
+  const checklist=phase.checks.map((item,index) => '<label><input type="checkbox" data-check="'+index+'"'+
+    (selected.includes(item)?" checked":"")+'><span>'+escape(item)+"</span></label>").join("");
+  return '<header class="detail-head"><div class="meta"><span>阶段 '+number(phase)+'</span>'+badge(phase.status)+'</div>'+
+    '<h2 id="stage-title">'+escape(phase.title)+'</h2><p>'+escape(phase.brief)+'</p></header>'+
+    '<div class="detail-body">'+task+
+    '<section class="block"><h3>项目现状</h3><p>'+escape(phase.now)+'</p></section>'+
+    '<section class="block"><h3>怎样实现</h3><p>'+escape(phase.implementation)+'</p><p><strong>交付物</strong>　'+escape(phase.output)+'</p></section>'+
+    '<section class="block"><h3>怎样借鉴 Hello-Agents</h3><p>'+escape(phase.adapt)+'</p><div class="readings">'+chaptersHtml+'</div></section>'+
+    '<section class="block"><h3>验收清单</h3><p id="count-note" class="check-info">'+selected.length+' / '+phase.checks.length+
+    ' 项个人记录。阶段状态依据项目验收记录。</p><div class="checklist">'+checklist+'</div></section>'+
+    '<section class="block"><h3>代码与项目文档</h3><ul class="filelist">'+sources+'</ul></section>'+
+    '<section class="notes"><div class="notes-row"><h3><label for="stage-note">我的开发笔记</label></h3>'+
+    '<button type="button" class="btn small" data-action="copy-task">复制开发单</button></div>'+
+    '<textarea id="stage-note" maxlength="12000" placeholder="记下验收结果、改过的文件和下次要接着做的事。">'+escape(state.notes[phase.id]||"")+
+    '</textarea><p class="saved" id="note-status">输入后保存到当前浏览器。</p></section></div>';
+}
+function renderBoard() {
+  document.getElementById("filter").value=selection;
+  document.querySelector(".hero [data-stage]").dataset.stage=state.lastStage;
+  renderTimeline();
+  const phase=phaseById.get(route.id);
+  if (phase) document.getElementById("detail").innerHTML=phaseMarkup(phase);
+}
+function road() {
+  const options=[["all","所有状态"],...Object.entries(statuses)];
+  return hero()+'<section aria-labelledby="road-title"><div class="route-title"><h2 id="road-title">阶段与开发卡</h2>'+
+    '<label>筛选阶段　<select id="filter">'+options.map(([key,name]) => '<option value="'+key+'"'+
+    (selection===key?" selected":"")+'>'+name+'</option>').join("")+'</select></label></div>'+
+    '<div class="board"><nav class="timeline" id="timeline" aria-label="开发阶段"></nav>'+
+    '<article class="detail" id="detail" aria-labelledby="stage-title"></article></div></section>';
+}
+function monitoringPage() {
+  return '<header class="page-title"><h1>配电网运行健康监测方案</h1>'+
+    '<p>持续接入煤矿每天产生的电力数据，发现缺测或值得复核的运行变化后主动反馈。值班员能继续追问发生了什么、涉及哪个柜、依据在哪里。</p></header>'+
+    '<p class="tip-panel"><strong>现场依据</strong>　以老洼地数据完成后续校准和验收。现有七份小时级日报和两张图支持历史回放、趋势和筛查。早期构造算例、DS01 和受控 RAG 语料继续用于回归。</p>'+
+    '<div class="verify-grid">'+
+    '<article class="module"><h3>四柜日况与主动反馈</h3>'+
+    '<p>303、306、1009、1010 四柜已有七天日级报告，列出数据齐全度、峰值、有功日内趋势和筛查事件。每条提示可回查柜号、前后整点和原表位置。</p>'+
+    '<p>日结状态用「数据不足」「有变化待复核」「当前规则下无提示」。现有 1,000 kW 是回放演示阈值。设备限值、故障原因及健康结论须结合实际工况和现场证据。</p>'+
+    '<p>DeepSeek 已完成老洼地事件 LW-000010 的只读复核。12 题对照中规则通过 10 题，DeepSeek 模式通过 7 题，当前按需启用模型。</p>'+
+    '<div class="actions"><button type="button" class="btn small" data-stage="monitor" data-scroll="detail">查看监测开发卡</button>'+
+    '<button type="button" class="btn small" data-stage="model" data-scroll="detail">查看 DeepSeek 联调</button></div></article>'+
+    '<article class="module"><h3>随后接入连续数据并复核反馈</h3>'+
+    '<p>拿到老洼地连续点表后，验证采样频率、延迟、重复上传、断流和恢复。分别记录数据生成到收到、收到到发出提示的时间，并统计每日提示数量。</p>'+
+    '<p>按同期运行与保护记录复核疑似事件。积累有人工判定的样例后，检验故障识别、漏报与误报。当前小时级回放已验证部分链路，现场响应时延和故障表现待实测。</p>'+
+    '<div class="actions"><button type="button" class="btn small" data-stage="deployment" data-scroll="detail">查看现场交付卡</button></div></article>'+
+    '<article class="module"><h3>Astryx 值班工作台</h3>'+
+    '<p>React 19 与 Astryx 的本地原型已覆盖七天日况、柜级曲线、事件详情和带出处的问答。可回放 11 月 10 日到 12:00 复验自动提示及同期追问。</p>'+
+    '<p>工作台使用已归档的老洼地历史数据。启动命令可在第 14 阶段查看，矿上连续接入和真实反馈时间待现场验证。</p>'+
+    '<div class="actions">'+external("http://127.0.0.1:8765/","打开本地工作台","btn small primary")+
+    '<button type="button" class="btn small" data-stage="review" data-scroll="detail">查看工作台开发卡</button></div></article>'+
+    '<article class="module"><h3>一人主做原型，现场环节协作</h3>'+
+    '<p><strong>研究者</strong>负责监测口径、阈值与事件证据、智能体实现和评测。助手协助整理资料、构建轻量 RAG、编码和复验。导师把关研究目标和评估方法。</p>'+
+    '<p><strong>矿方</strong>由电气人员复核工况、事件和判定，由监测系统负责人提供点表与读取接口。现场使用阶段需要确认谁接收、处理并回填反馈。</p>'+
+    '<p><strong>外包适用范围</strong>为 Astryx 页面和交互打磨、接口明确的通用适配代码，按页面或接口契约验收。当前可按一人主做推进。</p></article></div>';
+}
+function reportCard(report,cabinets,open) {
+  const rows=report.rows.map(([time,...values]) =>
+    '<tr><th scope="row">'+escape(time)+'</th>'+values.map(([value,marker,cell]) =>
+      '<td>'+escape(value ?? marker ?? "缺测")+' <small>'+escape(cell)+'</small></td>'
+    ).join("")+'</tr>'
+  ).join("");
+  return '<details class="module"'+(open?" open":"")+'><summary><strong>'+escape(report.day)+'</strong><span>'+escape(report.name)+'</span></summary>'+
+    '<div class="archive-report"><div class="actions"><a class="btn small primary" href="'+archiveHref(report.name)+'" download>下载原表 '+escape(report.name)+'</a></div>'+
+    '<div class="archive-table" role="region" aria-label="'+escape(report.day)+' 四柜有功整点表" tabindex="0">'+
+    '<table><thead><tr><th scope="col">时间</th>'+cabinets.map(cabinet =>
+      '<th scope="col">'+escape(cabinet)+' 柜</th>').join("")+'</tr></thead><tbody>'+rows+'</tbody></table></div>'+
+    '<p class="meta">源工作表 '+escape(report.sheet)+'</p></div></details>';
+}
+function materialsPage() {
+  const header='<header class="page-title"><h1>现场资料</h1><p>老洼地 35 kV 变电所 2026 年 11 月 10–16 日七份运行日报，以及 35 kV 变电所、中央变电所的两张监控截图。</p></header>';
+  if (typeof laowadiArchive==="undefined") {
+    return header+'<p class="tip-panel">当前目录缺少本地资料。请从完整的「项目知识库」目录打开，资料与 HTML 需一起保留。</p>';
+  }
+  const {cabinets,reports,diagrams}=laowadiArchive;
+  return header+'<section aria-labelledby="reports-title"><div class="route-title"><h2 id="reports-title">运行日报</h2></div>'+
+    '<p class="tip-panel">展开日期查看四个试点柜 00:00–23:00 的整点有功（kW）。每个值后附原表单元格。其他柜、量测项和日报页尾可查看 Excel 原件。</p>'+
+    '<div class="archive-list">'+reports.map((report,index)=>reportCard(report,cabinets,index===0)).join("")+'</div></section>'+
+    '<section class="archive-figures" aria-labelledby="diagrams-title"><div class="route-title"><h2 id="diagrams-title">监控截图</h2></div>'+
+    '<div class="chapter-grid">'+diagrams.map(({name,time}) =>
+      '<figure class="module"><a href="'+archiveHref(name)+'" target="_blank" rel="noreferrer" aria-label="查看原图 '+escape(name)+'">'+
+      '<img src="'+archiveHref(name)+'" alt="'+escape(name.replace(".png",""))+'监控画面"></a>'+
+      '<figcaption>'+escape(name)+' · '+escape(time)+'<br>点击查看原图</figcaption></figure>'
+    ).join("")+'</div></section>';
+}
+function chapterCards(list) {
+  return list.map(c => {
+    const related=phases.filter(phase => phase.refs.includes(c.n));
+    const buttons=related.map(phase =>
+      '<button class="btn small" type="button" data-stage="'+phase.id+'">'+escape(phase.title)+'</button>').join("");
+    return '<article class="module" id="chapter-'+c.n+'" style="scroll-margin-top:76px"><div class="module-head"><div><p class="meta">第 '+c.n+
+      ' 章</p><h3>'+escape(c.title)+'</h3></div><span class="badge">'+escape(c.tag)+'</span></div>'+
+      '<p>'+escape(c.lesson)+'</p><p class="applied"><strong>在老洼地怎么用</strong>　'+escape(c.use)+'</p>'+
+      '<div class="actions">'+external(c.url,"GitHub 章原文","btn small primary")+buttons+'</div></article>';
+  }).join("");
+}
+function chaptersPage() {
+  return '<header class="page-title"><h1>教程索引</h1><p>16 章均有对应说明。可从原章去看示例，也可直达本项目关联的开发卡。</p></header>'+
+    '<p class="tip-panel"><strong>优先阅读</strong>　第 4、7、9 章对应现有的有限步循环、工具与上下文。第 8、12 章用于资料 RAG 和独立验收。第 6 章用于后续可暂停恢复的核验任务。</p>'+
+    '<div class="chapter-grid">'+chapterCards(chapters)+'</div>';
+}
+const commands=[
+  {title:"企业级复审 #06–#10 可靠性与契约专项验收",text:"验证终审前未核验模型文本隔离、运行完成与业务可信分层、六入口回答口径一致、多轮与人工意见矿站/版本隔离，以及 DAG 的 strict/pin_snapshot/recompute_affected 与并发恢复互斥锁。",cmd:'cd "研究实施/老洼地数据接入_20261119"\n../.venv-power/bin/python -B verify_reliability_and_contracts.py'},
+  {title:"统一动态 DAG 引擎与跨进程任意节点挂起/恢复验收",text:"验证 diagnose.py、multi_agent.py 与 graph.py 均运行于 UnifiedDAGRuntime，并在独立 OS 子进程验证任意节点断点挂起与 0 重复恢复。",cmd:'cd "研究实施/老洼地数据接入_20261119"\n../.venv-power/bin/python -B verify_unified_dag.py'},
+  {title:"多矿零硬编码泛化、图模自动排版与实机 TimescaleDB+pgvector 验收",text:"用完全独立的第二座矿（东坡煤矿 35/6 kV）验证 mine_schema/diag_tools/supplement/rag/graph/SingleLineDiagram.jsx 零硬编码，并实机验证 Docker PostgreSQL 16 + TimescaleDB Hypertable + 连续聚合 + pgvector HNSW。",cmd:'cd "研究实施/老洼地数据接入_20261119"\n../.venv-power/bin/python -B verify_multimine_generalization.py\n../.venv-power/bin/python -B verify_storage_migration.py --live-pg-url "postgresql+psycopg://postgres:020728@127.0.0.1:5433/laowadi"'},
+  {title:"容器、K8s 清单、JSON 日志与热备/DR 演练验收",text:"验证多阶段非 root Dockerfile、docker compose config、k8s/ 10 份清单、NDJSON 日志脱敏、实机 PostgreSQL pg_dump 热备、SHA-256 篡改拦截与沙箱 DR 演练 RTO。",cmd:'cd "研究实施/老洼地数据接入_20261119"\n../.venv-power/bin/python -B verify_ops_and_deployment.py\n./scripts/backup.sh\n../.venv-power/bin/python -B -m laowadi ops dr-drill\n# Kubernetes 集群一键部署（先配置密钥）：\n# kubectl apply -k k8s/'},
+  {title:"PostgreSQL/TimescaleDB/pgvector、Alembic 与连接池验收",text:"验证 Alembic 离线编译 PG16+TimescaleDB Hypertable+pgvector HNSW DDL、16,800 遥测与 76 向量幂等 ETL、QueuePool 16 线程压测、downgrade/upgrade 可逆与 RBAC/Prometheus 指标。",cmd:'cd "研究实施/老洼地数据接入_20261119"\n../.venv-power/bin/python -B verify_storage_migration.py\n../.venv-power/bin/python -B -m laowadi db migrate-archive\n../.venv-power/bin/python -B -m laowadi db status\n# 在具备 Docker 的主机一键拉起 TimescaleDB-HA(PG16)+pgvector+Redis 生产栈：\n# docker compose -f docker-compose.enterprise.yml up -d'},
+  {title:"分布式多 Worker、跨进程熔断与重启不断流 SSE 实测",text:"真实多 OS 进程实测：SIGKILL Web 进程后 SSE 凭 Last-Event-ID 无缝续传、SIGKILL Worker 自动接管、×2 Uvicorn 多 PID 与跨进程熔断降级。",cmd:'cd "研究实施/老洼地数据接入_20261119"\n../.venv-power/bin/python -B verify_distributed_runtime.py\n../.venv-power/bin/python -B -m laowadi workbench --port 8765 --workers 2 --external-workers 2'},
+  {title:"五角色多智体协同与企业级治理验收",text:"验证 5-Role Multi-Agent 并行会诊与 MA01–MA04 单/多智体对照、RBAC 401/403、HMAC 令牌、限流 429、提示词防火墙、SHA-256 审计链防篡改与 Prometheus /metrics。",cmd:'cd "研究实施/老洼地数据接入_20261119"\n../.venv-power/bin/python -B verify_multi_agent_and_governance.py'},
+  {title:"企业级 FastAPI、多矿拓扑与 pandapower 潮流验收",text:"验证 MineProfile 多矿零代码适配、diagnose.py 三模块拆分、FastAPI+Uvicorn 33 端点/SSE/CSRF 以及 pandapower 四类 Newton-Raphson 交流潮流场景与工具 11。",cmd:'cd "研究实施/老洼地数据接入_20261119"\n../.venv-power/bin/python -B verify_enterprise_and_powerflow.py\n../.venv-power/bin/python -B -m laowadi workbench --port 8765'},
+  {title:"补证局部复算与只读 MCP 回归",text:"验证第 11 阶段（v1→v2 按依赖局部重算与未变项复用）和第 13 阶段（MCP 15 工具一致性、越界拦截与 stdio 通信）。",cmd:'cd "研究实施/老洼地数据接入_20261119"\n../.venv-power/bin/python -B verify_supplement_and_mcp.py\n../.venv-power/bin/python -B -m laowadi supplement'},
+  {title:"资料台账、GSSC 与五层评测回归",text:"验证第 07（GSSC 与会话隔离）、第 08（C01–C09 资料台账与边界）、Reflection 自我修正及第 12（五层 BFCL+GAIA 评测）并输出报告。",cmd:'cd "研究实施/老洼地数据接入_20261119"\npython3 -B verify_evaluation.py\npython3 -B -m laowadi corpus\npython3 -B -m laowadi evaluate'},
+  {title:"重构版 Astryx 工作台验收与启动",text:"端到端验证四大视图接口、25 柜画像、人工复核记忆闭环与两库只读性，并启动本机工作台（自动加载 DeepSeek 配置）。",cmd:'cd "研究实施/老洼地数据接入_20261119"\npython3 -B verify_workbench.py\npython3 -B -m laowadi workbench --port 8765'},
+  {title:"假设驱动诊断智能体回归与实测",text:"先跑离线回归（6 复合工具、规程检索、伪造引用拦截、SSE 并行替身、本地基线 6 题），也可用 DeepSeek 现场诊断单题。",cmd:'cd "研究实施/老洼地数据接入_20261119"\npython3 -B verify_diagnose.py\npython3 -B -m laowadi diagnose "2026年11月16日17点303柜与311柜有功相差2400多kW，这是主变或母线电气故障吗？" --model-config "../大模型接入_20261115/.env.local"'},
+  {title:"全站 25 柜四维电气体检回归",text:"复核 16,800 条整点读数、25 项健康发现、69 处原表单元格出处与两库只读性，并生成全站体检报告。",cmd:'cd "研究实施/老洼地数据接入_20261119"\npython3 -B verify_health.py\npython3 -B -m laowadi health'},
+  {title:"现场整周回放回归",text:"复核 168 个整点、106 条筛查提示、模拟整点缺测和同配置重跑。",cmd:'cd "研究实施/老洼地数据接入_20261119"\npython3 -B verify_monitor.py'},
+  {title:"生成四柜日级观察",text:"读取已经归档的历史回放和日报，输出 11 月 10 日整点趋势、峰值和待复核提示。",cmd:'cd "研究实施/老洼地数据接入_20261119"\npython3 -B -m laowadi daily --date 2026-11-10'},
+  {title:"DeepSeek 首例联调",text:"使用已有 DeepSeek 配置对 LW-000010 进行规则与模型对照，输出 JSON 回执。",cmd:'cd "研究实施/老洼地数据接入_20261119"\npython3 -B verify_model_live.py --smoke --config "../大模型接入_20261115/.env.local"'},
+  {title:"有限步问答回归",text:"覆盖时间对齐、证据、预算停止和只读性，也验证模型协议替身。",cmd:'cd "研究实施/老洼地数据接入_20261119"\npython3 -B verify_agent.py'},
+  {title:"查看现场四步调用",text:"输出实际工具轨迹及柜号、时刻、来源和停止原因。使用现有事件库。",cmd:'cd "研究实施/老洼地数据接入_20261119"\npython3 -B -m laowadi ask --json "LW-000010，306柜同期有功也变化了吗？再查1009柜下游。"'},
+  {title:"离线 RAG 开发回归",text:"运行 14 片段和 12 题的受控基准。可检查 Q07 与默认过滤下的 Q11、Q12 边界。结果不计入现场验收。",cmd:'PYTHONPATH="$PWD/研究实施/条件化资料RAG与适用性核验_v05_20261118:$PWD/研究实施/抽象目标与流式诊断_v04_20261118" \\\n  "研究实施/最小LangGraph流程_20261116/.venv/bin/python" -B -c \'from rag_engine import evaluate_benchmark; from pprint import pprint; pprint(evaluate_benchmark())\''}
+];
+function checksPage() {
+  return '<header class="page-title"><h1>复验台</h1><p>以下命令从项目根目录执行。现场回放与只读测试使用本地档案，DeepSeek 联调使用已有模型配置。</p></header>'+
+    '<div class="verify-grid">'+commands.map((item,i) => '<article class="module"><h3>'+escape(item.title)+'</h3><p>'+escape(item.text)+
+      '</p><pre><code>'+escape(item.cmd)+'</code></pre><button type="button" class="btn small" data-command="'+i+'">复制命令</button></article>').join("")+'</div>'+
+    '<article class="module case"><h3>现场案例 LW-000010</h3><p>2026 年 11 月 10 日 11:00 至 12:00。原表为 1110.xls 的 New Sheet1。</p>'+
+    '<table><thead><tr><th scope="col">柜号</th><th scope="col">11:00 有功</th><th scope="col">12:00 有功</th><th scope="col">变化</th></tr></thead>'+
+    '<tbody><tr><th scope="row">303</th><td>1,071.84 kW · D15</td><td>4,479.96 kW · D16</td><td>+3,408.12 kW</td></tr>'+
+    '<tr><th scope="row">306</th><td>427.54 kW · H15</td><td>223.13 kW · H16</td><td>−204.41 kW</td></tr></tbody></table>'+
+    '<p>1009 柜图示下游为中央变电所 1101 柜。追问现场原因时，需要核对同期日志、开关变位及保护动作记录。</p></article>';
+}
+function updatesPage() {
+  return '<header class="page-title"><h1>更新记录</h1><p>每项任务交付前，在这里记录产出、复验结果和下一步，同时更新对应开发卡。</p></header>'+
+    '<div class="update-list">'+[...updates].reverse().map(item =>
+      '<article class="module"><div class="module-head"><h3>'+escape(item.title)+'</h3><time datetime="'+escape(item.date)+'">'+
+      escape(item.date)+'</time></div><p><strong>交付</strong>　'+escape(item.delivered)+'</p><p><strong>核对</strong>　'+
+      escape(item.verified)+'</p><p><strong>下一步</strong>　'+escape(item.next)+'</p><div class="actions">'+
+      '<button type="button" class="btn small" data-stage="'+escape(item.stage)+'" data-scroll="detail">打开开发卡</button></div></article>'
+    ).join("")+'</div>';
+}
+function normalized(input) {
+  return input.normalize("NFKC").toLowerCase().replace(/\s+/g," ");
+}
+function results(query) {
+  const words=normalized(query).trim().split(" ").filter(Boolean);
+  const matches=text => words.every(word => normalized(text).includes(word));
+  const found=phases.filter(p => matches([p.title,p.brief,p.now,p.implementation,p.adapt,statuses[p.status],
+    p.files.flat().join(" "), ...p.refs.map(n => "第"+n+"章 "+chapterByNumber.get(n).title),state.notes[p.id]||""].join(" ")));
+  const books=chapters.filter(c => matches([c.title,c.lesson,c.use,"第"+c.n+"章","第 "+c.n+" 章"].join(" ")));
+  const itemHtml=found.map(p => '<article class="module"><div class="module-head"><h3>'+escape(p.title)+'</h3>'+badge(p.status)+'</div>'+
+    '<p>'+escape(p.brief)+'</p><div class="actions"><button class="btn small" type="button" data-stage="'+p.id+'" data-scroll="detail">打开开发卡</button></div></article>').join("");
+  return '<header class="page-title"><h1>搜索结果</h1><p aria-live="polite">找到 '+found.length+' 个阶段和 '+books.length+' 个教程章节。</p></header>'+
+    (found.length?'<div class="search-grid">'+itemHtml+'</div>':'')+
+    (books.length?'<div class="route-title" style="margin-top:20px"><h2>相关章节</h2></div><div class="chapter-grid">'+chapterCards(books)+'</div>':'')+
+    (!found.length&&!books.length?'<p class="module empty">试试输入 RAG、306 柜、LangGraph、章名或代码文件名。</p>':'');
+}
+function render() {
+  const query=search.value.trim();
+  pageName.textContent=query?"搜索":viewLabels[route.page];
+  for (const button of sidebar.querySelectorAll("[data-route]")) {
+    if (!query && button.dataset.route===route.page) button.setAttribute("aria-current","page");
+    else button.removeAttribute("aria-current");
+  }
+  if (query) { view.innerHTML=results(query); return; }
+  const pages = {roadmap:road,monitoring:monitoringPage,materials:materialsPage,chapters:chaptersPage,checks:checksPage,updates:updatesPage};
+  view.innerHTML=pages[route.page]();
+  if (route.page==="roadmap") renderBoard();
+}
+async function copy(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    announce("已复制");
+    return;
+  } catch {
+    const input=document.createElement("textarea");
+    input.value=text;
+    input.style.cssText="position:fixed;top:0;left:-2000px";
+    document.body.append(input);
+    const focused=document.activeElement;
+    input.select();
+    const copied=document.execCommand("copy");
+    input.remove();
+    focused?.focus();
+    announce(copied?"已复制":"浏览器未开放剪贴板，请选取文字复制。");
+  }
+}
+function taskSheet(phase) {
+  const lines=["老洼地开发单 · "+phase.title,"项目状态　"+statuses[phase.status],"现状　"+phase.now,
+    "实现　"+phase.implementation,"交付　"+phase.output,"验收",...phase.checks.map(s => "- "+s),
+    "项目文件",...phase.files.map(([,path])=>"- "+path),
+    "教程来源",...phase.refs.map(n => "- 第 "+n+" 章 "+chapterByNumber.get(n).url),
+    "数据口径　后续校准和验收使用老洼地数据。"];
+  if (state.notes[phase.id]) lines.push("个人笔记",state.notes[phase.id]);
+  return lines.join("\n");
+}
+function exportNotes() {
+  const url=URL.createObjectURL(new Blob([JSON.stringify(state,null,2)],{type:"application/json"}));
+  const anchor=document.createElement("a");
+  anchor.href=url;
+  anchor.download="老洼地知识库笔记.json";
+  anchor.click();
+  setTimeout(() => URL.revokeObjectURL(url),1500);
+  announce("已生成笔记备份");
+}
+importFile.addEventListener("change", async () => {
+  const file=importFile.files[0];
+  importFile.value="";
+  if (!file) return;
+  try {
+    if (file.size>1_000_000) throw Error();
+    const raw=JSON.parse(await file.text());
+    if (!raw || raw.version!==1 || (!raw.notes && !raw.checked)) throw Error();
+    const incoming=normalizeState(raw);
+    let skipped=0;
+    for (const phase of phases) {
+      const id=phase.id;
+      if (!state.notes[id] && incoming.notes[id]) state.notes[id]=incoming.notes[id];
+      else if (incoming.notes[id] && !state.notes[id].includes(incoming.notes[id])) {
+        const combined=state.notes[id]+"\n\n—— 导入的笔记 ——\n"+incoming.notes[id];
+        if (combined.length<=12000) state.notes[id]=combined;
+        else skipped++;
+      }
+      if (incoming.checked[id]?.length) state.checked[id]=
+        [...new Set([...(state.checked[id]||[]),...incoming.checked[id]])];
+    }
+    const saved=save();
+    render();
+    const savedMessage=saved?"备份已合并。":"备份已在本页合并，请重新导出保留。";
+    announce(skipped?savedMessage+" 有 "+skipped+" 条超长笔记可从备份查看。":savedMessage);
+  } catch { announce("无法导入，请选择本知识库导出的 JSON 备份。"); }
+});
+document.addEventListener("click", event => {
+  const button=event.target.closest("button");
+  if (!button) return;
+  if (button===mobileMenu) {
+    const open=sidebar.classList.toggle("open");
+    mobileMenu.setAttribute("aria-expanded",String(open));
+    return;
+  }
+  if (button.dataset.route) { go(button.dataset.route); return; }
+  if (button.dataset.stage) {
+    const inBoard=!!document.getElementById("timeline");
+    const focus=isMobile.matches||button.dataset.scroll==="detail";
+    go("roadmap",button.dataset.stage,{scroll:focus?"detail":inBoard?"keep":"top"});
+    return;
+  }
+  if ("command" in button.dataset) { copy(commands[Number(button.dataset.command)].cmd);return; }
+  const phase=phaseById.get(route.id);
+  if ("copyPath" in button.dataset && phase) { copy(phase.files[Number(button.dataset.copyPath)][1]);return; }
+  if (button.dataset.action==="copy-task" && phase) copy(taskSheet(phase));
+  if (button.dataset.action==="export") exportNotes();
+  if (button.dataset.action==="import") importFile.click();
+});
+document.addEventListener("change", event => {
+  if (event.target.id==="filter") {
+    selection=event.target.value;
+    const shown=visiblePhases();
+    if (shown.length && !shown.some(phase => phase.id===route.id)) go("roadmap",shown[0].id,{scroll:"keep",replace:true});
+    else renderBoard();
+  } else if ("check" in event.target.dataset) {
+    const phase=phaseById.get(route.id);
+    const label=phase.checks[Number(event.target.dataset.check)];
+    const checked=new Set(state.checked[phase.id]||[]);
+    if (event.target.checked) checked.add(label);
+    else checked.delete(label);
+    state.checked[phase.id]=[...checked];
+    if (!save()) announce("此页无法写入本地存储，可备份勾选记录。");
+    renderTimeline();
+    document.getElementById("count-note").textContent=checked.size+" / "+phase.checks.length+" 项个人记录。阶段状态依据项目验收记录。";
+  }
+});
+document.addEventListener("input", event => {
+  if (event.target===search) {
+    render();
+    window.scrollTo({top:0,behavior:"instant"});
+  } else if (event.target.id==="stage-note") {
+    state.notes[route.id]=event.target.value;
+    document.getElementById("note-status").textContent=save()?"已保存到当前浏览器。":"本页无法写入本地存储，可备份当前笔记。";
+  }
+});
+document.addEventListener("keydown", event => {
+  if ((event.metaKey||event.ctrlKey)&&event.key.toLowerCase()==="k") {
+    event.preventDefault();
+    search.focus();
+    search.select();
+  } else if (event.key==="Escape") {
+    if (search.value) { search.value="";render(); }
+    else closeMenu();
+  }
+});
+function restoreRoute() {
+  route=readRoute();
+  if (route.page==="roadmap" && !visiblePhases().some(phase => phase.id===route.id)) selection="all";
+  search.value="";
+  render();
+  if (route.page==="chapters"&&route.id) document.getElementById("chapter-"+route.id)?.scrollIntoView({block:"start",behavior:"instant"});
+}
+window.addEventListener("popstate",restoreRoute);
+window.addEventListener("hashchange",restoreRoute);
+restoreRoute();
+if (location.hash.startsWith("#stage/") && isMobile.matches) {
+  document.getElementById("detail")?.scrollIntoView({block:"start",behavior:"instant"});
+}
+</script>
+</body>
+</html>

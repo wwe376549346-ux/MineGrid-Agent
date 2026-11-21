@@ -1,0 +1,154 @@
+{
+  "station": "S35",
+  "layer1_monitoring_and_health": {
+    "replayed_hours": 168,
+    "cabinets_covered": 25,
+    "valid_readings": 16800,
+    "legacy_4cab_raw_notices": 106,
+    "simulated_gap_events": 1,
+    "full_station_findings_total": 25,
+    "actionable_high_medium_events": 14,
+    "noise_reduction_pct": 86.8
+  },
+  "layer2_corpus_and_boundaries": {
+    "total_cases": 9,
+    "passed_cases": 9
+  },
+  "layer3_context_and_gssc": {
+    "status": "verified",
+    "turns_tested": 3,
+    "followup_inheritance_ok": true,
+    "topic_switch_no_leakage_ok": true,
+    "gssc_saved_pct_turn1": 24.2,
+    "verified_cells_preserved": true
+  },
+  "layer4_bfcl_bounded_queries_12": {
+    "available": true,
+    "total_cases": 12,
+    "model": "deepseek-v4-pro",
+    "max_tool_calls": 4,
+    "passed": {
+      "local": 10,
+      "model": 11
+    },
+    "archives_unchanged": true,
+    "model_requests_total": 25,
+    "model_request_median_s": 4.43,
+    "model_request_max_s": 30.47,
+    "error_taxonomy": {
+      "wrong_cabinet": 0,
+      "wrong_source_cell_or_page": 0,
+      "version_mismatch": 0,
+      "ungrounded_fabrication": 0,
+      "budget_exhausted_local": 2,
+      "budget_exhausted_model": 2,
+      "protocol_or_gateway_error_model": 1
+    }
+  },
+  "layer5_gaia_diagnostic_agent_6": {
+    "available": true,
+    "archived_verification_policies": [
+      "legacy"
+    ],
+    "model": "deepseek-v4-pro",
+    "total_cases": 6,
+    "passed": {
+      "local": 6,
+      "model": 6
+    },
+    "citations": {
+      "verified_cells": 76,
+      "cited_cells": 76,
+      "ungrounded_cells": 0,
+      "verified_standards": 8,
+      "ungrounded_standards": 0,
+      "grounded_accuracy_pct": 100.0
+    },
+    "efficiency": {
+      "avg_rounds_completed": 3.33,
+      "avg_tools_per_case": 7.33,
+      "median_elapsed_s": 137.1,
+      "gateway_or_timeout_failures": 0
+    },
+    "cases": [
+      {
+        "id": "D01",
+        "topic": "单进线带双主变与规程核验",
+        "local_passed": true,
+        "model_passed": true,
+        "rounds": 3,
+        "tool_calls": 8,
+        "elapsed_seconds": 113.208,
+        "verified_cells": "9/9",
+        "verified_standards": 1,
+        "ungrounded_citations": 0,
+        "stop_reason": "completed"
+      },
+      {
+        "id": "D02",
+        "topic": "2#主变通道全链反向有功",
+        "local_passed": true,
+        "model_passed": true,
+        "rounds": 4,
+        "tool_calls": 8,
+        "elapsed_seconds": 219.54,
+        "verified_cells": "24/24",
+        "verified_standards": 2,
+        "ungrounded_citations": 0,
+        "stop_reason": "completed"
+      },
+      {
+        "id": "D03",
+        "topic": "1018与1012量测健康诊断",
+        "local_passed": true,
+        "model_passed": true,
+        "rounds": 3,
+        "tool_calls": 7,
+        "elapsed_seconds": 93.147,
+        "verified_cells": "8/8",
+        "verified_standards": 1,
+        "ungrounded_citations": 0,
+        "stop_reason": "completed"
+      },
+      {
+        "id": "D04",
+        "topic": "10kV母线过压与井下低功率因数",
+        "local_passed": true,
+        "model_passed": true,
+        "rounds": 4,
+        "tool_calls": 8,
+        "elapsed_seconds": 157.171,
+        "verified_cells": "10/10",
+        "verified_standards": 2,
+        "ungrounded_citations": 0,
+        "stop_reason": "completed"
+      },
+      {
+        "id": "D05",
+        "topic": "SCADA轮询偏移 vs 电气故障区分",
+        "local_passed": true,
+        "model_passed": true,
+        "rounds": 3,
+        "tool_calls": 7,
+        "elapsed_seconds": 117.119,
+        "verified_cells": "15/15",
+        "verified_standards": 1,
+        "ungrounded_citations": 0,
+        "stop_reason": "completed"
+      },
+      {
+        "id": "D06",
+        "topic": "分时段基线对照与LW-000010再评估",
+        "local_passed": true,
+        "model_passed": true,
+        "rounds": 3,
+        "tool_calls": 6,
+        "elapsed_seconds": 253.732,
+        "verified_cells": "10/10",
+        "verified_standards": 1,
+        "ungrounded_citations": 0,
+        "stop_reason": "completed"
+      }
+    ]
+  }
+}

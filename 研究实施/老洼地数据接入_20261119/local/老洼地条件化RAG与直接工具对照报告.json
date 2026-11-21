@@ -1,0 +1,266 @@
+{
+  "stage": "09_conditional_rag",
+  "evidence_cards_count": 8,
+  "standard_clauses_count": 68,
+  "total_cases": 12,
+  "direct_tools_only": {
+    "passed": 4,
+    "accuracy_pct": 33.3
+  },
+  "tools_plus_conditional_rag": {
+    "passed": 12,
+    "accuracy_pct": 100.0
+  },
+  "improved_case_ids": [
+    "R03",
+    "R04",
+    "R05",
+    "R06",
+    "R07",
+    "R10",
+    "R11",
+    "R12"
+  ],
+  "cases": [
+    {
+      "id": "R01",
+      "category": "exact_cell_lookup",
+      "question": "2026-11-10 12:00 303柜和306柜有功读数及原表单元格分别是什么？",
+      "direct_tools_only_passed": true,
+      "tools_plus_conditional_rag_passed": true,
+      "improved_by_rag": false,
+      "matched_card_ids": [
+        "EVC-LW-DIURNAL-BASELINE",
+        "EVC-LW-POLLING-SKEW-1116",
+        "EVC-LW-T2-REVERSE-AND-SKEW"
+      ],
+      "matched_standard_ids": [
+        "煤矿安全规程(2025) 第五百三十二条",
+        "GB/T 50417-2017 3.0.5",
+        "煤矿安全规程(2025) 第四百八十三条"
+      ],
+      "applicability_status": "applicable",
+      "missing_evidence_count": 4
+    },
+    {
+      "id": "R02",
+      "category": "dual_caliber_audit",
+      "question": "11月10日1009柜整点有功最大值与日报页尾最大值行一致吗？分别在哪个单元格？",
+      "direct_tools_only_passed": true,
+      "tools_plus_conditional_rag_passed": true,
+      "improved_by_rag": false,
+      "matched_card_ids": [
+        "EVC-LW-10KV-BUS-VOLTAGE",
+        "EVC-LW-1018-POLARITY",
+        "EVC-LW-DOWNHOLE-1009-1010"
+      ],
+      "matched_standard_ids": [
+        "GB/T 12325-2008（元数据已核，全文待复核）",
+        "煤矿安全规程(2025) 第四百八十八条",
+        "煤矿安全规程(2025) 第五百三十三条"
+      ],
+      "applicability_status": "applicable",
+      "missing_evidence_count": 5
+    },
+    {
+      "id": "R03",
+      "category": "topology_plus_standard",
+      "question": "地面1009和1010下井双回分别送到1535中央变电所哪两个进线柜？符合哪一条井下中央变电所两回路供电规定？",
+      "direct_tools_only_passed": false,
+      "tools_plus_conditional_rag_passed": true,
+      "improved_by_rag": true,
+      "matched_card_ids": [
+        "EVC-LW-DOWNHOLE-1009-1010",
+        "EVC-LW-303-306-SINGLE",
+        "EVC-LW-10KV-BUS-VOLTAGE"
+      ],
+      "matched_standard_ids": [
+        "GB/T 50417-2017 3.0.3",
+        "煤矿安全规程(2025) 第四百七十五条",
+        "煤矿安全规程(2025) 第四百九十二条"
+      ],
+      "applicability_status": "applicable",
+      "missing_evidence_count": 5
+    },
+    {
+      "id": "R04",
+      "category": "standard_and_missing_evidence",
+      "question": "10 kV II段母线（1006、1010、1018等偶数柜）最高电压达到11.01 kV，按国标供电电压允许偏差 ±7% 限值超标了吗？缺什么现场参数才能定因？",
+      "direct_tools_only_passed": false,
+      "tools_plus_conditional_rag_passed": true,
+      "improved_by_rag": true,
+      "matched_card_ids": [
+        "EVC-LW-10KV-BUS-VOLTAGE",
+        "EVC-LW-DOWNHOLE-1009-1010",
+        "EVC-LW-POLLING-SKEW-1116"
+      ],
+      "matched_standard_ids": [
+        "GB/T 12325-2008（元数据已核，全文待复核）",
+        "煤矿安全规程(2025) 第四百八十一条",
+        "煤矿安全规程(2025) 第四百八十三条"
+      ],
+      "applicability_status": "applicable",
+      "missing_evidence_count": 4
+    },
+    {
+      "id": "R05",
+      "category": "conditional_overload_boundary",
+      "question": "2026-11-13 07:00-19:00 306柜连续13小时有功和电流为0，303柜单进线带双主变是否满足矿井两回路电源线路供电规定？缺哪些定值与操作记录？",
+      "direct_tools_only_passed": false,
+      "tools_plus_conditional_rag_passed": true,
+      "improved_by_rag": true,
+      "matched_card_ids": [
+        "EVC-LW-303-306-SINGLE",
+        "EVC-LW-POLLING-SKEW-1116",
+        "EVC-LW-DIURNAL-BASELINE"
+      ],
+      "matched_standard_ids": [
+        "GB/T 50417-2017 3.0.3",
+        "煤矿安全规程(2025) 第四百七十二条",
+        "煤矿安全规程(2025) 第四百七十四条"
+      ],
+      "applicability_status": "applicable",
+      "missing_evidence_count": 4
+    },
+    {
+      "id": "R06",
+      "category": "metering_precondition",
+      "question": "1018二采区II回为什么全周168小时有功和功率因数都是负数？能否据此判定井下二采区在向母线反送电？",
+      "direct_tools_only_passed": false,
+      "tools_plus_conditional_rag_passed": true,
+      "improved_by_rag": true,
+      "matched_card_ids": [
+        "EVC-LW-1018-POLARITY",
+        "EVC-LW-10KV-BUS-VOLTAGE",
+        "EVC-LW-DOWNHOLE-1009-1010"
+      ],
+      "matched_standard_ids": [
+        "GB/T 50417-2017 3.0.4",
+        "煤矿安全规程(2025) 第五百二十七条",
+        "煤矿安全规程(2025) 第五百一十七条"
+      ],
+      "applicability_status": "applicable",
+      "missing_evidence_count": 5
+    },
+    {
+      "id": "R07",
+      "category": "metering_plus_standard",
+      "question": "1012补偿控制柜II功率因数均值0.704且有负有功，与1011补偿控制柜I对比说明了什么？缺哪份二次采样接线资料？",
+      "direct_tools_only_passed": false,
+      "tools_plus_conditional_rag_passed": true,
+      "improved_by_rag": true,
+      "matched_card_ids": [
+        "EVC-LW-1012-CAPACITOR",
+        "EVC-LW-10KV-BUS-VOLTAGE",
+        "EVC-LW-1018-POLARITY"
+      ],
+      "matched_standard_ids": [
+        "GB/T 50417-2017 3.0.5",
+        "煤矿安全规程(2025) 第五百二十六条",
+        "煤矿安全规程(2025) 第五百零二条"
+      ],
+      "applicability_status": "applicable",
+      "missing_evidence_count": 4
+    },
+    {
+      "id": "R08",
+      "category": "applicability_rejection",
+      "question": "请查询井下1535中央变电所1101一回进线柜在2026-11-13 12:00的有功功率和电流读数。",
+      "direct_tools_only_passed": true,
+      "tools_plus_conditional_rag_passed": true,
+      "improved_by_rag": false,
+      "matched_card_ids": [
+        "EVC-LW-DOWNHOLE-1009-1010",
+        "EVC-LW-303-306-SINGLE",
+        "EVC-LW-1018-POLARITY"
+      ],
+      "matched_standard_ids": [
+        "GB/T 50417-2017 3.0.3",
+        "煤矿安全规程(2025) 第四百七十五条",
+        "煤矿安全规程(2025) 第四百九十二条"
+      ],
+      "applicability_status": "rejected_precondition",
+      "missing_evidence_count": 6
+    },
+    {
+      "id": "R09",
+      "category": "missing_evidence_guard",
+      "question": "1009和1010下井电缆的具体型号、截面（mm²）和额定载流量是多少？",
+      "direct_tools_only_passed": true,
+      "tools_plus_conditional_rag_passed": true,
+      "improved_by_rag": false,
+      "matched_card_ids": [
+        "EVC-LW-DOWNHOLE-1009-1010",
+        "EVC-LW-303-306-SINGLE",
+        "EVC-LW-10KV-BUS-VOLTAGE"
+      ],
+      "matched_standard_ids": [
+        "煤矿安全规程(2025) 第五百一十五条",
+        "煤矿安全规程(2025) 第四百八十三条",
+        "煤矿安全规程(2025) 第五百零四条"
+      ],
+      "applicability_status": "applicable",
+      "missing_evidence_count": 6
+    },
+    {
+      "id": "R10",
+      "category": "mechanism_differentiation",
+      "question": "2026-11-12 12:00 2#主变支路（306、312、1006）全链反向有功，与全周25个整点的进线-主变差额在机理上有什么区别？",
+      "direct_tools_only_passed": false,
+      "tools_plus_conditional_rag_passed": true,
+      "improved_by_rag": true,
+      "matched_card_ids": [
+        "EVC-LW-T2-REVERSE-AND-SKEW",
+        "EVC-LW-POLLING-SKEW-1116",
+        "EVC-LW-303-306-SINGLE"
+      ],
+      "matched_standard_ids": [
+        "煤矿安全规程(2025) 第四百九十八条",
+        "煤矿安全规程(2025) 第五百二十三条",
+        "煤矿安全规程(2025) 第五百二十四条"
+      ],
+      "applicability_status": "applicable",
+      "missing_evidence_count": 5
+    },
+    {
+      "id": "R11",
+      "category": "semantic_paraphrase_recall",
+      "question": "老洼地 2# 主变支路出现逆潮流与功率倒灌风险时，如何结合归档单元格定位并排查缺证？",
+      "direct_tools_only_passed": false,
+      "tools_plus_conditional_rag_passed": true,
+      "improved_by_rag": true,
+      "matched_card_ids": [
+        "EVC-LW-T2-REVERSE-AND-SKEW",
+        "EVC-LW-DIURNAL-BASELINE",
+        "EVC-LW-1012-CAPACITOR"
+      ],
+      "matched_standard_ids": [
+        "GB/T 12325-2008（元数据已核，全文待复核）",
+        "GB/T 50417-2017 3.0.3",
+        "煤矿安全规程(2025) 第五百零七条"
+      ],
+      "applicability_status": "applicable",
+      "missing_evidence_count": 4
+    },
+    {
+      "id": "R12",
+      "category": "semantic_paraphrase_recall",
+      "question": "变电所 10 kV 电容支路疑似无功倒补并伴随母线高压越限时，依据哪条国标口径以及缺少哪些现场信息？",
+      "direct_tools_only_passed": false,
+      "tools_plus_conditional_rag_passed": true,
+      "improved_by_rag": true,
+      "matched_card_ids": [
+        "EVC-LW-1012-CAPACITOR",
+        "EVC-LW-10KV-BUS-VOLTAGE",
+        "EVC-LW-DOWNHOLE-1009-1010"
+      ],
+      "matched_standard_ids": [
+        "GB/T 12325-2008（元数据已核，全文待复核）",
+        "GB/T 50417-2017 3.0.3",
+        "煤矿安全规程(2025) 第四百八十九条"
+      ],
+      "applicability_status": "applicable",
+      "missing_evidence_count": 4
+    }
+  ]
+}

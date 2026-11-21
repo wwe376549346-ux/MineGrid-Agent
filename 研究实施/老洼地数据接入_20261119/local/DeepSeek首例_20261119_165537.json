@@ -1,0 +1,29 @@
+{
+  "model": "deepseek-v4-pro",
+  "date": "2026-11-19T16:55:37.152353+08:00",
+  "question": "LW-000010，306柜同期有功也变化了吗？再查1009柜下游。",
+  "seconds_by_request": [
+    30.718
+  ],
+  "checks": {
+    "completed_with_four_tools": false,
+    "comparison_matches_baseline": false,
+    "source_cells_present": false,
+    "diagram_downstream": false,
+    "archives_unchanged": true
+  },
+  "answer": {
+    "kind": "agent_review",
+    "decision_mode": "model",
+    "max_tool_calls": 4,
+    "steps": [],
+    "comparisons": [],
+    "pending": [
+      "模型端点返回 HTTP 400，本轮停止。"
+    ],
+    "status": "partial",
+    "stop_reason": "model_error",
+    "tool_calls": 0
+  },
+  "rendered": "模型端点返回 HTTP 400，本轮停止。"
+}

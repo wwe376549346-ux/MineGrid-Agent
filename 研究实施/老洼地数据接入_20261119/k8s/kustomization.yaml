@@ -1,0 +1,15 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: laowadi-power
+commonLabels:
+  app.kubernetes.io/part-of: coal-mine-power-grid
+  app.kubernetes.io/managed-by: kustomize
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - timescaledb-statefulset.yaml
+  - archive-pvc.yaml
+  - migrate-job.yaml
+  - api-deployment.yaml
+  - worker-deployment.yaml
+  - backup-cronjob.yaml

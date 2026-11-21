@@ -1,0 +1,4 @@
+# Backward-compatible entry point for the production stack.
+include:
+  - docker-compose.yml
+

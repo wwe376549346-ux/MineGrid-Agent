@@ -1,0 +1,194 @@
+{
+  "station": "S35",
+  "sources": {
+    "daily_reports": [
+      {
+        "day": "2026-11-10",
+        "filename": "1110.xls",
+        "sheet": "New Sheet1",
+        "sha256": "b80e3555e93c2444ff006397a429609ccf9db480561aa5c6fff66e148f893aea"
+      },
+      {
+        "day": "2026-11-11",
+        "filename": "1111.xls",
+        "sheet": "New Sheet1",
+        "sha256": "ce801bf35f36d893d24469673b6dbdba21d63b3b3b0e06f222f4a0817a21e6f9"
+      },
+      {
+        "day": "2026-11-12",
+        "filename": "1112.xls",
+        "sheet": "New Sheet1",
+        "sha256": "2ddbb12a5f5fdbe16b0132bb0bc0599c98278277734249a687c6dd41122698b2"
+      },
+      {
+        "day": "2026-11-13",
+        "filename": "1113.xls",
+        "sheet": "New Sheet1",
+        "sha256": "2ea50206fd5ac4d071046eb35e4023955920b520fafa4c8ccd668843cf652acc"
+      },
+      {
+        "day": "2026-11-14",
+        "filename": "1114.xls",
+        "sheet": "New Sheet1",
+        "sha256": "6f057a094fb1ca57476ae7c1e407a5089b71d702ecb56e826e57a2f1b792b630"
+      },
+      {
+        "day": "2026-11-15",
+        "filename": "1115.xls",
+        "sheet": "New Sheet1",
+        "sha256": "f54f8d0eb4e64cb0758fd4c6113f10ba55a6597bb354ee08663f8b2998a95349"
+      },
+      {
+        "day": "2026-11-16",
+        "filename": "1116.xls",
+        "sheet": "New Sheet1",
+        "sha256": "1a50c071c9d2bf88ad383578bad1c431584ad227a4b12a380c6ab2f9657689b4"
+      }
+    ],
+    "diagrams": [
+      {
+        "filename": "35KV变电所.png",
+        "captured_at": "2026-11-17 20:29:01",
+        "sha256": "cfbf052ae1068b299e4462c953ad9a628a183f22672794d6abf1ac13fc6dcab5"
+      },
+      {
+        "filename": "中央变电所.png",
+        "captured_at": "2026-11-17 20:29:25",
+        "sha256": "8cebfebf7b3bcfbfe9508f0e9fe8dca7691fe987216b2e93bba111de1a7454e2"
+      }
+    ],
+    "station_cabinet_counts": {
+      "C1535": 15,
+      "S35": 25
+    },
+    "topology_links": [
+      {
+        "from_station": "S35",
+        "from_cabinet": "1009",
+        "to_station": "C1535",
+        "to_cabinet": "1101",
+        "label": "地面站10 kV I段供电线路"
+      },
+      {
+        "from_station": "S35",
+        "from_cabinet": "1010",
+        "to_station": "C1535",
+        "to_cabinet": "1201",
+        "label": "地面站10 kV II段供电线路"
+      }
+    ],
+    "hourly_readings_total": 16800,
+    "footer_summaries_total": 2100,
+    "historical_replay": {
+      "run_id": "LWR-e0c6b18a0d5023d4",
+      "frames": 168,
+      "power_change_events": 106
+    },
+    "full_station_health_findings": {
+      "high": 7,
+      "medium": 7,
+      "info": 11,
+      "total": 25
+    },
+    "standards_clauses_total": 68
+  },
+  "answerability_matrix": {
+    "answerable": [
+      "35 kV 变电所 25 个柜在 2026-11-10 至 2026-11-16 共 168 个整点的 Uab、Ia、P、cos 读数及原表单元格坐标。",
+      "日报页尾原表统计行（最大值、最小值、平均值，第 28–30 行）与基于 24 个可见整点重算的统计量双口径对照。",
+      "两张监控截图（35KV变电所.png、中央变电所.png）登记的 40 个柜号及 1009→1101、1010→1201 两条站间图示供电连接。",
+      "基于已有读数派生的四柜整点回放事件（106 条）及全站 25 柜四维电气体检发现（25 项，含三相功率自洽比例、10 kV I/II 段电压聚类、单进线带双主变时段、2#主变反向有功、SCADA 轮询偏移与分时段基线偏离）。",
+      "本地归档的《煤矿安全规程（2025）》电气与监控章节 63 条原文及 5 张已核 GB/T 50417-2017、GB/T 12325-2008 参考卡。"
+    ],
+    "condition_mismatch": [
+      "非整点时刻查询（如 12:30、半小时后）或未导入日期查询：日报仅含 00:00–23:00 整点，系统拒绝插值并提示澄清。",
+      "站名与柜号归属不符（如查询中央变电所 306 柜或 1009 柜整点读数）：1535 中央变电所仅有截图台账，无小时级日报。",
+      "事件跨柜对比时指定了与该事件（前一整点→触发整点）不一致的日期或小时：停止计算并提示对齐事件时段。",
+      "任何遥控操作或定值修改请求（如分闸、合闸、倒闸、修改保护定值）：系统严格执行只读边界并拒绝控制指令。"
+    ],
+    "missing_evidence": [
+      "电缆型号、截面、长度、敷设方式及环境温度校正系数（无法计算电缆热稳定极限与精确电压降模型）。",
+      "1#、2# 主变及各高压柜的额定容量、CT/PT 变比配置、过流/速断/零序保护整定值单（无法直接判定是否越过设备额定限值或保护定值）。",
+      "2026-11-10 至 2026-11-16 同期值班日志、倒闸操作票、35 kV/10 kV 母联及进出线开关分合变位、保护装置 SOE 动作记录（无法仅凭功率变化确诊物理原因是计划倒闸、正常大负荷启停还是故障跳闸）。",
+      "35 kV 变电所 10 kV 侧未列入该日报的其他出线回路清单（主变低压侧与日报已列 10 kV 出线均值相差 54.0%）。"
+    ]
+  },
+  "verification_cases": [
+    {
+      "id": "C01",
+      "category": "可答事实 · 整点与页尾双口径",
+      "question": "11月10日1009柜有功最大值是多少？",
+      "passed": true,
+      "evidence": "1110.xls / New Sheet1!BD28（页尾 1222.51 kW）与 New Sheet1!BD17（13:00 整点 955.53 kW）",
+      "note": "区分日报页尾原表值与 24 个整点样本最大值，分别保留源单元格。"
+    },
+    {
+      "id": "C02",
+      "category": "可答事实 · 站间图示连接",
+      "question": "1009柜和1010柜下游分别接到哪里？",
+      "passed": true,
+      "evidence": "35KV变电所.png + 中央变电所.png（1009→1101 地面站10kV I段；1010→1201 地面站10kV II段）",
+      "note": "绑定两张监控截图的文件名、截取时刻与 SHA-256；仅代表图示连接，不等同于某时刻合闸运行状态。"
+    },
+    {
+      "id": "C03",
+      "category": "可答事实 · 事件驱动跨柜核验",
+      "question": "LW-000010，比较1009柜同期有功。",
+      "passed": true,
+      "evidence": "1110.xls / New Sheet1!D15,D16（303柜）与 BD15,BD16（1009柜 +459.92 kW）",
+      "note": "按事件前后两个整点（11:00→12:00）对齐查询另一柜并校验源文件哈希。"
+    },
+    {
+      "id": "C04",
+      "category": "条件不符 · 非整点时刻拒绝插值",
+      "question": "11月10日12:30 1009柜有功是多少？",
+      "passed": true,
+      "evidence": "status=clarify（日报仅含 00:00–23:00 整点记录）",
+      "note": "不伪造半点插值读数，要求用户指定整点。"
+    },
+    {
+      "id": "C05",
+      "category": "条件不符 · 站名与柜号归属冲突",
+      "question": "中央变电所1009柜11月10日12点有功是多少？",
+      "passed": true,
+      "evidence": "status=clarify（1009 柜属于地面 35/10 kV 变电站，中央变电所无小时日报）",
+      "note": "严格校验站名与柜号台账归属关系。"
+    },
+    {
+      "id": "C06",
+      "category": "条件不符 · 事件比较时段未对齐",
+      "question": "LW-000010，比较1010柜15点的有功。",
+      "passed": true,
+      "evidence": "stop_reason=time_alignment（事件时段为 11:00 至 12:00，在第 1 步后立即停止）",
+      "note": "防止把不同时段的读数混作同期对比。"
+    },
+    {
+      "id": "C07",
+      "category": "缺证边界 · 电缆型号与额定限值缺失",
+      "question": "1009柜和1010柜下井电缆型号、截面和额定载流限值是多少？当前过载了吗？",
+      "passed": true,
+      "evidence": "保留 1009/1010 实际电流与有功区间，显式单列缺额定容量、电缆型号截面与保护定值单",
+      "note": "缺设备参数时保留已证实读数，不编造额定值或过载结论。"
+    },
+    {
+      "id": "C08",
+      "category": "缺证边界 · 1010低功率因数与井下台账缺失",
+      "question": "1010柜（II回井下1535）这7天功率因数健康吗？具体最低值和原表出处在哪里？",
+      "passed": true,
+      "evidence": "1115.xls / New Sheet1!BM16（最低 cos=0.32，7天均值 0.651，148/168h < 0.80）",
+      "note": "准确给出量测异常证据，同时将井下就地无功补偿与电机轻载原因列为待现场核查。"
+    },
+    {
+      "id": "C09",
+      "category": "缺证边界 · 跳闸/操作原因缺日志",
+      "question": "LW-000010，比较306柜同期有功。是不是跳闸导致的？",
+      "passed": true,
+      "evidence": "1110.xls / New Sheet1!D15,D16,H15,H16 + stop_reason=needs_evidence（缺运行日志/开关变位/保护动作）",
+      "note": "已证实的四处单元格读数完整保留，物理原因明确登记为缺现场日志。"
+    }
+  ],
+  "summary": {
+    "total_cases": 9,
+    "passed_cases": 9
+  }
+}

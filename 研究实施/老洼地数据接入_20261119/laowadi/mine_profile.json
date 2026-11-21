@@ -1,0 +1,248 @@
+{
+  "schema_version": "2.0.0",
+  "mine_id": "laowadi",
+  "mine_name": "老洼地煤矿 35/10 kV 配电网",
+  "primary_station": "S35",
+  "polling_ramp_kw": 1000.0,
+  "balance_threshold_kw": 200.0,
+  "model_assumption_disclaimer": "以下变压器额定容量/短路阻抗/分接头及电缆单位阻抗均为用于交流潮流（pandapower Newton-Raphson）校核的参数化等值假设，非老洼地现场铭牌实测台账；所有整点电压、电流、有功与功率因数边界条件均直接取自归档 SQLite 日报并附原表单元格出处。",
+  "stations": [
+    {
+      "code": "S35",
+      "name": "地面 35 kV 变电所",
+      "role": "surface_substation",
+      "has_hourly_archive": true,
+      "diagram_filename": "35KV变电所.png"
+    },
+    {
+      "code": "C1535",
+      "name": "井下 1535 中央变电所",
+      "role": "underground_substation",
+      "has_hourly_archive": false,
+      "diagram_filename": "中央变电所.png"
+    }
+  ],
+  "voltage_limits": [
+    {
+      "nominal_kv": 35.0,
+      "lo_kv": 32.55,
+      "hi_kv": 38.50,
+      "operational_watch_hi_kv": 37.45,
+      "standard_ref": "GB/T 12325-2008（35 kV 及以上正负偏差绝对值之和 <= 10%，工程关注上限 +7% = 37.45 kV）"
+    },
+    {
+      "nominal_kv": 10.0,
+      "lo_kv": 9.30,
+      "hi_kv": 10.70,
+      "operational_watch_hi_kv": 10.70,
+      "standard_ref": "GB/T 12325-2008（20 kV 及以下三相供电电压允许偏差 ±7%，即 9.30–10.70 kV）"
+    }
+  ],
+  "buses": [
+    {
+      "id": "S35_35KV_I",
+      "station": "S35",
+      "name": "地面站 35 kV I段母线",
+      "nominal_kv": 35.0,
+      "segment": "35kV_I",
+      "reference_cabinet": "303"
+    },
+    {
+      "id": "S35_35KV_II",
+      "station": "S35",
+      "name": "地面站 35 kV II段母线",
+      "nominal_kv": 35.0,
+      "segment": "35kV_II",
+      "reference_cabinet": "306"
+    },
+    {
+      "id": "S35_10KV_I",
+      "station": "S35",
+      "name": "地面站 10 kV I段母线",
+      "nominal_kv": 10.5,
+      "segment": "I段",
+      "reference_cabinet": "1005"
+    },
+    {
+      "id": "S35_10KV_II",
+      "station": "S35",
+      "name": "地面站 10 kV II段母线",
+      "nominal_kv": 10.5,
+      "segment": "II段",
+      "reference_cabinet": "1006"
+    },
+    {
+      "id": "C1535_10KV_I",
+      "station": "C1535",
+      "name": "井下 1535 中央变电所 I段母线（1101进线）",
+      "nominal_kv": 10.5,
+      "segment": "1535_I",
+      "reference_cabinet": "1101"
+    },
+    {
+      "id": "C1535_10KV_II",
+      "station": "C1535",
+      "name": "井下 1535 中央变电所 II段母线（1201进线）",
+      "nominal_kv": 10.5,
+      "segment": "1535_II",
+      "reference_cabinet": "1201"
+    },
+    {
+      "id": "UG_1750_10KV",
+      "station": "C1535",
+      "name": "井下 1750 配电点（1020末端）",
+      "nominal_kv": 10.5,
+      "segment": "1750",
+      "reference_cabinet": "1020"
+    }
+  ],
+  "transformers": [
+    {
+      "id": "T1",
+      "name": "1号主变（311 → 1005）",
+      "station": "S35",
+      "hv_cabinet": "311",
+      "lv_cabinet": "1005",
+      "hv_bus": "S35_35KV_I",
+      "lv_bus": "S35_10KV_I",
+      "default_sn_mva": 6.3,
+      "default_vn_hv_kv": 35.0,
+      "default_vn_lv_kv": 10.5,
+      "default_vk_percent": 7.5,
+      "default_vkr_percent": 0.6,
+      "default_pfe_kw": 6.1,
+      "default_i0_percent": 0.12,
+      "tap_side": "hv",
+      "tap_step_percent": 2.5,
+      "tap_min": -2,
+      "tap_max": 2,
+      "calibrated_tap_pos": 2,
+      "parameter_source": "parameterized_assumption_calibrated_to_7d_ratio_3.556"
+    },
+    {
+      "id": "T2",
+      "name": "2号主变（312 → 1006）",
+      "station": "S35",
+      "hv_cabinet": "312",
+      "lv_cabinet": "1006",
+      "hv_bus": "S35_35KV_II",
+      "lv_bus": "S35_10KV_II",
+      "default_sn_mva": 6.3,
+      "default_vn_hv_kv": 35.0,
+      "default_vn_lv_kv": 10.5,
+      "default_vk_percent": 7.5,
+      "default_vkr_percent": 0.6,
+      "default_pfe_kw": 6.1,
+      "default_i0_percent": 0.12,
+      "tap_side": "hv",
+      "tap_step_percent": 2.5,
+      "tap_min": -2,
+      "tap_max": 2,
+      "calibrated_tap_pos": 1,
+      "parameter_source": "parameterized_assumption_calibrated_to_7d_ratio_3.440"
+    }
+  ],
+  "feeders": [
+    {"cabinet": "303", "station": "S35", "label": "一回进线", "bus_id": "S35_35KV_I", "role": "incomer", "nominal_kv": 35.0},
+    {"cabinet": "306", "station": "S35", "label": "二回进线", "bus_id": "S35_35KV_II", "role": "incomer", "nominal_kv": 35.0},
+    {"cabinet": "311", "station": "S35", "label": "1号主变高压侧", "bus_id": "S35_35KV_I", "role": "transformer_hv", "nominal_kv": 35.0},
+    {"cabinet": "312", "station": "S35", "label": "2号主变高压侧", "bus_id": "S35_35KV_II", "role": "transformer_hv", "nominal_kv": 35.0},
+    {"cabinet": "313", "station": "S35", "label": "备用", "bus_id": "S35_35KV_II", "role": "spare", "nominal_kv": 35.0},
+    {"cabinet": "1005", "station": "S35", "label": "1号主变低压侧", "bus_id": "S35_10KV_I", "role": "transformer_lv", "nominal_kv": 10.0},
+    {"cabinet": "1006", "station": "S35", "label": "2号主变低压侧", "bus_id": "S35_10KV_II", "role": "transformer_lv", "nominal_kv": 10.0},
+    {"cabinet": "1007", "station": "S35", "label": "充电桩变压器", "bus_id": "S35_10KV_I", "role": "feeder", "nominal_kv": 10.0},
+    {
+      "cabinet": "1009", "station": "S35", "label": "I回井下1535", "bus_id": "S35_10KV_I", "role": "feeder", "nominal_kv": 10.0,
+      "downstream_bus_id": "C1535_10KV_I", "default_cable_length_km": 1.8, "default_r_ohm_per_km": 0.193, "default_x_ohm_per_km": 0.085, "default_max_i_ka": 0.30
+    },
+    {
+      "cabinet": "1010", "station": "S35", "label": "II回井下1535", "bus_id": "S35_10KV_II", "role": "feeder", "nominal_kv": 10.0,
+      "downstream_bus_id": "C1535_10KV_II", "default_cable_length_km": 1.8, "default_r_ohm_per_km": 0.193, "default_x_ohm_per_km": 0.085, "default_max_i_ka": 0.30
+    },
+    {"cabinet": "1011", "station": "S35", "label": "补偿控制柜I", "bus_id": "S35_10KV_I", "role": "capacitor", "nominal_kv": 10.0},
+    {"cabinet": "1012", "station": "S35", "label": "补偿控制柜II", "bus_id": "S35_10KV_II", "role": "capacitor", "nominal_kv": 10.0},
+    {"cabinet": "1016", "station": "S35", "label": "3号变压器", "bus_id": "S35_10KV_II", "role": "feeder", "nominal_kv": 10.0},
+    {"cabinet": "1017", "station": "S35", "label": "主平硐I回", "bus_id": "S35_10KV_I", "role": "feeder", "nominal_kv": 10.0},
+    {"cabinet": "1018", "station": "S35", "label": "二采区II回", "bus_id": "S35_10KV_II", "role": "feeder", "nominal_kv": 10.0, "polarity_suspect": true},
+    {"cabinet": "1019", "station": "S35", "label": "1号变压器", "bus_id": "S35_10KV_I", "role": "feeder", "nominal_kv": 10.0},
+    {
+      "cabinet": "1020", "station": "S35", "label": "井下1750配电点", "bus_id": "S35_10KV_II", "role": "feeder", "nominal_kv": 10.0,
+      "downstream_bus_id": "UG_1750_10KV", "default_cable_length_km": 2.2, "default_r_ohm_per_km": 0.258, "default_x_ohm_per_km": 0.089, "default_max_i_ka": 0.24
+    },
+    {"cabinet": "1022", "station": "S35", "label": "2号变压器", "bus_id": "S35_10KV_II", "role": "feeder", "nominal_kv": 10.0},
+    {"cabinet": "1023", "station": "S35", "label": "二采区I回", "bus_id": "S35_10KV_I", "role": "feeder", "nominal_kv": 10.0},
+    {"cabinet": "1024", "station": "S35", "label": "5号变压器", "bus_id": "S35_10KV_II", "role": "feeder", "nominal_kv": 10.0},
+    {"cabinet": "1025", "station": "S35", "label": "4号变压器（660）", "bus_id": "S35_10KV_I", "role": "feeder", "nominal_kv": 10.0},
+    {"cabinet": "1026", "station": "S35", "label": "6号变压器", "bus_id": "S35_10KV_II", "role": "feeder", "nominal_kv": 10.0},
+    {"cabinet": "1027", "station": "S35", "label": "瓦斯发电站I回", "bus_id": "S35_10KV_I", "role": "feeder", "nominal_kv": 10.0},
+    {"cabinet": "1030", "station": "S35", "label": "备用", "bus_id": "S35_10KV_II", "role": "spare", "nominal_kv": 10.0},
+    {"cabinet": "1032", "station": "S35", "label": "备用", "bus_id": "S35_10KV_II", "role": "spare", "nominal_kv": 10.0}
+  ],
+  "inter_station_links": [
+    {
+      "from_station": "S35",
+      "from_cabinet": "1009",
+      "to_station": "C1535",
+      "to_cabinet": "1101",
+      "description": "地面站 10 kV I段供电线路（下井 I回）",
+      "default_cable_length_km": 1.8,
+      "default_r_ohm_per_km": 0.193,
+      "default_x_ohm_per_km": 0.085,
+      "default_max_i_ka": 0.30
+    },
+    {
+      "from_station": "S35",
+      "from_cabinet": "1010",
+      "to_station": "C1535",
+      "to_cabinet": "1201",
+      "description": "地面站 10 kV II段供电线路（下井 II回）",
+      "default_cable_length_km": 1.8,
+      "default_r_ohm_per_km": 0.193,
+      "default_x_ohm_per_km": 0.085,
+      "default_max_i_ka": 0.30
+    }
+  ],
+  "bus_ties": [
+    {
+      "id": "TIE_35KV",
+      "station": "S35",
+      "cabinet": "300",
+      "bus_a": "S35_35KV_I",
+      "bus_b": "S35_35KV_II",
+      "normal_closed": false,
+      "description": "地面 35 kV 母联开关（常规分列，单进线检修时闭合）"
+    },
+    {
+      "id": "TIE_C1535",
+      "station": "C1535",
+      "cabinet": "1200",
+      "bus_a": "C1535_10KV_I",
+      "bus_b": "C1535_10KV_II",
+      "normal_closed": false,
+      "description": "井下 1535 中央变电所 1200 联络开关（常规分列，N-1 转供闭合）"
+    }
+  ],
+  "balance_equations": [
+    {
+      "id": "BAL_35KV_IN_VS_TR",
+      "name": "35 kV 进线与主变高压侧功率守恒",
+      "lhs_cabinets": ["303", "306"],
+      "rhs_cabinets": ["311", "312"],
+      "threshold_kw": 200.0
+    },
+    {
+      "id": "BAL_TR1_HV_LV",
+      "name": "1号主变高低压侧功率守恒",
+      "lhs_cabinets": ["311"],
+      "rhs_cabinets": ["1005"],
+      "threshold_kw": 200.0
+    },
+    {
+      "id": "BAL_TR2_HV_LV",
+      "name": "2号主变高低压侧功率守恒",
+      "lhs_cabinets": ["312"],
+      "rhs_cabinets": ["1006"],
+      "threshold_kw": 200.0
+    }
+  ]
+}

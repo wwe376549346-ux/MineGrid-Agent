@@ -1,0 +1,46 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: laowadi-alembic-migrate
+  namespace: laowadi-power
+  labels:
+    app.kubernetes.io/name: laowadi-alembic-migrate
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: laowadi-alembic-migrate
+    spec:
+      restartPolicy: OnFailure
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+      containers:
+        - name: migrate
+          image: laowadi/power-agent:2.4.0
+          imagePullPolicy: IfNotPresent
+          command: ["python", "-B", "-m", "laowadi", "db", "migrate-archive", "--db", "/archive/seed/laowadi.sqlite3", "--events-db", "/archive/seed/laowadi_events.sqlite3"]
+          envFrom:
+            - configMapRef:
+                name: laowadi-config
+            - secretRef:
+                name: laowadi-secrets
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "256Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"
+          volumeMounts:
+            - name: archive
+              mountPath: /archive
+              readOnly: true
+      volumes:
+        - name: archive
+          persistentVolumeClaim:
+            claimName: laowadi-archive-pvc
