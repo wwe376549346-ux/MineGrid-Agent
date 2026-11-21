@@ -395,3 +395,319 @@ def arbitration_evidence(archive, trace, decision):
         ))
         return facts, [step]
     return facts, []
+
+
+N1_REVIEW_REQUIREMENTS = [
+    "1009 与 1010 下井电缆铭牌型号、截面（mm²）、长度及井筒敷设降容系数",
+    "1010 柜电流互感器（CT）变比、两表法/三表法接线与有功计量比例系数核校记录",
+    "井下 1535 中央变电所 1200 母联/联络开关热备用状态与闭锁逻辑操作票",
+    "主变实测短路阻抗 Uk% 与同期分接头档位台账",
+]
+
+
+def n1_transfer_request(question, hints, profile):
+    """Detect underground dual-circuit N-1 transfer study requests (e.g. 1009 -> 1010)."""
+    if not re.search(r"N-1|n-1|转供|(?:1009.*退出|1009.*停运)", question):
+        return None
+    if re.search(r"补偿|电容", question):
+        return None
+    if any(k in question for k in ("303", "306", "单进线")) and not any(k in question for k in ("1009", "1010", "下井")):
+        return None
+    rated_m = re.search(r"(?:额定(?:电流|载流)?|载流量)[^\d]{0,10}(\d{2,4}(?:\.\d+)?)\s*A\b", question, re.I)
+    derate_m = re.search(r"降容[^\d]{0,6}(0\.\d+|1(?:\.\d+)?)", question)
+    time = re.search(r"(?<!\d)\d{1,2}:(\d{2})(?::(\d{2}))?(?!\d)", question)
+    non_hourly = bool(time and (time[1] != "00" or time[2] not in (None, "00")))
+    return {
+        "outage_cabinet": "1009",
+        "receiving_cabinet": "1010",
+        "outage_mode": "feeder_1009",
+        "rated_current_a": float(rated_m.group(1)) if rated_m else None,
+        "derating_factor": float(derate_m.group(1)) if derate_m else None,
+        "non_hourly": non_hourly,
+    }
+
+
+def n1_telemetry_case(archive, profile, request, hints, scoped_call):
+    """Locate the worst concurrent dual-circuit current hour and inspect metering scale offset."""
+    out_cab = request["outage_cabinet"]
+    rec_cab = request["receiving_cabinet"]
+    if request.get("non_hourly") or (hints["hour"] is not None and not 0 <= hints["hour"] <= 23):
+        return _message(
+            "n1-measurement", "TelemetryMeteringAgent", "PhysicsPowerFlowAgent",
+            "measurement_claim", "请求时刻超出日报整点范围。", {"status": "missing_measurements"},
+        ), None
+
+    prof_rec = scoped_call("get_cabinet_health_profile", {"cabinet": rec_cab})
+    m_chk = (prof_rec.get("metering_check") or {}) if prof_rec.get("status") == "ok" else {}
+    ratio_median = m_chk.get("ratio_median")
+    scale_status = m_chk.get("status")
+
+    days = [hints["day"]] if hints["day"] else archive.days()
+    frames = []
+    for day in days:
+        hour = hints["hour"]
+        start, end = ("00:00:00", "23:00:00") if hour is None else (f"{hour:02d}:00:00",) * 2
+        win = scoped_call("get_window_snapshot", {
+            "start_time": f"{day} {start}", "end_time": f"{day} {end}",
+            "cabinets": ["303", "306", "1005", "1006", out_cab, rec_cab],
+            "metrics": ["Ia", "P", "Uab", "cos"],
+        })
+        frames.extend(win.get("frames", []))
+
+    candidates = []
+    for fr in frames:
+        rd = fr.get("readings") or {}
+        ia_out = (rd.get(out_cab) or {}).get("Ia")
+        ia_rec = (rd.get(rec_cab) or {}).get("Ia")
+        p_out = (rd.get(out_cab) or {}).get("P")
+        p_rec = (rd.get(rec_cab) or {}).get("P")
+        u_rec = (rd.get("1006") or {}).get("Uab")
+        if all(_valid(x) for x in (ia_out, ia_rec, p_out, p_rec, u_rec)):
+            comb_ia = round(float(ia_out["value"]) + float(ia_rec["value"]), 2)
+            comb_p = round(float(p_out["value"]) + float(p_rec["value"]), 2)
+            candidates.append((comb_ia, fr["time"], fr, comb_p))
+
+    if not candidates:
+        return _message(
+            "n1-measurement", "TelemetryMeteringAgent", "PhysicsPowerFlowAgent",
+            "measurement_claim", "指定范围内缺少双回同期完整电流与有功读数。",
+            {"status": "missing_measurements"},
+        ), None
+
+    comb_ia, best_time, best_frame, comb_p = max(candidates, key=lambda row: (row[0], row[1]))
+    rd = best_frame["readings"]
+    payload = {
+        "status": "ok",
+        "at_time": best_time,
+        "outage_cabinet": out_cab,
+        "receiving_cabinet": rec_cab,
+        "ia_outage": rd[out_cab]["Ia"],
+        "ia_receiving": rd[rec_cab]["Ia"],
+        "p_outage": rd[out_cab]["P"],
+        "p_receiving": rd[rec_cab]["P"],
+        "bus_voltage": rd["1006"]["Uab"],
+        "combined_metered_ia_a": comb_ia,
+        "combined_metered_p_kw": comb_p,
+        "metering_scale_status": scale_status,
+        "metering_ratio_median": ratio_median,
+    }
+    content = (
+        f'{best_time} · {out_cab}+{rec_cab} 双回同期表计电流代数和峰值 {comb_ia:.2f} A'
+        f'（{out_cab}={rd[out_cab]["Ia"]["value"]:.2f} A，{rec_cab}={rd[rec_cab]["Ia"]["value"]:.2f} A），'
+        f'有功合计 {comb_p:.2f} kW；{rec_cab} 柜量测比例系数中位数={ratio_median}（{scale_status}）。'
+    )
+    return _message(
+        "n1-measurement", "TelemetryMeteringAgent", "PhysicsPowerFlowAgent",
+        "measurement_claim", content, payload,
+    ), best_frame
+
+
+def n1_propose(archive, profile, measurement, frame, request):
+    """PhysicsPowerFlowAgent runs single-model balanced 3-phase pandapower N-1 contingency."""
+    from laowadi.powerflow import run_ac_power_flow
+
+    case = measurement["payload"]
+    if case.get("status") != "ok":
+        return _message(
+            "n1-proposal", "PhysicsPowerFlowAgent", "StandardsComplianceAgent",
+            "proposal", "缺少有效同期量测断面，无法执行 N-1 交流潮流提案。",
+            {"status": case.get("status", "error"), "case": case}, measurement,
+        )
+    pf = run_ac_power_flow(
+        archive,
+        scenario="n1_contingency",
+        outage_mode=request["outage_mode"],
+        at_time=case["at_time"],
+        profile=profile,
+    )
+    n1_block = pf.get("n1_contingency") or {}
+    rec_comp = n1_block.get("receiving_1010_comparison") or {}
+    sim_after_i = rec_comp.get("after_i_a")
+    min_ug_kv = rec_comp.get("min_underground_kv")
+    payload = {
+        "status": "ok" if pf.get("status") == "ok" and n1_block.get("converged") else "non_converged",
+        "case": case,
+        "powerflow_n1": n1_block,
+        "sim_receiving_i_a": sim_after_i,
+        "min_underground_kv": min_ug_kv,
+        "total_loss_kw": (pf.get("network_summary") or {}).get("total_loss_kw"),
+        "model_assumptions": pf.get("model_assumptions"),
+    }
+    content = (
+        f'{case["at_time"]} · pandapower N-1 交流潮流（{request["outage_cabinet"]} 退运由 {request["receiving_cabinet"]} 单回转供）收敛：'
+        f'受电回路平衡三相仿真电流 {sim_after_i} A，井下最低仿真电压 {min_ug_kv} kV。'
+        if payload["status"] == "ok" else "N-1 交流潮流未收敛。"
+    )
+    return _message(
+        "n1-proposal", "PhysicsPowerFlowAgent", "StandardsComplianceAgent",
+        "proposal", content, payload, measurement,
+    )
+
+
+def n1_challenge(profile, proposal, policy):
+    """StandardsComplianceAgent challenges single-model N-1 current when metering ratio offset exists."""
+    prop = proposal["payload"]
+    case = prop.get("case") or {}
+    if prop.get("status") != "ok":
+        return _message(
+            "n1-challenge", "StandardsComplianceAgent", "PhysicsPowerFlowAgent",
+            "constraint_review", "N-1 潮流提案未收敛或缺少量测，保留缺证清单。",
+            {"status": prop.get("status"), "challenged": False}, proposal,
+        )
+    metered_ia = float(case["combined_metered_ia_a"])
+    sim_ia = float(prop["sim_receiving_i_a"] or 0.0)
+    ratio = case.get("metering_ratio_median")
+    gap_a = round(metered_ia - sim_ia, 2)
+    challenged = bool(case.get("metering_scale_status") == "systematic_scale_offset" or abs(gap_a) >= 15.0)
+    payload = {
+        "status": "challenged" if challenged else "passes_single_basis",
+        "challenged": challenged,
+        "metered_algebraic_peak_a": metered_ia,
+        "powerflow_balanced_i_a": sim_ia,
+        "discrepancy_a": gap_a,
+        "metering_ratio_median": ratio,
+        "requested_revisions": ["dual_basis_thermal_envelope", "corrected_ct_power_projection"] if challenged else [],
+        "policy": policy,
+    }
+    content = (
+        f'合规质疑：{case["receiving_cabinet"]} 柜存在系统性量测比例偏离（P/(√3·U·I·cos) 中位数={ratio}），'
+        f'导致按有功驱动的三相潮流仿真电流（{sim_ia:.2f} A）显著低于表计实测电流代数和上限（{metered_ia:.2f} A，相差 {gap_a:+.2f} A）。'
+        f'依据《煤矿安全规程》双回路全负荷转供安全红线，禁止仅凭偏低的潮流电流判定不越限，要求补算「表计电流保守包络」与「按比例修正有功后的折算潮流」双口径对比！'
+    )
+    return _message(
+        "n1-challenge", "StandardsComplianceAgent", "PhysicsPowerFlowAgent",
+        "challenge" if challenged else "constraint_review", content, payload, proposal,
+    )
+
+
+def n1_revise(profile, proposal, objection, request):
+    """PhysicsPowerFlowAgent computes the dual-basis thermal & voltage envelope in response to the challenge."""
+    prop = proposal["payload"]
+    rev = objection["payload"]
+    case = prop.get("case") or {}
+    metered_ia = float(case.get("combined_metered_ia_a") or 0.0)
+    sim_ia = float(prop.get("sim_receiving_i_a") or 0.0)
+    ratio = float(case.get("metering_ratio_median") or 0.73)
+    u_kv = float((case.get("bus_voltage") or {}).get("value") or 10.6)
+    # Re-estimate apparent power & voltage drop under both bases
+    s_powerflow_kva = round(1.7320508 * u_kv * sim_ia / 1000.0 * 1000.0, 2)
+    s_metered_upper_kva = round(1.7320508 * u_kv * metered_ia, 2)
+    scale_corrected_i_a = round(sim_ia / max(ratio, 0.5), 2) if ratio else metered_ia
+
+    rated_a = request.get("rated_current_a")
+    derate = request.get("derating_factor") or 1.0
+    eff_limit_a = round(rated_a * derate, 2) if rated_a else None
+
+    envelopes = [
+        {
+            "basis": "pandapower_active_power_driven",
+            "label": "口径 A：有功驱动平衡三相交流潮流",
+            "current_a": sim_ia,
+            "apparent_power_kva": s_powerflow_kva,
+            "min_underground_kv": prop.get("min_underground_kv"),
+            "load_ratio_pct": round(sim_ia / eff_limit_a * 100.0, 2) if eff_limit_a else None,
+        },
+        {
+            "basis": "metered_current_conservative_upper",
+            "label": "口径 B：表计实测电流代数和保守上限",
+            "current_a": metered_ia,
+            "apparent_power_kva": s_metered_upper_kva,
+            "min_underground_kv": prop.get("min_underground_kv"),
+            "load_ratio_pct": round(metered_ia / eff_limit_a * 100.0, 2) if eff_limit_a else None,
+        },
+        {
+            "basis": "scale_offset_corrected_projection",
+            "label": f"口径 C：计及 {case.get('receiving_cabinet')} 比例系数({ratio})修正折算",
+            "current_a": scale_corrected_i_a,
+            "apparent_power_kva": round(1.7320508 * u_kv * scale_corrected_i_a, 2),
+            "min_underground_kv": prop.get("min_underground_kv"),
+            "load_ratio_pct": round(scale_corrected_i_a / eff_limit_a * 100.0, 2) if eff_limit_a else None,
+        },
+    ]
+    payload = {
+        "at_time": case.get("at_time"),
+        "envelopes": envelopes,
+        "effective_limit_a": eff_limit_a,
+        "conservative_governing_current_a": max(metered_ia, sim_ia),
+    }
+    return _message(
+        "n1-revision", "PhysicsPowerFlowAgent", "SkepticAuditorAgent",
+        "counterproposal",
+        f'已按质疑完成三口径复算：潮流口径 {sim_ia:.2f} A vs 表计实测代数和保守上限 {metered_ia:.2f} A vs 比例修正折算 {scale_corrected_i_a:.2f} A。',
+        payload, proposal, objection,
+    )
+
+
+def n1_arbitrate(profile, proposal, objection, revision):
+    """SkepticAuditorAgent arbitrates the dual-basis N-1 envelope and signs off conditional verdict."""
+    prop = proposal["payload"]
+    rev = objection["payload"]
+    recomp = revision["payload"]
+    case = prop.get("case") or {}
+    gov_i = recomp.get("conservative_governing_current_a")
+    sim_i = prop.get("sim_receiving_i_a")
+    min_ug = prop.get("min_underground_kv")
+    eff_lim = recomp.get("effective_limit_a")
+
+    if eff_lim:
+        gov_ratio = round(gov_i / eff_lim * 100.0, 2)
+        verdict_str = (
+            f'按输入有效限值 {eff_lim:.1f} A 校核，保守包络负载率 {gov_ratio:.2f}%（{"越限" if gov_ratio > 100 else "满足热稳定条件"}）。'
+        )
+    else:
+        verdict_str = "因归档缺失下井电缆真实额定载流量与 1200 联络开关操作票，保留双口径包络区间待 HITL 补证终审。"
+
+    statement = (
+        f'{case.get("at_time")} 下井双回（{case.get("outage_cabinet")}→{case.get("receiving_cabinet")}）N-1 转供会诊裁决：'
+        f'采纳安规专家质疑，拒绝单一偏低潮流值，确立「三相潮流 {sim_i:.2f} A ～ 表计实测代数和上限 {gov_i:.2f} A」双口径安全校核包络'
+        f'（井下仿真最低母线电压 {min_ug:.3f} kV）。{verdict_str}'
+    )
+    decision = {
+        "study_kind": "n1_dual_basis_arbitration",
+        "status": "conditional_candidate" if prop.get("status") == "ok" else prop.get("status", "error"),
+        "case": case,
+        "envelopes": recomp.get("envelopes") or [],
+        "governing_current_a": gov_i,
+        "powerflow_current_a": sim_i,
+        "min_underground_kv": min_ug,
+        "discrepancy_a": rev.get("discrepancy_a"),
+        "field_status": "pending_evidence",
+        "review_requirements": N1_REVIEW_REQUIREMENTS,
+    }
+    return _message(
+        "n1-decision", "SkepticAuditorAgent", "Consensus",
+        "arbitration", statement, decision, objection, revision,
+    )
+
+
+def n1_arbitration_evidence(archive, trace, decision):
+    """Bind exact archived Excel cell coordinates for the N-1 dual-basis arbitration decision."""
+    payload = decision["payload"]
+    case = payload.get("case") or {}
+    if case.get("status") != "ok":
+        return [], []
+    refs = [
+        case[key]["cell"]
+        for key in ("ia_outage", "ia_receiving", "p_outage", "p_receiving", "bus_voltage")
+        if isinstance(case.get(key), dict) and case[key].get("cell")
+    ]
+    facts = build_observations(archive, refs, trace)
+    if not facts:
+        return None, []
+    step = {
+        "round": 3,
+        "agent": "auditor",
+        "tool": "arbitrate_n1_dual_basis",
+        "arguments": {
+            "at_time": case["at_time"],
+            "outage_cabinet": case["outage_cabinet"],
+            "receiving_cabinet": case["receiving_cabinet"],
+        },
+        "result": {"status": "ok", "decision": payload},
+    }
+    facts.append(bind_tool_fact(
+        {"statement": decision["content"], "evidence": refs[:6]},
+        step, "decision", kind="simulation",
+    ))
+    return facts, [step]
+

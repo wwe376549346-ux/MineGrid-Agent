@@ -94,7 +94,11 @@ DIAGNOSTIC_TOOL_SCHEMAS = [
                     "at_time": {
                         "type": "string",
                         "description": "整点时刻，格式 YYYY-MM-DD HH:00:00。",
-                    }
+                    },
+                    "section_cabinet": {
+                        "type": "string",
+                        "description": "可选。按该出线柜所在的母线段汇总主变低压侧和非备用出线，并对照该柜有功反号后的差额。",
+                    },
                 },
                 "required": ["at_time"],
                 "additionalProperties": False,
@@ -584,7 +588,7 @@ class DiagnosticToolbox:
             "frames": [{"time": t, "readings": dict(frames[t])} for t in ordered_times],
         }
 
-    def check_power_balance(self, at_time: str) -> dict:
+    def check_power_balance(self, at_time: str, section_cabinet: str | None = None) -> dict:
         at = stamp(at_time)
         dt = datetime.fromisoformat(at)
         prev_t = (dt - HOUR).isoformat(sep=" ")
@@ -694,7 +698,7 @@ class DiagnosticToolbox:
         p_hv0 = p_val(cur, tr_hvs[0]) if len(tr_hvs) >= 1 else 0.0
         p_hv1 = p_val(cur, tr_hvs[1]) if len(tr_hvs) >= 2 else 0.0
 
-        return {
+        result = {
             "kind": "power_balance",
             "status": "ok",
             "station": station,
@@ -733,6 +737,36 @@ class DiagnosticToolbox:
             "flags": flags,
             "negative_main_cabinets": neg_main,
         }
+        if section_cabinet is not None:
+            feeder = self.profile.feeder_map().get(section_cabinet)
+            if feeder is None or feeder.station != station or feeder.role not in ("feeder", "capacitor"):
+                raise ValueError("母线分段核算须指定本站的出线柜或补偿柜。")
+            incomer_cabs = [t.lv_cabinet for t in self.profile.transformers
+                            if t.station == station and t.lv_bus == feeder.bus_id]
+            outgoing_cabs = [f.cabinet for f in self.profile.feeders if f.station == station
+                             and f.bus_id == feeder.bus_id and f.role in ("feeder", "capacitor")]
+            inputs = [cur.get(c, {}).get("P", {}) for c in [*incomer_cabs, *outgoing_cabs]]
+            section = {
+                "bus_id": feeder.bus_id,
+                "bus_label": self.profile.bus_map()[feeder.bus_id].name,
+                "incomer_cabinets": incomer_cabs,
+                "outgoing_cabinets": outgoing_cabs,
+                "compared_cabinet": section_cabinet,
+                "inputs_complete": bool(incomer_cabs) and all(r.get("value") is not None for r in inputs),
+                "input_cells": [r["cell"] for r in inputs if r.get("value") is not None],
+            }
+            if section["inputs_complete"]:
+                incoming_kw = sum(p_val(cur, c) for c in incomer_cabs)
+                outgoing_kw = sum(p_val(cur, c) for c in outgoing_cabs)
+                feeder_kw = p_val(cur, section_cabinet)
+                section.update(
+                    incomer_kw=round(incoming_kw, 2), outgoing_kw=round(outgoing_kw, 2),
+                    cabinet_kw=feeder_kw, signed_residual_kw=round(incoming_kw - outgoing_kw, 2),
+                    flipped_residual_kw=round(incoming_kw - outgoing_kw + 2 * feeder_kw, 2),
+                    residual_change_kw=round(2 * feeder_kw, 2),
+                )
+            result["section_balance"] = section
+        return result
 
     def get_cabinet_health_profile(self, cabinet: str) -> dict:
         cab = str(cabinet).strip()

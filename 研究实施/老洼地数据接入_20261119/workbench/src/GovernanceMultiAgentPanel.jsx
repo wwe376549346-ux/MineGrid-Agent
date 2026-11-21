@@ -113,6 +113,62 @@ function ReactiveStudy({decision, messages}) {
   );
 }
 
+function N1TransferStudy({decision, messages}) {
+  const {case: sample, envelopes = [], selected} = decision;
+  const ruling = messages.find(message => message.id === "n1-decision");
+  const fixed = (value, digits = 2) => value == null ? "—" : Number(value).toFixed(digits);
+  return (
+    <Card padding={16} className="pf-hero-card">
+      <h3>下井双回 N-1 转供双口径包络仲裁（1009 → 1010）</h3>
+      <p>{ruling?.content}</p>
+      {sample && (
+        <div className="inline-cells">
+          {[
+            sample.peak_1010?.cell && [`1010 峰值 Ia=${sample.peak_1010.ia_a} A (${sample.peak_1010.time?.slice(5, 16)})`, sample.peak_1010.cell],
+            sample.peak_1009?.cell && [`1009 峰值 Ia=${sample.peak_1009.ia_a} A (${sample.peak_1009.time?.slice(5, 16)})`, sample.peak_1009.cell],
+            sample.worst_mismatch?.p_cell && [`1010 量测比值 ${sample.worst_mismatch.ratio} (${sample.worst_mismatch.time?.slice(5, 16)})`, sample.worst_mismatch.p_cell],
+          ].filter(Boolean).map(([label, cell]) => (
+            <a key={cell} className="cell-chip" href={cellHref(cell)} target="_blank" rel="noreferrer">{label}</a>
+          ))}
+        </div>
+      )}
+      {envelopes.length > 0 && (
+        <div className="pf-table-wrap">
+          <table className="pf-table">
+            <thead>
+              <tr>
+                <th>复核口径</th><th>转供电流 A</th><th>占安全裕度(210A)%</th><th>占热稳定(300A)%</th>
+                <th>末端电压 kV</th><th>压降 %</th><th>筛查结论</th>
+              </tr>
+            </thead>
+            <tbody>
+              {envelopes.map(env => (
+                <tr key={env.basis}>
+                  <td><strong>{env.label}</strong></td>
+                  <td className="mono">{fixed(env.current_a, 2)}</td>
+                  <td className="mono">{fixed(env.loading_safe_pct, 2)}%</td>
+                  <td className="mono">{fixed(env.loading_max_pct, 2)}%</td>
+                  <td className="mono">{env.receiving_kv == null ? "—" : fixed(env.receiving_kv, 4)}</td>
+                  <td className="mono">{env.v_drop_pct == null ? "—" : `${fixed(env.v_drop_pct, 2)}%`}</td>
+                  <td>{env.safe_pass ? "通过" : "超安全线"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {selected?.binding_envelope && (
+        <p className="muted" style={{marginTop: 8}}>
+          最严包络约束：{selected.binding_envelope.label}（{fixed(selected.binding_envelope.current_a, 2)} A，占 210 A 连续安全载流线 {fixed(selected.binding_envelope.loading_safe_pct, 2)}%）
+        </p>
+      )}
+      <Collapsible trigger="现场待核资料" defaultIsOpen={false}>
+        <ul>{(decision.review_requirements || []).map(requirement => <li key={requirement}>{requirement}</li>)}</ul>
+      </Collapsible>
+    </Card>
+  );
+}
+
 export function GovernanceMultiAgentPanel() {
   const [subTab, setSubTab] = useState("multi_agent");
 
@@ -613,6 +669,10 @@ export function GovernanceMultiAgentPanel() {
 
         {consult.reactive_arbitration && (
           <ReactiveStudy decision={consult.reactive_arbitration} messages={consult.inter_agent_messages || []} />
+        )}
+
+        {consult.n1_arbitration && (
+          <N1TransferStudy decision={consult.n1_arbitration} messages={consult.inter_agent_messages || []} />
         )}
 
         {/* 3 Parallel Specialist Brief Cards */}

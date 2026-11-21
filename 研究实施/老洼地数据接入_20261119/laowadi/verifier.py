@@ -361,7 +361,7 @@ def finalize_diagnosis(archive, draft, trace):
         report["summary"] += " 现场原因与处置条件待复核。"
     if hypothesis_trace := report.get("hypothesis_trace"):
         observed = [facts[i]["source"] for i in hypothesis_trace["observation_fact_indices"]]
-        readings = "、".join(f'{row["cabinet"]} 柜 {row["value"]:g} kW' for row in observed)
+        readings = "、".join(f'{row["cabinet"]} 柜 {row["value"]:g} kW' for row in observed if row["metric"] == "P")
         refutations = [check["judgment"] for check in hypothesis_trace["checks"]
                        if check["outcome"] == "refuted_at_sample"]
         report["summary"] = " ".join([f'{hypothesis_trace["time"]} 有功记录为 {readings}。',

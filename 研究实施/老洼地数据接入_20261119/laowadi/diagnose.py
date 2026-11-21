@@ -15,7 +15,7 @@ from laowadi.context import (
     select_relevant_reviews,
 )
 from laowadi.diag_tools import DIAGNOSTIC_TOOL_SCHEMAS, DiagnosticToolbox
-from laowadi.hypothesis import execute_reverse_power, reverse_power_scope
+from laowadi.hypothesis import REVERSE_POWER, execute_hypotheses, hypothesis_scope
 from laowadi.llm import ChatClient, LLMError
 from laowadi.diagnostic_claims import (
     AUTHOR_INSTRUCTIONS,
@@ -234,9 +234,12 @@ def diagnose_question(
     from laowadi.llmops import GLOBAL_LLMOPS, classify_query_tier
 
     tier_info = classify_query_tier(effective_question, anchors)
-    reverse_at = reverse_power_scope(toolbox, effective_question, anchors)
-    if reverse_at:
-        tier_info = {"tier": "slow", "reason": "reverse_power_hypothesis_review"}
+    hypothesis = hypothesis_scope(toolbox, effective_question, anchors)
+    if cap_params and hypothesis and hypothesis[0] is not REVERSE_POWER:
+        hypothesis = None
+    if hypothesis:
+        scenario, at = hypothesis
+        tier_info = {"tier": "slow", "reason": scenario.kind.replace("_review", "_hypothesis_review")}
     use_fast_tier = bool(client is not None and auto_tier and tier_info["tier"] == "fast")
     eff_client = None if use_fast_tier else client
 
@@ -259,7 +262,7 @@ def diagnose_question(
             emit("fallback", message="事件候选查询选择失败，按本地任务范围继续复核。")
             return options[0]
 
-        scoped = None if reverse_at else execute_scoped_question(
+        scoped = None if hypothesis else execute_scoped_question(
             archive, toolbox, question, anchors, context_snapshot["current_anchors"],
             budget=max_tool_calls, emit=emit, selector=select_event_tool if eff_client is not None else None,
         )
@@ -275,14 +278,14 @@ def diagnose_question(
                     "report": refusal["report"], "tool_trace": [], "rounds": 0,
                     "task_alignment": {"kind": "date_coverage", "status": "insufficient_data",
                                        "scope": {"days": req_days}, "gaps": refusal["report"]["missing_evidence"]}}
-        if reverse_at:
-            planned = execute_reverse_power(
-                archive, toolbox, effective_question, reverse_at, client=eff_client,
+        if hypothesis:
+            planned = execute_hypotheses(
+                archive, toolbox, effective_question, scenario, at, client=eff_client,
                 max_rounds=max_rounds, max_tool_calls=max_tool_calls, emit=emit,
                 fallback_to_local=fallback_to_local, summarize=_summarize_tool_result,
             )
             synthesis_rounds = min(max_rounds - planned["rounds"], MAX_SYNTHESIS_ROUNDS)
-            if (eff_client is None or planned.get("degraded_from_model")
+            if (scenario is not REVERSE_POWER or eff_client is None or planned.get("degraded_from_model")
                     or planned["stop_reason"] != "checks_complete" or synthesis_rounds <= 0):
                 return planned
             synthesized = _execute_diagnosis_core(
@@ -550,7 +553,7 @@ def diagnose_question(
             verification,
             archive_snapshot_sha256=str(archive_snap.get("snapshot_sha256") or ""),
         )
-    scoped_lookup = task and task["kind"] != "reverse_power_review"
+    scoped_lookup = task and not hypothesis
     out_final = {
         "kind": "diagnostic_review",
         "mode": (("model_scoped" if exec_out.get("scoped_model_choices") else "local_scoped") if scoped_lookup
@@ -712,7 +715,7 @@ def _execute_diagnosis_core(
                 messages,
                 tools=DIAGNOSTIC_TOOL_SCHEMAS if allow_tools else None,
                 tool_choice="auto" if allow_tools else None,
-                max_tokens=4096,
+                max_tokens=4096 if allow_tools else 6144,
                 json_mode=not allow_tools,
                 on_delta=lambda kind, text, r_no=round_idx: emit(
                     "llm_delta",

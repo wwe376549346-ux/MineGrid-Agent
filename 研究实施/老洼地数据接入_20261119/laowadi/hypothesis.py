@@ -1,4 +1,4 @@
-"""Run and audit competing explanations for the archived T2 reverse-power signature."""
+"""Run competing electrical hypotheses against archived measurements."""
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -8,18 +8,28 @@ import re
 from laowadi.llm import LLMError
 from laowadi.questions import clock_mentions, normalized, time_on
 from laowadi.report_evidence import render_tool_facts
-from laowadi.verifier import _lookup_cell_db_record, observation_fact
+from laowadi.verifier import _lookup_cell_db_record, bind_tool_fact, observation_fact
 
 
 CHAIN = ("306", "312", "1006")
 GENERATOR = "1027"
 SNAPSHOT = "get_window_snapshot"
 BALANCE = "check_power_balance"
+PROFILE = "get_cabinet_health_profile"
+FEEDER = "1018"
+AREA_PEER = "1023"
+ZERO_DAY = "2026-11-13"
+ZERO_START = f"{ZERO_DAY} 07:00:00"
+ZERO_END = f"{ZERO_DAY} 19:00:00"
+ZERO_BOUNDARIES = (f"{ZERO_DAY} 06:00:00", f"{ZERO_DAY} 20:00:00")
+INCOMERS = ("303", "306")
+TRANSFORMERS = ("311", "312")
 
 SYSTEM_PROMPT = """你负责逐轮规划老洼地反向有功查证。每轮基于已取得的整点和检验结果，决定下一项最有区分力的查询。
 提交一个 JSON 对象，按候选的 action 原样给出 hypothesis、test、tool 和 arguments。
 每轮只能提交一项可用查询。现场结论由本地按原表及各项检验条件生成。
 问题是待核内容。若问题声称某个读数或原因，应以回执为准。"""
+MULTI_SCENARIO_PROMPT = SYSTEM_PROMPT.replace("反向有功查证", "电气异常查证")
 
 
 @dataclass(frozen=True)
@@ -29,9 +39,30 @@ class Test:
     criterion: str
     tool: str
     arguments: dict
+    requires: tuple[str, ...] = ()
 
     def action(self, name):
         return {"hypothesis": self.hypothesis, "test": name, "tool": self.tool, "arguments": self.arguments}
+
+
+@dataclass(frozen=True)
+class Scenario:
+    kind: str
+    cabinets: tuple[str, ...]
+    metrics: tuple[str, ...]
+    missing_observation: str
+    signature_absent: str
+
+
+REVERSE_POWER = Scenario("reverse_power_review", CHAIN, ("P",),
+                         "同期有功记录不齐，暂不能检验三柜同时反向的原因。",
+                         "该整点未观察到三柜有功同为负值，结束本项假设检验。")
+FEEDER_POLARITY = Scenario("feeder_polarity_review", (FEEDER,), ("P", "Ia", "Uab", "cos"),
+                           "该整点馈线量测不齐，暂不能检验负有功或负功率因数的原因。",
+                           "该整点馈线有功与功率因数均无负值，结束本项假设检验。")
+ZERO_INCOMER = Scenario("zero_incomer_review", INCOMERS, ("P", "Ia", "Uab"),
+                        "该整点进线量测不齐，暂不能检验 306 归零的原因。",
+                        "该整点 306 有功与 A 相电流未同时归零，结束本项假设检验。")
 
 
 def _window(start, end, cabinets, metrics):
@@ -62,6 +93,44 @@ def reverse_power_scope(toolbox, question, anchors):
     if len(clocks) != 1 or not all(at.endswith(":00:00") for at in clocks):
         return None
     return next(iter(clocks))
+
+
+def hypothesis_scope(toolbox, question, anchors):
+    if reverse_at := reverse_power_scope(toolbox, question, anchors):
+        return REVERSE_POWER, reverse_at
+    if toolbox.profile.mine_id != "laowadi" or anchors["events"] or len(anchors["days"]) > 1:
+        return None
+    text = normalized(question)
+    if (re.search(r"\d{1,2}[时点]半|c1535|1535中央变电所", text)
+            or not re.search(r"为何|为什么|原因|怎么(?:回事|会|变成|判断)|区分|解释|查证|证伪|诊断|核查|分析|假设|排除|是否|是不是|吗", text)):
+        return None
+    cabinets = set(anchors["cabinets"])
+    days = anchors["days"]
+    clocks = list(clock_mentions(text))
+    try:
+        if (FEEDER in cabinets and cabinets <= {FEEDER, AREA_PEER, "1011", "312", "1006"}
+                and re.search(r"负(?:有功|功率因数|cos)|(?:有功|功率因数|cos|(?<![a-z])p(?![a-z])).{0,10}(?:负|小于0)"
+                              r"|倒送|反送|反向|量测异常|极性|方向整定", text)):
+            day = days[0] if days else "2026-11-16"
+            hours = {time_on(day, clock) for clock in clocks}
+            if not hours:
+                return FEEDER_POLARITY, f"{day} 21:00:00"
+            if len(hours) == 1 and next(iter(hours)).endswith(":00:00"):
+                return FEEDER_POLARITY, next(iter(hours))
+        if ("306" in cabinets and cabinets <= {*INCOMERS, *TRANSFORMERS, "300"}
+                and (days or clocks) and (not days or days == [ZERO_DAY])
+                and re.search(r"(?:有功|电流|功率|(?<![a-z])(?:p|ia)(?![a-z])).{0,20}(?:0(?!\d)|零)"
+                              r"|(?:零|0)(?:有功|电流|功率)|归零|失压|死数|断联|漏报|停电|停运|退出|倒闸|转供|跳闸", text)):
+            hours = {time_on(ZERO_DAY, clock) for clock in clocks}
+            if not hours or hours == {ZERO_START, ZERO_END}:
+                return ZERO_INCOMER, f"{ZERO_DAY} 15:00:00"
+            if len(hours) == 1:
+                at = next(iter(hours))
+                if ZERO_START <= at <= ZERO_END and at.endswith(":00:00"):
+                    return ZERO_INCOMER, at
+    except ValueError:
+        return None
+    return None
 
 
 def _readings(archive, result, times, cabinets, metrics):
@@ -142,21 +211,230 @@ def _evaluate(archive, step, name, at):
     )
 
 
+def _feeder_checks(at):
+    return {
+        "weekly_metering": Test(
+            "H1", "CT 二次极性 S1/S2 接反或表计功率方向整定反相",
+            "核对全周 168 个整点的 P、cos 符号及 Uab、Ia 量测范围。",
+            PROFILE, {"cabinet": FEEDER},
+        ),
+        "area_peer_at_hour": Test(
+            "H2", "二采区有并网电源并经两回线路整体倒送",
+            "核对二采区 I 回 1023 的同期带载方向及两回有功合计。1011 补偿柜作为同期参照。",
+            SNAPSHOT, _window(at, at, (AREA_PEER, "1011"), ["P", "Ia", "cos"]),
+        ),
+        "section_balance_at_hour": Test(
+            "H3", "10 kV II 段母线功率平衡交叉校核",
+            "先核对 312、1006 高低压侧差额，再计算 II 段出线按原符号及仅将 1018 反号时的差额。",
+            BALANCE, {"at_time": at, "section_cabinet": FEEDER},
+        ),
+    }
+
+
+def _zero_checks(at):
+    before, after = ZERO_BOUNDARIES
+    return {
+        "incomer_voltage_and_boundaries": Test(
+            "H1", "35 kV 母线失压或 PT 失压造成零功率",
+            "核对目标整点的 306 线电压，同时取停运前后 06:00、20:00 两回进线读数。",
+            SNAPSHOT, _window(before, after, INCOMERS, ["P", "Ia", "Uab"]),
+        ),
+        "incomer_balance_at_hour": Test(
+            "H2", "306 表计通信死数或采集漏报，进线仍在明显带载",
+            "核对 303 是否承担双主变高压侧负荷，并与归零前后的两回进线读数对照。",
+            BALANCE, {"at_time": at}, requires=("incomer_voltage_and_boundaries",),
+        ),
+        "single_incomer_window": Test(
+            "H3", "306 退出后 303 单进线带双主变，可能经 300 母联转供",
+            "核对 07:00–19:00 每个整点的单进线带载模式。母联位置和退出原因须用同期运行记录核实。",
+            SNAPSHOT, _window(ZERO_START, ZERO_END, (*INCOMERS, *TRANSFORMERS), ["P", "Ia"]),
+        ),
+    }
+
+
+def _values(facts):
+    return {
+        (row["time"], row["cabinet"], row["metric"]): row["value"]
+        for row in (fact["source"] for fact in facts)
+    }
+
+
+def _balance_equation(step, at, lhs, rhs):
+    result = step["result"]
+    if (result.get("status"), result.get("kind"), result.get("station"), result.get("time")) != (
+        "ok", "power_balance", "S35", at,
+    ):
+        return None, None
+    for index, eq in enumerate(result["equations"]):
+        if eq["inputs_complete"] and tuple(eq["lhs_cabinets"]) == lhs and tuple(eq["rhs_cabinets"]) == rhs:
+            return index, eq
+    return None, None
+
+
+def _evaluate_feeder(archive, step, name, at, observation):
+    result = step["result"]
+    if name == "weekly_metering":
+        if (result.get("status"), result.get("kind"), result.get("device", {}).get("number")) != (
+            "ok", "cabinet_health_profile", FEEDER,
+        ):
+            return [], "insufficient_evidence", "缺少 1018 归档健康画像。"
+        facts = render_tool_facts(step)
+        stats = result["metrics_7d"]
+        if not all(stats.get(metric, {}).get("valid_hours") == 168 for metric in FEEDER_POLARITY.metrics):
+            return facts, "insufficient_evidence", "四项量测未覆盖全部 168 个整点。"
+        p, cos, voltage, current = (stats[metric] for metric in ("P", "cos", "Uab", "Ia"))
+        counts = f'全周 P 负值 {p["negative_hours"]}/168，cos 负值 {cos["negative_hours"]}/168。'
+        if p["negative_hours"] == cos["negative_hours"] == 168 and voltage["min"] > 0 and current["min"] > 0:
+            support = (f'Uab 为 {voltage["min"]:g}–{voltage["max"]:g} kV，Ia 为 '
+                       f'{current["min"]:g}–{current["max"]:g} A，均为正值。持续同号模式强支撑极性或方向设置异常。')
+        else:
+            support = "本周量测未形成四项同时满足的持续符号模式。"
+        return facts, "insufficient_evidence", counts + support + "待用现场相位仪和表计整定记录核验。"
+
+    if name == "area_peer_at_hour":
+        facts = _readings(archive, result, (at,), (AREA_PEER, "1011"), ["P", "Ia", "cos"])
+        target = _readings(archive, observation["result"], (at,), (FEEDER,), ["P"])
+        values = _values(facts + target)
+        peer = [values.get((at, AREA_PEER, metric)) for metric in ("P", "Ia", "cos")]
+        feeder_kw = values.get((at, FEEDER, "P"))
+        if feeder_kw is None or any(value is None for value in peer):
+            return facts, "insufficient_evidence", "缺少两回馈线同期读数，无法判定二采区是否整体倒送。"
+        p, ia, cos = peer
+        net = round(p + feeder_kw, 2)
+        if min(peer) > 0 and net > 0:
+            return facts, "refuted_at_sample", (
+                f'1023 二采区 I 回同期正向受电（{p:g} kW、{ia:g} A、cos {cos:g}），'
+                f'与 1018 按原符号相加仍为 {net:g} kW。该整点证伪两回合计向地面倒送。'
+                '归档缺少二采区并网电源台账和同期接线状态，1018 单回功率方向仍待核实。'
+            )
+        return facts, "insufficient_evidence", f'两回有功表观合计 {net:g} kW，归档量测不足以排除整体倒送。'
+
+    section = result.get("section_balance", {})
+    index, tr = _balance_equation(step, at, ("312",), ("1006",))
+    if not tr or section.get("compared_cabinet") != FEEDER or not section.get("inputs_complete"):
+        return [], "insufficient_evidence", "缺少 312、1006 或 II 段出线的同期有功，无法量化反号影响。"
+    # Bind both calculations to the exact sub-results and their original cells.
+    tr_fact = bind_tool_fact({
+        "statement": f'{at} 主变 312（{tr["lhs_kw"]:g} kW）与 1006（{tr["rhs_kw"]:g} kW）'
+                     f'有功差额 {tr["diff_kw"]:+.2f} kW。',
+        "evidence": tr["input_cells"],
+    }, step, "equations", index)
+    comparison = (
+        f'按归档图模，{section["bus_label"]}由 1006 供入 {section["incomer_kw"]:g} kW，'
+        f'所列非备用出线合计 {section["outgoing_kw"]:g} kW（含 1018）。'
+        f'原符号差额 {section["signed_residual_kw"]:+.2f} kW，仅将 1018 反号后为 '
+        f'{section["flipped_residual_kw"]:+.2f} kW，差额变化 {section["residual_change_kw"]:+.2f} kW。'
+    )
+    section_fact = bind_tool_fact({"statement": comparison, "evidence": section["input_cells"]},
+                                  step, "section_balance")
+    return [tr_fact, section_fact], "insufficient_evidence", (
+        comparison + "现场母联状态及量测同步性待核，差额变化用于比较两个符号口径。"
+    )
+
+
+def _single_incomer(values, at, threshold):
+    return (
+        values[at, "306", "P"] == values[at, "306", "Ia"] == 0
+        and all(values[at, c, "P"] > 50 for c in ("303", *TRANSFORMERS))
+        and abs(values[at, "303", "P"] - sum(values[at, c, "P"] for c in TRANSFORMERS)) <= threshold
+    )
+
+
+def _evaluate_zero(archive, toolbox, step, name, at, observation, completed):
+    result = step["result"]
+    threshold = toolbox.profile.balance_threshold_kw
+    if name == "incomer_voltage_and_boundaries":
+        voltage = _readings(archive, result, (at,), ("306",), ["Uab"])
+        facts = voltage + _readings(archive, result, ZERO_BOUNDARIES, INCOMERS, ["P", "Ia"])
+        if not voltage:
+            return facts, "insufficient_evidence", "306 同期 Uab 缺少可核验的读数。"
+        uab = voltage[0]["source"]["value"]
+        limits = toolbox.profile.voltage_limit_for_kv(35.0)
+        if limits.lo_kv <= uab <= limits.hi_kv:
+            return facts, "refuted_at_sample", (
+                f'306 同期 Uab 为 {uab:g} kV，归档显示该测点有压，证伪该采样点母线完全失压'
+                '或 Uab 通道完全失压。上级线路状态与 PT 其他通道待现场核实。'
+            )
+        return facts, "insufficient_evidence", f'306 同期 Uab 为 {uab:g} kV，需结合 PT 状态和母线其他测点复核。'
+
+    if name == "incomer_balance_at_hour":
+        index, eq = _balance_equation(step, at, INCOMERS, TRANSFORMERS)
+        if not eq:
+            return [], "insufficient_evidence", "进线与主变高压侧缺少完整的同期有功输入。"
+        values = _values(_readings(archive, observation["result"], (at,), INCOMERS, ["P", "Ia"]))
+        for cell in eq["input_cells"]:
+            row = _lookup_cell_db_record(archive, cell)
+            if row and row["station"] == "S35" and row["time"] == at and row["metric"] == "P":
+                values[at, row["cabinet"], "P"] = row["value"]
+        p303 = values.get((at, "303", "P"))
+        if p303 is None or any(values.get((at, c, "P")) is None for c in (*INCOMERS, *TRANSFORMERS)):
+            return [], "insufficient_evidence", "同期线侧与主变有功单元格无法完整回查。"
+        balance = (f'303 同期有功 {p303:g} kW，311 + 312 合计 {eq["rhs_kw"]:g} kW，'
+                   f'两回进线与双主变高压侧差额 {eq["diff_kw"]:+.2f} kW。')
+        fact = bind_tool_fact({"statement": balance, "evidence": eq["input_cells"]}, step, "equations", index)
+        boundary = completed["incomer_voltage_and_boundaries"]["result"]
+        edge_facts = _readings(archive, boundary, ZERO_BOUNDARIES, INCOMERS, ["P", "Ia"])
+        edges = _values(edge_facts)
+        before, after = ZERO_BOUNDARIES
+        if (len(edge_facts) == 8 and all(value > 0 for value in edges.values())
+                and p303 > edges[before, "303", "P"] and _single_incomer(values, at, threshold)):
+            return [fact], "refuted_at_sample", (
+                balance + f'差额在 {threshold:g} kW 核查阈值内。'
+                f'306 于 06:00、20:00 分别有 {edges[before, "306", "P"]:g}、{edges[after, "306", "P"]:g} kW，'
+                f'303 在 06:00 为 {edges[before, "303", "P"]:g} kW。'
+                '这些读数证伪该整点仅表计假死而 306 仍明显带载的解释。'
+            )
+        return [fact], "insufficient_evidence", balance + "归零前后切换证据或同期功率守恒条件不足。"
+
+    start = datetime.fromisoformat(ZERO_START)
+    hours = tuple((start + timedelta(hours=i)).isoformat(sep=" ") for i in range(13))
+    facts = _readings(archive, result, hours, (*INCOMERS, *TRANSFORMERS), ["P"])
+    facts += _readings(archive, result, hours, ("306",), ["Ia"])
+    values = _values(facts)
+    if len(values) != len(hours) * 5:
+        return facts, "insufficient_evidence", "归零窗口缺少完整的进线或主变整点量测。"
+    matched = sum(_single_incomer(values, hour, threshold) for hour in hours)
+    statement = f'07:00–19:00 有 {matched}/13 个整点符合 306 归零、303 单进线带双主变的量测判据。'
+    fact = bind_tool_fact({"statement": statement, "evidence": [f["source"]["cell"] for f in facts]}, step, "frames")
+    return [fact], "insufficient_evidence", (
+        statement + "300 母联实际合位须查同期遥信或 SOE。区分计划检修倒闸与保护跳闸须查操作票和保护动作记录。"
+    )
+
+
 STOP_LABELS = {
     "checks_complete": "可用检验已执行。现场原因待补证。",
     "budget_exhausted": "达到轮次或查询上限，仍有检验待执行。",
     "model_error": "模型服务中断，保留已核对的证据。",
     "invalid_plan": "模型提交的检验超出本轮候选范围，仍有检验待执行。",
-    "signature_absent": "该整点未观察到三柜有功同为负值，结束本项假设检验。",
-    "missing_observation": "同期有功记录不齐，暂不能检验三柜同时反向的原因。",
 }
 
 
 def execute_reverse_power(archive, toolbox, question, at, *, client, max_rounds, max_tool_calls,
                           emit, fallback_to_local, summarize):
+    return execute_hypotheses(
+        archive, toolbox, question, REVERSE_POWER, at, client=client, max_rounds=max_rounds,
+        max_tool_calls=max_tool_calls, emit=emit, fallback_to_local=fallback_to_local, summarize=summarize,
+    )
+
+
+def execute_hypotheses(archive, toolbox, question, scenario, at, *, client, max_rounds, max_tool_calls,
+                       emit, fallback_to_local, summarize):
     trace, facts, records, checks = [], [], [], []
-    specs = _checks(at)
-    pending = list(specs)[:3]
+    completed = {}
+    if scenario is REVERSE_POWER:
+        specs = _checks(at)
+        pending = list(specs)[:3]
+        missing = ["同期母联遥信、分段量测和运行日志。", "表计极性核验和各测点 SCADA 采集时间戳。"]
+    elif scenario is FEEDER_POLARITY:
+        specs = _feeder_checks(at)
+        pending = list(specs)
+        missing = ["1018 二次接线、现场相位仪读数和表计功率方向整定。", "二采区同期接线状态及并网电源台账。"]
+    else:
+        specs = _zero_checks(at)
+        pending = list(specs)
+        missing = ["300 母联及 306 同期遥信、倒闸操作票、SOE 和保护动作记录。", "306 采集质量码、表计通信日志与 PT 回路状态。"]
+    stop_labels = {**STOP_LABELS, "signature_absent": scenario.signature_absent,
+                   "missing_observation": scenario.missing_observation}
     model_failed = False
     stop = "budget_exhausted"
 
@@ -171,21 +449,33 @@ def execute_reverse_power(archive, toolbox, question, at, *, client, max_rounds,
         return step
 
     round_no = 0
+    first = None
     if max_rounds > 0 and max_tool_calls > 0:
         round_no = 1
-        first = run(SNAPSHOT, _window(at, at, CHAIN, ["P"]), round_no)
-        facts.extend(_readings(archive, first["result"], (at,), CHAIN, ["P"]))
-        stop = ("missing_observation" if len(facts) != len(CHAIN) else
-                "signature_absent" if any(f["source"]["value"] >= 0 for f in facts) else "budget_exhausted")
+        first = run(SNAPSHOT, _window(at, at, scenario.cabinets, list(scenario.metrics)), round_no)
+        facts.extend(_readings(archive, first["result"], (at,), scenario.cabinets, scenario.metrics))
+        if len(facts) != len(scenario.cabinets) * len(scenario.metrics):
+            stop = "missing_observation"
+        else:
+            values = _values(facts)
+            if scenario is REVERSE_POWER:
+                signature = all(value < 0 for value in values.values())
+            elif scenario is FEEDER_POLARITY:
+                signature = values[at, FEEDER, "P"] < 0 or values[at, FEEDER, "cos"] < 0
+            else:
+                signature = values[at, "306", "P"] == values[at, "306", "Ia"] == 0
+            if not signature:
+                stop = "signature_absent"
     observation_refs = list(range(len(facts)))
-    signature_observed = len(facts) == len(CHAIN) and stop == "budget_exhausted"
+    signature_observed = first is not None and stop == "budget_exhausted"
     reflections = 0
 
     while signature_observed and pending and round_no < max_rounds and len(trace) < max_tool_calls:
         round_no += 1
+        available = [name for name in pending if all(req in completed for req in specs[name].requires)]
         planner = "model" if client is not None and not model_failed else "local"
         if planner == "model":
-            choices = [specs[name].action(name) for name in pending]
+            choices = [specs[name].action(name) for name in available]
             context = {
                 "user_question": question,
                 "observation": [facts[index]["statement"] for index in observation_refs],
@@ -204,7 +494,7 @@ def execute_reverse_power(archive, toolbox, question, at, *, client, max_rounds,
             emit("llm_round", round=round_no, message="根据已有证据规划下一项假设检验…")
             try:
                 msg, record = client.chat(
-                    [{"role": "system", "content": SYSTEM_PROMPT},
+                    [{"role": "system", "content": SYSTEM_PROMPT if scenario is REVERSE_POWER else MULTI_SCENARIO_PROMPT},
                      {"role": "user", "content": json.dumps(context, ensure_ascii=False)}],
                     json_mode=True, max_tokens=1536,
                 )
@@ -219,14 +509,14 @@ def execute_reverse_power(archive, toolbox, question, at, *, client, max_rounds,
                     break
                 model_failed = True
                 emit("fallback", message="模型查证规划中断，按本地顺序继续检验。")
-                planner, name = "local", pending[0]
+                planner, name = "local", available[0]
             except ValueError:
                 stop = "invalid_plan"
                 reflections += 1
                 emit("reflection", round=round_no, reason="查证请求与候选范围不符，未执行。")
                 continue
         else:
-            name = pending[0]
+            name = available[0]
         stop = "budget_exhausted"
         test = specs[name]
         pending.remove(name)
@@ -234,7 +524,13 @@ def execute_reverse_power(archive, toolbox, question, at, *, client, max_rounds,
         emit("hypothesis_check", round=round_no, hypothesis=test.hypothesis, title=test.title,
              criterion=test.criterion, step=len(trace) + 1, planner=planner)
         step = run(test.tool, test.arguments, round_no)
-        evidence, outcome, judgment = _evaluate(archive, step, name, at)
+        if scenario is REVERSE_POWER:
+            evidence, outcome, judgment = _evaluate(archive, step, name, at)
+        elif scenario is FEEDER_POLARITY:
+            evidence, outcome, judgment = _evaluate_feeder(archive, step, name, at, first)
+        else:
+            evidence, outcome, judgment = _evaluate_zero(archive, toolbox, step, name, at, first, completed)
+        completed[name] = step
         checks.append({
             **test.action(name), "round": round_no, "step": len(trace), "based_on_steps": based_on,
             "planner": planner, "title": test.title, "criterion": test.criterion,
@@ -248,27 +544,27 @@ def execute_reverse_power(archive, toolbox, question, at, *, client, max_rounds,
     if signature_observed and not pending:
         stop = "checks_complete"
     hypothesis_trace = {
-        "time": at, "cabinets": list(CHAIN), "observation_step": 1 if trace else None,
+        "time": at, "cabinets": list(scenario.cabinets), "observation_step": 1 if trace else None,
         "observation_fact_indices": observation_refs, "checks": checks,
         "pending": [
             {"hypothesis": specs[name].hypothesis, "title": specs[name].title, "criterion": specs[name].criterion}
             for name in pending if signature_observed
         ],
-        "stop_reason": stop, "stop_message": STOP_LABELS[stop],
+        "stop_reason": stop, "stop_message": stop_labels[stop],
     }
-    missing = (["同期母联遥信、分段量测和运行日志。", "表计极性核验和各测点 SCADA 采集时间戳。"]
-               if signature_observed else [])
-    report = {"confirmed_facts": facts, "cited_standards": [], "missing_evidence": missing,
+    if scenario is not REVERSE_POWER:
+        hypothesis_trace["scenario"] = scenario.kind
+    report = {"confirmed_facts": facts, "cited_standards": [], "missing_evidence": missing if signature_observed else [],
               "hypothesis_trace": hypothesis_trace}
     status = "partial" if hypothesis_trace["pending"] or stop == "missing_observation" else "ok"
     output = {"status": status, "stop_reason": stop, "report": report, "tool_trace": trace,
               "rounds": round_no, "llm_records": records, "reflections_triggered": reflections,
               "degraded_from_model": model_failed}
     if not facts:
-        gaps = [STOP_LABELS[stop]]
+        gaps = [stop_labels[stop]]
         report.update(summary=gaps[0], missing_evidence=gaps)
         output.update(status="insufficient_data", task_alignment={
-            "kind": "reverse_power_review", "status": "insufficient_data", "gaps": gaps,
-            "scope": {"days": [at[:10]], "hours": [at[11:16]], "cabinets": list(CHAIN)},
+            "kind": scenario.kind, "status": "insufficient_data", "gaps": gaps,
+            "scope": {"days": [at[:10]], "hours": [at[11:16]], "cabinets": list(scenario.cabinets)},
         })
     return output

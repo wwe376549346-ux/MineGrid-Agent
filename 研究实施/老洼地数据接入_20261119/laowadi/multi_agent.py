@@ -215,6 +215,17 @@ def _run_specialist_in_archive(
                 refs = [message["payload"][key]["cell"] for key in ("power_factor", "voltage", "power")]
                 evidence_cells.extend(refs)
                 findings.extend(build_observations(archive, refs, trace) or [])
+        elif plan.get("n1_request"):
+            message, case_frame = reactive.n1_telemetry_case(archive, tb.profile, plan["n1_request"], hints, call_scoped)
+            messages.append(message)
+            if case_frame:
+                refs = [
+                    message["payload"][key]["cell"]
+                    for key in ("ia_outage", "ia_receiving", "p_outage", "p_receiving", "bus_voltage")
+                    if isinstance(message["payload"].get(key), dict) and message["payload"][key].get("cell")
+                ]
+                evidence_cells.extend(refs)
+                findings.extend(build_observations(archive, refs, trace) or [])
         ov = call_scoped("get_station_health_overview", {"day": day, "severity": "all"} if day else {"severity": "all"})
         if ov.get("status") != "ok":
             ov = call_scoped("get_station_health_overview", {"severity": "all"})
@@ -306,7 +317,7 @@ def _run_specialist_in_archive(
                     "evidence": [],
                 }, prof, kind="coverage"))
 
-    elif role_id == "physics" and reactive_inputs is not None:
+    elif role_id == "physics" and reactive_inputs is not None and plan.get("reactive_request"):
         message = reactive.propose(tb.profile, reactive_inputs["messages"][0],
                                    reactive_inputs["case_frame"], plan["reactive_request"])
         messages.append(message)
@@ -318,6 +329,11 @@ def _run_specialist_in_archive(
             assumptions.append(message["payload"]["model_assumptions"])
 
     elif role_id == "physics":
+        if reactive_inputs is not None and plan.get("n1_request"):
+            n1_msg = reactive.n1_propose(
+                archive, tb.profile, reactive_inputs["messages"][0], reactive_inputs["case_frame"], plan["n1_request"],
+            )
+            messages.append(n1_msg)
         pf_spec = plan.get("powerflow_spec") or {"scenario": "base_case"}
         pf_res = call_scoped("run_ac_power_flow", pf_spec)
         if pf_res.get("status") == "ok":
@@ -379,7 +395,7 @@ def _run_specialist_in_archive(
         signals["cited_standards"] = cited[:3]
         signals["applicability_warnings"] = rag_res.get("applicability_warnings") or []
         signals["missing_evidence"] = rag_res.get("missing_evidence") or []
-        if plan.get("reactive_request"):
+        if plan.get("reactive_request") or plan.get("n1_request"):
             signals["reactive_policy"] = reactive.standards_policy(tb.profile, std_res.get("hits") or [])
 
         for index, warning in enumerate(signals["applicability_warnings"]):
@@ -555,11 +571,18 @@ def run_multi_agent_consultation(
     plan = _plan_consultation(question, hints)
     profile = load_mine_profile()
     reactive_req = reactive.reactive_request(question, hints, profile)
+    n1_req = None if reactive_req else reactive.n1_transfer_request(question, hints, profile)
+    exchange_active = bool(reactive_req or n1_req)
     if reactive_req:
         plan["reactive_request"] = reactive_req
         plan["selected_specialists"] = ["telemetry", "physics", "standards"]
         plan["execution_mode"] = "evidence_exchange"
         plan["subtasks"]["physics"] = "根据量测消息执行同点交流潮流，收到约束质疑后重算"
+    elif n1_req:
+        plan["n1_request"] = n1_req
+        plan["selected_specialists"] = ["telemetry", "physics", "standards"]
+        plan["execution_mode"] = "evidence_exchange"
+        plan["subtasks"]["physics"] = "根据双回峰值量测执行 N-1 交流潮流，收到计量口径质疑后补算双口径安全包络"
     selected = plan["selected_specialists"]
     reader = archive.parallel_reader() if len(selected) > 1 else None
     use_parallel = reader is not None
@@ -600,7 +623,7 @@ def run_multi_agent_consultation(
 
         def _make_spec_handler(r_id: str):
             def _run_spec(ctx: DAGRunContext) -> dict[str, Any]:
-                inputs = ctx.completed_outputs["specialist:telemetry"] if reactive_req and r_id == "physics" else None
+                inputs = ctx.completed_outputs["specialist:telemetry"] if exchange_active and r_id == "physics" else None
                 if reader:
                     with reader() as local_archive:
                         brief = _run_specialist_in_archive(r_id, question, plan, local_archive, inputs)
@@ -619,7 +642,7 @@ def run_multi_agent_consultation(
             return _run_spec
 
         metadata = {"role_id": role_id, "agent_name": AGENT_ROLES[role_id]["name"]}
-        if reactive_req and role_id == "telemetry":
+        if exchange_active and role_id == "telemetry":
             # Cabinet profiles and an unpinned search may depend on the whole report span.
             metadata["data_scope"] = {"reads_all_days": True}
         dag.add_node(
@@ -628,7 +651,7 @@ def run_multi_agent_consultation(
                 kind="specialist",
                 title=AGENT_ROLES[role_id]["title"],
                 handler=_make_spec_handler(role_id),
-                depends_on=["specialist:telemetry"] if reactive_req and role_id == "physics" else ["plan"],
+                depends_on=["specialist:telemetry"] if exchange_active and role_id == "physics" else ["plan"],
                 metadata=metadata,
             )
         )
@@ -646,6 +669,15 @@ def run_multi_agent_consultation(
         frame, proposal = _reactive_inputs(ctx)
         return reactive.revise(profile, frame, proposal, ctx.completed_outputs["reactive:challenge"], reactive_req)
 
+    def _n1_challenge_node(ctx):
+        _, proposal = _reactive_inputs(ctx)
+        policy = ctx.completed_outputs["specialist:standards"]["signals"].get("reactive_policy") or {}
+        return reactive.n1_challenge(profile, proposal, policy)
+
+    def _n1_revision_node(ctx):
+        _, proposal = _reactive_inputs(ctx)
+        return reactive.n1_revise(profile, proposal, ctx.completed_outputs["n1:challenge"], n1_req)
+
     if reactive_req:
         dag.add_node(DAGNode(
             "reactive:challenge", "specialist", "规程专家质疑单投候选", _challenge_node,
@@ -654,6 +686,15 @@ def run_multi_agent_consultation(
         dag.add_node(DAGNode(
             "reactive:revise", "specialist", "物理专家同点复算中间稳态与终态", _revision_node,
             depends_on=["reactive:challenge"],
+        ))
+    elif n1_req:
+        dag.add_node(DAGNode(
+            "n1:challenge", "specialist", "规程专家质疑单一潮流电流口径", _n1_challenge_node,
+            depends_on=["specialist:standards", "specialist:physics"],
+        ))
+        dag.add_node(DAGNode(
+            "n1:revise", "specialist", "物理专家补算表计上限与比例修正双口径包络", _n1_revision_node,
+            depends_on=["n1:challenge"],
         ))
 
     # Wave 3: SkepticAuditor Conflict Arbitration & Consensus Synthesis Node
@@ -679,6 +720,16 @@ def run_multi_agent_consultation(
             if case_facts is None:
                 raise NodeRestricted("reactive_evidence_mismatch", "复算断面与当前日报证据版本不一致。")
             conflicts.extend(reactive.voltage_conflict_record(decision, objection))
+        elif n1_req:
+            _, proposal = _reactive_inputs(ctx)
+            objection = ctx.completed_outputs["n1:challenge"]
+            revision = ctx.completed_outputs["n1:revise"]
+            decision = reactive.n1_arbitrate(profile, proposal, objection, revision)
+            case_facts, arb_trace = reactive.n1_arbitration_evidence(
+                archive, [step for brief in ordered_briefs for step in brief["tool_trace"]], decision,
+            )
+            if case_facts is None:
+                case_facts = []
         for conf in conflicts:
             emit("conflict_detected", conflict=conf)
 
@@ -716,7 +767,7 @@ def run_multi_agent_consultation(
             kind="arbitrate",
             title="Skeptic 冲突仲裁与共识综合",
             handler=_arbitrate_node,
-            depends_on=["reactive:revise"] if reactive_req else specialist_node_ids,
+            depends_on=["reactive:revise"] if reactive_req else (["n1:revise"] if n1_req else specialist_node_ids),
         )
     )
 
@@ -853,7 +904,7 @@ def run_multi_agent_consultation(
             "content": f'提交 {len(b["findings"])} 条结构化证据与 {len(b["evidence_cells"])} 处原表单元格（耗时 {b["latency_ms"]} ms）',
         })
         messages.extend(b.get("messages") or [])
-    for node_id in ("reactive:challenge", "reactive:revise"):
+    for node_id in ("reactive:challenge", "reactive:revise", "n1:challenge", "n1:revise"):
         if node_id in completed:
             messages.append(completed[node_id]["output"])
     public_briefs = [
@@ -928,7 +979,8 @@ def run_multi_agent_consultation(
         "specialist_briefs": public_briefs,
         "inter_agent_messages": messages,
         "conflicts_resolved": arb["conflicts"],
-        **({"reactive_arbitration": decision} if decision else {}),
+        **({"reactive_arbitration": decision} if (decision and reactive_req) else {}),
+        **({"n1_arbitration": decision} if (decision and n1_req) else {}),
         "parallel_speedup": {
             "wall_ms": par_wall_ms,
             "sequential_sum_ms": seq_sum_ms,

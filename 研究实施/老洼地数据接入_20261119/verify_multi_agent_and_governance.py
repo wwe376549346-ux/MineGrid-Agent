@@ -96,6 +96,24 @@ def verify_workstream3_multi_agent(archive: Archive) -> dict:
     assert failed["reactive_arbitration"]["status"] == "baseline_non_converged"
     assert failed["reactive_arbitration"]["selected"] is None
 
+    # 1b. N-1 Dual-Basis Evidence Exchange & Challenge (MA02: 1009 -> 1010 metering offset vs pandapower AC flow)
+    n1_consult = run_multi_agent_consultation(
+        archive,
+        "如果 1009 柜退出转供至 1010 柜，请结合 N-1 交流故障潮流与 1010 量测口径校核下井双回载流裕度与末端压降。",
+    )
+    assert n1_consult["status"] == "ok" and n1_consult["verification"]["status"] == "verified"
+    n1_arb = n1_consult.get("n1_arbitration")
+    assert n1_arb and n1_arb["study_kind"] == "n1_dual_basis_arbitration"
+    assert abs(n1_arb["governing_current_a"] - 159.69) < 0.05
+    assert n1_arb["powerflow_current_a"] < n1_arb["governing_current_a"]
+    assert len(n1_arb["envelopes"]) == 3
+    n1_msgs = {m["id"]: m for m in n1_consult["inter_agent_messages"] if "id" in m}
+    assert {"n1-measurement", "n1-proposal", "n1-challenge", "n1-revision", "n1-decision"} <= set(n1_msgs)
+    assert n1_msgs["n1-challenge"]["in_reply_to"] == ["n1-proposal"]
+    assert n1_msgs["n1-challenge"]["payload"]["challenged"] is True
+    assert "n1-challenge" in n1_msgs["n1-revision"]["in_reply_to"]
+    assert n1_msgs["n1-decision"]["in_reply_to"] == ["n1-challenge", "n1-revision"]
+
     # 2. Single-Agent vs Multi-Agent 4-case comparative benchmark
     bench = evaluate_multi_agent_comparison(archive)
     assert bench["all_verified"] is True

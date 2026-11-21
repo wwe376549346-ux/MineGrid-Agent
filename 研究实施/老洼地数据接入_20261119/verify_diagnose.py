@@ -210,6 +210,84 @@ def _verify_hypothesis_loop(archive):
         assert changed[-1]["test"] == "adjacent_generator" and changed[-1]["based_on_steps"] == [1, 2, 3, 4]
 
 
+def _verify_multiscenario_hypotheses(archive):
+    class Planner:
+        model = "stub-scenario-planner"
+
+        def chat(self, messages, *, json_mode, **options):
+            assert json_mode
+            context = json.loads(messages[-1]["content"])
+            choices = [option["action"] for option in context["available_checks"]]
+            if self.zero and not context["previous_checks"]:
+                assert {choice["hypothesis"] for choice in choices} == {"H1", "H3"}
+            return {"content": json.dumps(choices[-1])}, {}
+
+        def __init__(self, *, zero):
+            self.zero = zero
+
+    scenarios = [
+        (
+            "1018 馈线全周持续负有功和负功率因数是什么原因？是否二采区反送电？",
+            "feeder_polarity_review", "2026-11-16 21:00:00",
+            {"H1": "insufficient_evidence", "H2": "refuted_at_sample", "H3": "insufficient_evidence"},
+            {"1116.xls / New Sheet1!BX25", "1116.xls / New Sheet1!AN25", "1116.xls / New Sheet1!AZ25"},
+        ),
+        (
+            "2026年11月13日15:00，306柜有功和电流为何归零？请查证失压、表计死数和单进线转供。",
+            "zero_incomer_review", "2026-11-13 15:00:00",
+            {"H1": "refuted_at_sample", "H2": "refuted_at_sample", "H3": "insufficient_evidence"},
+            {"1113.xls / New Sheet1!D19", "1113.xls / New Sheet1!F19",
+             "1113.xls / New Sheet1!H10", "1113.xls / New Sheet1!H24"},
+        ),
+    ]
+    for question, scenario, at, outcomes, expected_cells in scenarios:
+        zero = scenario == "zero_incomer_review"
+        for planner in (None, Planner(zero=zero)):
+            result = diagnose_question(archive, question, client=planner, auto_tier=True)
+            report = result["report"]
+            trace = report["hypothesis_trace"]
+            checks = {item["hypothesis"]: item for item in trace["checks"]}
+            assert result["status"] == "ok" and result["stop_reason"] == "checks_complete"
+            assert result["rounds"] == result["tool_calls"] == 4 and not trace["pending"]
+            assert trace["scenario"] == scenario and trace["time"] == at
+            assert len(trace["checks"]) == 3 and {key: check["outcome"] for key, check in checks.items()} == outcomes
+            assert all(check["planner"] == ("model" if planner else "local") for check in checks.values())
+            if planner:
+                assert trace["checks"][0]["hypothesis"] == "H3"
+            all_indices = trace["observation_fact_indices"] + [
+                i for check in checks.values() for i in check["fact_indices"]
+            ]
+            assert sorted(all_indices) == list(range(len(report["confirmed_facts"])))
+            cells = {cell for index in all_indices for cell in report["confirmed_facts"][index]["evidence"]}
+            verdict = result["verification"]
+            assert verdict["status"] == "verified" and verdict["grounded_ratio"] == 1.0
+            assert verdict["verified_values_count"] == verdict["numeric_checks_total"] > 0
+            assert verdict["verified_tool_results_count"] == verdict["tool_result_checks_total"] > 0
+            assert cells == set(verdict["verified_cells"]) and expected_cells <= cells
+            assert verdict["cited_cells_total"] == len(cells)
+            if zero:
+                assert len(trace["observation_fact_indices"]) == 6
+                assert checks["H1"]["step"] in checks["H2"]["based_on_steps"]
+                assert "36.82 kV" in checks["H1"]["judgment"]
+                assert all(value in checks["H2"]["judgment"] for value in ("5710.12 kW", "5699.21 kW", "+10.91 kW"))
+                assert "13/13" in checks["H3"]["judgment"] and "SOE" in checks["H3"]["judgment"]
+            else:
+                assert len(trace["observation_fact_indices"]) == 4
+                assert checks["H1"]["judgment"].count("168/168") == 2
+                assert "778.05 kW" in checks["H2"]["judgment"]
+                balance = result["tool_trace"][checks["H3"]["step"] - 1]["result"]["section_balance"]
+                assert "1018" in balance["outgoing_cabinets"] and balance["incomer_cabinets"] == ["1006"]
+                assert balance["signed_residual_kw"] == 1677.51 and balance["flipped_residual_kw"] == 1467.75
+                assert balance["residual_change_kw"] == -209.76
+
+    for hour in ("07:00", "19:00"):
+        result = diagnose_question(archive, f"2026-11-13 {hour} 306柜为什么零有功？")
+        assert result["report"]["hypothesis_trace"]["time"] == f"2026-11-13 {hour}:00"
+        assert result["verification"]["status"] == "verified"
+    result = diagnose_question(archive, "2026-11-13 306柜为什么连续13小时零有功和零电流？")
+    assert result["report"]["hypothesis_trace"]["time"] == "2026-11-13 15:00:00"
+
+
 def _verify_offline(archive: Archive) -> dict:
     # 1. Verify standards corpus & search
     corpus = load_corpus()
@@ -445,6 +523,7 @@ def _verify_offline(archive: Archive) -> dict:
         assert falsify_res["rounds"] >= 2 and "1027" in falsify_res["report"]["summary"]
 
     _verify_hypothesis_loop(archive)
+    _verify_multiscenario_hypotheses(archive)
 
     # 5. Verify local baseline across all 6 diagnostic cases
     local_results = []

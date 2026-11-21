@@ -55,6 +55,21 @@ const DUTY_PROMPTS = [
     detail: "2 号主变",
     Icon: Activity,
     text: "2026年11月12日12:00，2号主变通道306/312/1006有功为负。请查证1027反送电、表计异常和母联环流的可能性。",
+    runOnClick: true,
+  },
+  {
+    label: "查证全周负有功",
+    detail: "1018 二采区 II 回",
+    Icon: Activity,
+    text: "1018 馈线全周持续负有功和负功率因数是什么原因？是否二采区反送电？",
+    runOnClick: true,
+  },
+  {
+    label: "查证进线归零",
+    detail: "306 二回进线",
+    Icon: Activity,
+    text: "2026年11月13日15:00，306柜有功和电流为何归零？请查证失压、表计死数和单进线转供。",
+    runOnClick: true,
   },
 ];
 
@@ -489,7 +504,7 @@ function HypothesisTrace({report}) {
         {fact.statement}
         <div className="inline-cells">{fact.evidence.map(cell => {
           const href = cellHref(cell);
-          return href ? <a key={cell} className="cell-chip" href={href} download>{cell}</a>
+          return href ? <a key={cell} className="cell-chip" href={href} download title={`下载原始日报 · ${cell}`}>{cell}</a>
             : <span key={cell} className="cell-chip">{cell}</span>;
         })}</div>
       </li>;
@@ -1470,8 +1485,9 @@ export function AgentCopilotPane({
             <p>查运行日报、回看监测事件，或核对不同柜的同期读数。</p>
             {composer}
             <div className="duty-prompts" aria-label="示例问题">
-              {DUTY_PROMPTS.map(({label, detail, Icon, text}) => (
-                <button type="button" key={label} className="duty-prompt" onClick={() => usePrompt(text)}>
+              {DUTY_PROMPTS.map(({label, detail, Icon, text, runOnClick}) => (
+                <button type="button" key={label} className="duty-prompt"
+                  onClick={() => runOnClick ? sendQuestion(text) : usePrompt(text)}>
                   <Icon size={18} strokeWidth={1.65} />
                   <span><strong>{label}</strong><small>{detail}</small></span>
                 </button>
