@@ -1,0 +1,105 @@
+name: MineGrid-Agent CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend-verification:
+    name: Archive Integrity & Python Test Gates
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: 研究实施/老洼地数据接入_20261119
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: 研究实施/老洼地数据接入_20261119/pyproject.toml
+
+      - name: Verify read-only golden archive SHA-256 checksums
+        run: |
+          python -B -c "
+          import hashlib
+          from pathlib import Path
+          expected = {
+              'local/laowadi.sqlite3': '37946d8abb40bd34295b7787c3426cc3e19a0ece9c9df70e45481f2253fb573a',
+              'local/laowadi_events.sqlite3': '99373c36ce28939905d12a93714e05ca886ea8068cd31690fd33ea2d2a5c8d05',
+          }
+          for rel, exp in expected.items():
+              p = Path(rel)
+              assert p.exists(), f'Missing read-only archive: {rel}'
+              actual = hashlib.sha256(p.read_bytes()).hexdigest()
+              assert actual == exp, f'{rel} SHA-256 mismatch: expected {exp}, got {actual}'
+              print(f'[OK] {rel} SHA-256 = {actual[:16]}...')
+          "
+
+      - name: Install MineGrid-Agent package
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+
+      - name: Run core correctness & claim grounding gates
+        run: |
+          python -B verify_p0_correctness.py
+          python -B verify_diagnostic_claims.py
+          python -B verify_diagnose.py
+          python -B verify_task_alignment.py
+
+      - name: Run multi-agent, power-flow, VoI & DAG gates
+        run: |
+          python -B verify_multi_agent_and_governance.py
+          python -B verify_enterprise_and_powerflow.py
+          python -B verify_unified_dag.py
+          python -B verify_supplement_and_mcp.py
+          python -B verify_multimine_generalization.py
+
+      - name: Run proactive monitoring, workbench API & offline benchmark probe
+        run: |
+          python -B verify_proactive_delivery.py
+          python -B verify_p1_autonomy_and_ops.py
+          python -B verify_workbench.py
+          python -B -m thesis_eval.probe --output /tmp/minegrid_eval_results
+
+      - name: Re-verify golden archive immutability post-tests
+        run: |
+          python -B -c "
+          import hashlib
+          from pathlib import Path
+          assert hashlib.sha256(Path('local/laowadi.sqlite3').read_bytes()).hexdigest() == '37946d8abb40bd34295b7787c3426cc3e19a0ece9c9df70e45481f2253fb573a'
+          assert hashlib.sha256(Path('local/laowadi_events.sqlite3').read_bytes()).hexdigest() == '99373c36ce28939905d12a93714e05ca886ea8068cd31690fd33ea2d2a5c8d05'
+          print('[OK] Golden archives remained 100% immutable after full test matrix.')
+          "
+
+  frontend-build:
+    name: React 19 Workbench Build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: 研究实施/老洼地数据接入_20261119/workbench
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: 研究实施/老洼地数据接入_20261119/workbench/package-lock.json
+
+      - name: Install dependencies & build production bundle
+        run: |
+          npm ci
+          npm run build

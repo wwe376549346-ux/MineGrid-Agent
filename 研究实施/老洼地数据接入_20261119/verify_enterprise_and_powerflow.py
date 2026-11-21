@@ -165,7 +165,11 @@ def verify_pandapower_all_scenarios(archive: Archive) -> dict:
     assert d["total_loss_reduction_kw"] > 3.0
 
     # 5. 24-hour discrete tap & capacitor switching DP schedule + 7-day weekly Pareto analysis
-    from laowadi.powerflow import analyze_weekly_schedule_pareto, optimize_daily_tap_cap_schedule
+    from laowadi.powerflow import (
+        analyze_parameter_sensitivity_voi,
+        analyze_weekly_schedule_pareto,
+        optimize_daily_tap_cap_schedule,
+    )
 
     sched = optimize_daily_tap_cap_schedule(archive, "2026-11-13", target_cabinet="1010")
     assert sched["status"] == "ok" and len(sched["hours"]) == 24
@@ -189,6 +193,21 @@ def verify_pandapower_all_scenarios(archive: Archive) -> dict:
     assert frontier[-1]["all_hours_safe"] is True
     assert weekly["featured_day_schedule"]["day"] == "2026-11-13"
 
+    # 5b. Parameter uncertainty sensitivity & Value-of-Information (VoI) supplement ranking
+    voi = analyze_parameter_sensitivity_voi(archive)
+    assert voi["status"] == "ok"
+    tornado = voi["tornado_items"]
+    ranking = voi["voi_ranking"]
+    assert len(tornado) == 5 and len(ranking) == 5
+    scores = [item["voi_score"] for item in tornado]
+    assert all(scores[i] >= scores[i + 1] for i in range(len(scores) - 1)), f"VoI not sorted desc: {scores}"
+    top2_keys = {item["param_key"] for item in tornado[:2]}
+    assert top2_keys == {"transformer_tap_pos", "metering_ratio"}, f"Unexpected top-2 VoI params: {top2_keys}"
+    by_key = {item["param_key"]: item for item in tornado}
+    assert by_key["transformer_tap_pos"]["voltage_span_kv"] > 0.40
+    assert by_key["metering_ratio"]["n1_current_span_a"] > 40.0
+    assert all(item["required_field_document"] for item in tornado)
+
     # 6. Agent Tool 11 end-to-end groundedness check
     diag = diagnose_question(
         archive,
@@ -211,6 +230,7 @@ def verify_pandapower_all_scenarios(archive: Archive) -> dict:
         "reactive_loss_reduction_kw": d["total_loss_reduction_kw"],
         "daily_24h_loss_saving_kwh": sched["loss_saving_kwh"],
         "daily_24h_all_safe": sched["all_hours_safe"],
+        "voi_top2": [item["param_key"] for item in tornado[:2]],
         "agent_tool11_verified": True,
     }
 

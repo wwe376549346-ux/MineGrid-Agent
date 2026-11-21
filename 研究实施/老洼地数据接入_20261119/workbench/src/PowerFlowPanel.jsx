@@ -21,6 +21,7 @@ import {ProgressBar} from "@astryxdesign/core/ProgressBar";
 import {Spinner} from "@astryxdesign/core/Spinner";
 import {apiRequest, cellHref} from "./api.js";
 import {DailyScheduleChart} from "./DailyScheduleChart.jsx";
+import {SensitivityTornadoChart} from "./SensitivityTornadoChart.jsx";
 
 const SCENARIOS = [
   {
@@ -159,6 +160,76 @@ function WeeklyScheduleCard() {
             </table>
           </div>
           <DailyScheduleChart schedule={weeklyData.featured_day_schedule} />
+        </>}
+      </Collapsible>
+    </Card>
+  );
+}
+
+function SensitivityVoiCard({atTime}) {
+  const [result, setResult] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  async function loadSensitivity() {
+    setLoading(true);
+    setError("");
+    try {
+      const params = new URLSearchParams({at_time: atTime, target_cabinet: "1010"});
+      const response = await apiRequest(`/api/powerflow/sensitivity-voi?${params}`);
+      if (response.status !== "ok" || !Array.isArray(response.tornado_items) || !Array.isArray(response.voi_ranking)) {
+        throw new Error(response.summary || "当前断面未返回灵敏度结果。");
+      }
+      setResult(response);
+    } catch (err) {
+      setError(err.message || "参数灵敏度计算失败。");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const baseline = result?.baseline;
+  return (
+    <Card padding={16} className="pf-hero-card">
+      <Collapsible trigger="未知参数灵敏度与信息价值（VoI）补证排序" defaultIsOpen={false}>
+        <p>电压断面 {atTime} · N-1 工况 1009 退运、1010 受电{result?.n1_time && `（${result.n1_time}）`}</p>
+        {!result && (
+          <div aria-busy={loading}>
+            <Button
+              size="sm"
+              variant="primary"
+              label={loading ? "正在计算灵敏度…" : error ? "重新计算灵敏度" : "计算并加载灵敏度"}
+              onClick={loadSensitivity}
+              disabled={loading}
+            />
+            {error && <Banner variant="error" title="未能载入灵敏度结果" description={error} />}
+          </div>
+        )}
+        {result && <>
+          {result.summary && <p>{result.summary}</p>}
+          {baseline && (
+            <p className="muted">
+              基线 · 10 kV II 段 {displayNumber(baseline.bus_10kv_ii_kv)} kV · N-1 末端最低 {displayNumber(baseline.n1_min_ug_kv)} kV
+              {" · "}N-1 受电电流 {displayNumber(baseline.n1_current_a)} A · 网损 {displayNumber(baseline.total_loss_kw)} kW
+            </p>
+          )}
+          <SensitivityTornadoChart items={result.tornado_items} />
+          <div className="pf-table-wrap">
+            <table className="pf-table">
+              <caption>补证优先级</caption>
+              <thead>
+                <tr><th>排名</th><th>参数</th><th>VoI 评分</th><th>主导影响</th><th>优先索要的现场资料</th></tr>
+              </thead>
+              <tbody>
+                {result.voi_ranking.map(row => (
+                  <tr key={row.param_key}>
+                    <td>{row.rank}</td><th scope="row">{row.label}</th><td>{displayNumber(row.voi_score)}</td>
+                    <td>{row.dominant_impact}</td><td>{row.required_field_document}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </>}
       </Collapsible>
     </Card>
@@ -416,6 +487,7 @@ export function PowerFlowPanel({onAskDiagnose}) {
     </Card>
 
     <WeeklyScheduleCard />
+    <SensitivityVoiCard key={atTime} atTime={atTime} />
 
     {err && <Banner variant="error" title="潮流计算错误" description={err} />}
 

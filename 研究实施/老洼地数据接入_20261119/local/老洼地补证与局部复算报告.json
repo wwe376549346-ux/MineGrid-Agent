@@ -264,6 +264,92 @@
       "conditionally_violated": 0,
       "recalculated_items": 0,
       "reused_items": 0
+    },
+    "voi_hints": {
+      "at_time": "2026-11-13 17:00:00",
+      "n1_time": "2026-11-10 06:00:00",
+      "top_parameters": [
+        {
+          "rank": 1,
+          "param_key": "transformer_tap_pos",
+          "label": "2# 主变分接头实际档位",
+          "voi_score": 50.6,
+          "dominant_impact": "母线/末端电压跨度 0.5400 kV",
+          "required_field_document": "2# 主变铭牌及同期分接开关实际档位台账",
+          "rationale": "直接决定 10 kV II 段母线电压是否处于 GB/T 12325 限值带内以及调压裕度。"
+        },
+        {
+          "rank": 2,
+          "param_key": "metering_ratio",
+          "label": "1010 柜计量/CT 比例系数",
+          "voi_score": 50.6,
+          "dominant_impact": "N-1 受电电流跨度 53.84 A",
+          "required_field_document": "1010 柜 CT 变比、计量接线核校报告与试验记录",
+          "rationale": "决定有功驱动潮流与实测电流包络之间的口径偏差，是下井双回 N-1 载流安全裁决的主导变量。"
+        },
+        {
+          "rank": 3,
+          "param_key": "transformer_sn_mva",
+          "label": "1#/2# 主变额定容量 Sn",
+          "voi_score": 20.9,
+          "dominant_impact": "系统总网损跨度 6.457 kW",
+          "required_field_document": "1#/2# 主变铭牌额定容量与冷却方式核定单",
+          "rationale": "影响主变标幺阻抗及单进线/N-1 负载率热稳定判定基准。"
+        },
+        {
+          "rank": 4,
+          "param_key": "transformer_vk_percent",
+          "label": "1#/2# 主变短路阻抗 Uk%",
+          "voi_score": 9.3,
+          "dominant_impact": "母线/末端电压跨度 0.0930 kV",
+          "required_field_document": "1#/2# 主变出厂试验报告（实测短路阻抗 Uk% 与空载/负载损耗）",
+          "rationale": "影响重载及单进线带双主变工况下的主变内部阻抗压降。"
+        },
+        {
+          "rank": 5,
+          "param_key": "cable_length_km",
+          "label": "1009/1010 下井电缆长度",
+          "voi_score": 4.0,
+          "dominant_impact": "母线/末端电压跨度 0.0420 kV",
+          "required_field_document": "下井双回电缆型号、截面（mm²）、敷设长度及井筒降容台账",
+          "rationale": "直接控制井下 1535 中央变电所受端压降与线路铜损测算精度。"
+        }
+      ],
+      "item_priorities": {
+        "V01": {
+          "lead_param_key": "transformer_tap_pos",
+          "lead_param_label": "2# 主变分接头实际档位",
+          "priority_rank": 1,
+          "voi_score": 50.6,
+          "dominant_impact": "母线/末端电压跨度 0.5400 kV",
+          "required_field_document": "2# 主变铭牌及同期分接开关实际档位台账"
+        },
+        "V02": {
+          "lead_param_key": "metering_ratio",
+          "lead_param_label": "1010 柜计量/CT 比例系数",
+          "priority_rank": 2,
+          "voi_score": 50.6,
+          "dominant_impact": "N-1 受电电流跨度 53.84 A",
+          "required_field_document": "1010 柜 CT 变比、计量接线核校报告与试验记录"
+        },
+        "V03": {
+          "lead_param_key": "metering_ratio",
+          "lead_param_label": "1010 柜计量/CT 比例系数",
+          "priority_rank": 2,
+          "voi_score": 50.6,
+          "dominant_impact": "N-1 受电电流跨度 53.84 A",
+          "required_field_document": "1010 柜 CT 变比、计量接线核校报告与试验记录"
+        },
+        "V04": {
+          "lead_param_key": "metering_ratio",
+          "lead_param_label": "1010 柜计量/CT 比例系数",
+          "priority_rank": 2,
+          "voi_score": 50.6,
+          "dominant_impact": "N-1 受电电流跨度 53.84 A",
+          "required_field_document": "1010 柜 CT 变比、计量接线核校报告与试验记录"
+        }
+      },
+      "summary": "参数不确定性与信息价值（VoI）排序（电压断面 2026-11-13 17:00:00、N-1 峰值断面 2026-11-10 06:00:00）：最优先核查「2# 主变分接头实际档位」（VoI=50.6，母线/末端电压跨度 0.5400 kV），其次为「1010 柜计量/CT 比例系数」（VoI=50.6，N-1 受电电流跨度 53.84 A）；建议按上述顺序向现场索要铭牌与核校台账以收窄安全边界。"
     }
   },
   "supplemented_v2": {
@@ -559,6 +645,92 @@
       "evidence_conflict": 0,
       "recalculated_items": 2,
       "reused_items": 2
+    },
+    "voi_hints": {
+      "at_time": "2026-11-13 17:00:00",
+      "n1_time": "2026-11-10 06:00:00",
+      "top_parameters": [
+        {
+          "rank": 1,
+          "param_key": "transformer_tap_pos",
+          "label": "2# 主变分接头实际档位",
+          "voi_score": 50.6,
+          "dominant_impact": "母线/末端电压跨度 0.5400 kV",
+          "required_field_document": "2# 主变铭牌及同期分接开关实际档位台账",
+          "rationale": "直接决定 10 kV II 段母线电压是否处于 GB/T 12325 限值带内以及调压裕度。"
+        },
+        {
+          "rank": 2,
+          "param_key": "metering_ratio",
+          "label": "1010 柜计量/CT 比例系数",
+          "voi_score": 50.6,
+          "dominant_impact": "N-1 受电电流跨度 53.84 A",
+          "required_field_document": "1010 柜 CT 变比、计量接线核校报告与试验记录",
+          "rationale": "决定有功驱动潮流与实测电流包络之间的口径偏差，是下井双回 N-1 载流安全裁决的主导变量。"
+        },
+        {
+          "rank": 3,
+          "param_key": "transformer_sn_mva",
+          "label": "1#/2# 主变额定容量 Sn",
+          "voi_score": 20.9,
+          "dominant_impact": "系统总网损跨度 6.457 kW",
+          "required_field_document": "1#/2# 主变铭牌额定容量与冷却方式核定单",
+          "rationale": "影响主变标幺阻抗及单进线/N-1 负载率热稳定判定基准。"
+        },
+        {
+          "rank": 4,
+          "param_key": "transformer_vk_percent",
+          "label": "1#/2# 主变短路阻抗 Uk%",
+          "voi_score": 9.3,
+          "dominant_impact": "母线/末端电压跨度 0.0930 kV",
+          "required_field_document": "1#/2# 主变出厂试验报告（实测短路阻抗 Uk% 与空载/负载损耗）",
+          "rationale": "影响重载及单进线带双主变工况下的主变内部阻抗压降。"
+        },
+        {
+          "rank": 5,
+          "param_key": "cable_length_km",
+          "label": "1009/1010 下井电缆长度",
+          "voi_score": 4.0,
+          "dominant_impact": "母线/末端电压跨度 0.0420 kV",
+          "required_field_document": "下井双回电缆型号、截面（mm²）、敷设长度及井筒降容台账",
+          "rationale": "直接控制井下 1535 中央变电所受端压降与线路铜损测算精度。"
+        }
+      ],
+      "item_priorities": {
+        "V01": {
+          "lead_param_key": "transformer_tap_pos",
+          "lead_param_label": "2# 主变分接头实际档位",
+          "priority_rank": 1,
+          "voi_score": 50.6,
+          "dominant_impact": "母线/末端电压跨度 0.5400 kV",
+          "required_field_document": "2# 主变铭牌及同期分接开关实际档位台账"
+        },
+        "V02": {
+          "lead_param_key": "metering_ratio",
+          "lead_param_label": "1010 柜计量/CT 比例系数",
+          "priority_rank": 2,
+          "voi_score": 50.6,
+          "dominant_impact": "N-1 受电电流跨度 53.84 A",
+          "required_field_document": "1010 柜 CT 变比、计量接线核校报告与试验记录"
+        },
+        "V03": {
+          "lead_param_key": "metering_ratio",
+          "lead_param_label": "1010 柜计量/CT 比例系数",
+          "priority_rank": 2,
+          "voi_score": 50.6,
+          "dominant_impact": "N-1 受电电流跨度 53.84 A",
+          "required_field_document": "1010 柜 CT 变比、计量接线核校报告与试验记录"
+        },
+        "V04": {
+          "lead_param_key": "metering_ratio",
+          "lead_param_label": "1010 柜计量/CT 比例系数",
+          "priority_rank": 2,
+          "voi_score": 50.6,
+          "dominant_impact": "N-1 受电电流跨度 53.84 A",
+          "required_field_document": "1010 柜 CT 变比、计量接线核校报告与试验记录"
+        }
+      },
+      "summary": "参数不确定性与信息价值（VoI）排序（电压断面 2026-11-13 17:00:00、N-1 峰值断面 2026-11-10 06:00:00）：最优先核查「2# 主变分接头实际档位」（VoI=50.6，母线/末端电压跨度 0.5400 kV），其次为「1010 柜计量/CT 比例系数」（VoI=50.6，N-1 受电电流跨度 53.84 A）；建议按上述顺序向现场索要铭牌与核校台账以收窄安全边界。"
     }
   }
 }

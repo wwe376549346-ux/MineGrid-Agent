@@ -492,7 +492,8 @@ def build_baseline_verification(archive, profile: MineProfile | None = None) -> 
         "items": items,
     }
     run_id = "LWS-v1-" + _json_sha(payload)[:12]
-    return {
+    voi_hints = _build_voi_hints(archive, prof)
+    result = {
         "run_id": run_id,
         **payload,
         "summary": {
@@ -504,6 +505,51 @@ def build_baseline_verification(archive, profile: MineProfile | None = None) -> 
             "reused_items": 0,
         },
     }
+    if voi_hints is not None:
+        result["voi_hints"] = voi_hints
+    return result
+
+
+def _build_voi_hints(archive: Archive, prof: MineProfile) -> dict | None:
+    """Attach pandapower parameter sensitivity Value-of-Information (VoI) hints for supplement prioritization."""
+    if prof.mine_id != "laowadi":
+        return None
+    try:
+        from .powerflow import analyze_parameter_sensitivity_voi
+
+        voi = analyze_parameter_sensitivity_voi(archive)
+        if voi.get("status") != "ok":
+            return None
+        by_param = {item["param_key"]: item for item in voi.get("tornado_items", [])}
+        item_mapping = {
+            "V01": ["transformer_sn_mva", "transformer_tap_pos"],
+            "V02": ["metering_ratio", "cable_length_km"],
+            "V03": ["metering_ratio"],
+            "V04": ["metering_ratio", "transformer_vk_percent"],
+        }
+        item_priorities = {}
+        for item_id, keys in item_mapping.items():
+            matched = [by_param[k] for k in keys if k in by_param]
+            if not matched:
+                continue
+            lead = max(matched, key=lambda x: float(x.get("voi_score", 0.0)))
+            item_priorities[item_id] = {
+                "lead_param_key": lead["param_key"],
+                "lead_param_label": lead["label"],
+                "priority_rank": lead["priority_rank"],
+                "voi_score": lead["voi_score"],
+                "dominant_impact": lead["dominant_impact"],
+                "required_field_document": lead["required_field_document"],
+            }
+        return {
+            "at_time": voi.get("at_time"),
+            "n1_time": voi.get("n1_time"),
+            "top_parameters": voi.get("voi_ranking", []),
+            "item_priorities": item_priorities,
+            "summary": voi.get("summary", ""),
+        }
+    except Exception:
+        return None
 
 
 def apply_supplement(baseline: dict, packet: dict) -> dict:
@@ -730,7 +776,7 @@ def apply_supplement(baseline: dict, packet: dict) -> dict:
         "items": new_items,
     }
     run_id = f'LWS-v{payload["version"]}-' + _json_sha(payload)[:12]
-    return {
+    result = {
         "run_id": run_id,
         **payload,
         "summary": {
@@ -743,6 +789,9 @@ def apply_supplement(baseline: dict, packet: dict) -> dict:
             "reused_items": reused_count,
         },
     }
+    if baseline.get("voi_hints") is not None:
+        result["voi_hints"] = baseline["voi_hints"]
+    return result
 
 
 def render_supplement_markdown(v1: dict, v2: dict | None = None) -> str:

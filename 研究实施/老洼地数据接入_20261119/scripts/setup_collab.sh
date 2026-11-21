@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 老洼地煤矿配电网诊断智能体 · 课题组双人协同开发一键环境初始化与门禁自检脚本
+# MineGrid-Agent: One-command environment bootstrap, archive checksum check & pre-merge verification gate
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -8,26 +8,26 @@ STUDY_DIR="$(cd "${APP_DIR}/.." && pwd)"
 VENV_DIR="${STUDY_DIR}/.venv-power"
 LLM_DIR="${STUDY_DIR}/大模型接入_20261115"
 
-echo "=== [1/4] 检查 Python 虚拟环境 (${VENV_DIR}) ==="
+echo "=== [1/4] Checking Python virtual environment (${VENV_DIR}) ==="
 if [ ! -x "${VENV_DIR}/bin/python" ]; then
   PYTHON_BIN="$(command -v python3.12 || command -v python3)"
-  echo "创建虚拟环境 (${PYTHON_BIN})..."
+  echo "Creating virtual environment with ${PYTHON_BIN}..."
   "${PYTHON_BIN}" -m venv "${VENV_DIR}"
   "${VENV_DIR}/bin/pip" install --upgrade pip
   "${VENV_DIR}/bin/pip" install -e "${APP_DIR}"
 else
-  echo "已检测到虚拟环境: $(${VENV_DIR}/bin/python --version)"
+  echo "Detected existing virtual environment: $(${VENV_DIR}/bin/python --version)"
 fi
 
-echo "=== [2/4] 检查本地大模型密钥配置文件 ==="
+echo "=== [2/4] Checking local LLM configuration ==="
 if [ ! -f "${LLM_DIR}/.env.local" ] && [ -f "${LLM_DIR}/.env.example" ]; then
   cp "${LLM_DIR}/.env.example" "${LLM_DIR}/.env.local"
-  echo "提示: 已从模板生成 ${LLM_DIR}/.env.local，请填入课题组 DeepSeek API 密钥（该文件已被 .gitignore 忽略，不会上传）。"
+  echo "Created ${LLM_DIR}/.env.local from template. Add your API key locally (ignored by Git)."
 else
-  echo "本地模型配置文件就绪。"
+  echo "Local model configuration ready."
 fi
 
-echo "=== [3/4] 校验老洼地只读黄金归档库 SHA-256 ==="
+echo "=== [3/4] Verifying read-only golden archive SHA-256 checksums ==="
 cd "${APP_DIR}"
 "${VENV_DIR}/bin/python" -B -c "
 import hashlib
@@ -38,22 +38,25 @@ expected = {
 }
 for rel, exp in expected.items():
     p = Path(rel)
-    assert p.exists(), f'缺失核心只读库: {rel}'
+    assert p.exists(), f'Missing core read-only archive: {rel}'
     actual = hashlib.sha256(p.read_bytes()).hexdigest()
-    assert actual == exp, f'{rel} SHA-256 不一致! 期望 {exp}, 实际 {actual}'
+    assert actual == exp, f'{rel} SHA-256 mismatch! Expected {exp}, got {actual}'
     print(f'  [OK] {rel} SHA-256 = {actual[:16]}...')
 "
 
-echo "=== [4/4] 运行合并前核心门禁自检 (Pre-Merge Gate) ==="
+echo "=== [4/4] Running pre-merge verification gates ==="
 "${VENV_DIR}/bin/python" -B verify_p0_correctness.py
 "${VENV_DIR}/bin/python" -B verify_diagnostic_claims.py
+"${VENV_DIR}/bin/python" -B verify_diagnose.py
 "${VENV_DIR}/bin/python" -B verify_multi_agent_and_governance.py
+"${VENV_DIR}/bin/python" -B verify_enterprise_and_powerflow.py
+"${VENV_DIR}/bin/python" -B verify_proactive_delivery.py
 "${VENV_DIR}/bin/python" -B verify_workbench.py
 "${VENV_DIR}/bin/python" -B -m thesis_eval.probe --output thesis_eval/results
 
 echo ""
 echo "=================================================================="
-echo " 协同开发环境校验全部通过！"
-echo " 启动本地 8765 工作台命令："
-echo "   cd \"${APP_DIR}\" && ../ .venv-power/bin/python -m laowadi workbench --port 8765"
+echo " MineGrid-Agent environment & verification gates PASSED!"
+echo " Launch the interactive operator workbench:"
+echo "   cd \"${APP_DIR}\" && ../.venv-power/bin/python -B -m laowadi workbench --port 8765"
 echo "=================================================================="

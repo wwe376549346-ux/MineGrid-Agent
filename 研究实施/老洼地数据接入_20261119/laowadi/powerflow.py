@@ -1369,3 +1369,252 @@ def analyze_weekly_schedule_pareto(
     if len(_WEEKLY_PARETO_CACHE) < 16:
         _WEEKLY_PARETO_CACHE[wkey] = deepcopy(out)
     return out
+
+
+_SENSITIVITY_VOI_CACHE: dict[tuple, dict[str, Any]] = {}
+
+
+def analyze_parameter_sensitivity_voi(
+    archive,
+    *,
+    at_time: str = "2026-11-13 17:00:00",
+    target_cabinet: str = "1010",
+    n1_time: str = "2026-11-10 06:00:00",
+    profile: MineProfile | None = None,
+) -> dict[str, Any]:
+    """Quantify impact of unverified equivalent parameters via pandapower perturbation & rank VoI."""
+    from copy import deepcopy
+
+    prof = profile or load_mine_profile()
+    rep_rows = archive.db.execute("SELECT day, sha256 FROM report ORDER BY day ASC").fetchall()
+    archive_sig = tuple((row["day"], row["sha256"]) for row in rep_rows)
+    skey = (prof.mine_id, archive_sig, at_time, target_cabinet, n1_time)
+    if skey in _SENSITIVITY_VOI_CACHE:
+        return deepcopy(_SENSITIVITY_VOI_CACHE[skey])
+
+    tr2 = next((t for t in prof.transformers if t.id == "T2"), prof.transformers[-1])
+    fd_target = prof.feeder_map().get(target_cabinet) or next(f for f in prof.feeders if f.downstream_bus_id)
+    base_tap = int(tr2.calibrated_tap_pos)
+    base_vk = float(tr2.default_vk_percent)
+    base_sn = float(tr2.default_sn_mva)
+    base_len = float(fd_target.default_cable_length_km or 1.8)
+
+    # Fetch real metering scale ratio median for target cabinet from archived readings
+    from laowadi.diag_tools import DiagnosticToolbox
+
+    tb = DiagnosticToolbox(archive)
+    prof_cab = tb.execute("get_cabinet_health_profile", {"cabinet": target_cabinet})
+    m_chk = (prof_cab.get("metering_check") or {}) if prof_cab.get("status") == "ok" else {}
+    obs_ratio = float(m_chk.get("ratio_median") or 0.6606)
+
+    # Baseline runs at voltage-critical hour (`at_time`) and N-1 peak hour (`n1_time`)
+    base_v = run_ac_power_flow(archive, scenario="base_case", at_time=at_time, profile=prof)
+    base_n1 = run_ac_power_flow(
+        archive, scenario="n1_contingency", outage_mode="feeder_1009", at_time=n1_time, profile=prof,
+    )
+    b_u_ii = float(base_v["network_summary"]["bus_10kv_ii_kv"])
+    b_loss = float(base_v["network_summary"]["total_loss_kw"])
+    b_n1_comp = (base_n1.get("n1_contingency") or {}).get("receiving_1010_comparison") or {}
+    b_n1_i = float(b_n1_comp.get("after_i_a") or 0.0)
+    b_n1_ug = float(b_n1_comp.get("min_underground_kv") or 0.0)
+
+    def _eval_case(**kwargs) -> tuple[float, float, float, float]:
+        rv = run_ac_power_flow(archive, scenario="base_case", at_time=at_time, profile=prof, **kwargs)
+        rn = run_ac_power_flow(
+            archive, scenario="n1_contingency", outage_mode="feeder_1009", at_time=n1_time, profile=prof, **kwargs,
+        )
+        u_ii = float(rv["network_summary"]["bus_10kv_ii_kv"])
+        loss = float(rv["network_summary"]["total_loss_kw"])
+        nc = (rn.get("n1_contingency") or {}).get("receiving_1010_comparison") or {}
+        ni = float(nc.get("after_i_a") or b_n1_i)
+        nug = float(nc.get("min_underground_kv") or b_n1_ug)
+        return u_ii, ni, loss, nug
+
+    def _eval_metering_scale(scale_factor: float) -> tuple[float, float, float, float]:
+        # Re-solve pandapower with target cabinet load scaled by 1/scale_factor to reflect CT ratio uncertainty
+        snap_v = _load_hour_snapshot(archive, at_time, prof.primary_station)
+        snap_n = _load_hour_snapshot(archive, n1_time, prof.primary_station)
+        mult = 1.0 / max(scale_factor, 0.4)
+
+        def _scaled_snap(snap: dict) -> dict:
+            out_s = {cab: {m: dict(v) for m, v in metrics.items()} for cab, metrics in snap.items()}
+            if target_cabinet in out_s and "P" in out_s[target_cabinet] and out_s[target_cabinet]["P"].get("value") is not None:
+                out_s[target_cabinet]["P"]["value"] = float(out_s[target_cabinet]["P"]["value"]) * mult
+            if "1006" in out_s and "P" in out_s["1006"] and out_s["1006"]["P"].get("value") is not None:
+                delta_p = float(snap.get(target_cabinet, {}).get("P", {}).get("value") or 0.0) * (mult - 1.0)
+                out_s["1006"]["P"]["value"] = float(out_s["1006"]["P"]["value"]) + delta_p
+            return out_s
+
+        net_v, meta_v = build_pandapower_network(prof, _scaled_snap(snap_v))
+        _solve_nr(net_v)
+        sol_v = _extract_solution(net_v, meta_v, prof, snap_v)
+        u_ii = float(sol_v["network_summary"]["bus_10kv_ii_kv"])
+        loss = float(sol_v["network_summary"]["total_loss_kw"])
+
+        net_n, meta_n = build_pandapower_network(prof, _scaled_snap(snap_n), outage_mode="feeder_1009")
+        _solve_nr(net_n)
+        sol_n = _extract_solution(net_n, meta_n, prof, snap_n)
+        l_rec = next((l for l in sol_n["lines"] if l["cabinet"] == target_cabinet), None)
+        ni = float(l_rec["i_from_a"]) if l_rec else b_n1_i
+        nug = float(sol_n["network_summary"]["min_underground_kv"] or b_n1_ug)
+        return u_ii, ni, loss, nug
+
+    specs = [
+        {
+            "param_key": "transformer_tap_pos",
+            "label": "2# 主变分接头实际档位",
+            "unit": "档",
+            "base_value": base_tap,
+            "low_value": max(tr2.tap_min, base_tap - 1),
+            "high_value": min(tr2.tap_max, base_tap + 1),
+            "perturbation_label": f"{max(tr2.tap_min, base_tap - 1):+d} 档 ～ {min(tr2.tap_max, base_tap + 1):+d} 档（±1 档）",
+            "low_eval": lambda: _eval_case(tr2_tap_pos=max(tr2.tap_min, base_tap - 1)),
+            "high_eval": lambda: _eval_case(tr2_tap_pos=min(tr2.tap_max, base_tap + 1)),
+            "required_field_document": "2# 主变铭牌及同期分接开关实际档位台账",
+            "rationale": "直接决定 10 kV II 段母线电压是否处于 GB/T 12325 限值带内以及调压裕度。",
+        },
+        {
+            "param_key": "metering_ratio",
+            "label": f"{target_cabinet} 柜计量/CT 比例系数",
+            "unit": "倍",
+            "base_value": 1.0,
+            "low_value": round(obs_ratio, 4),
+            "high_value": 1.0,
+            "perturbation_label": f"观测比例 {obs_ratio:.4f} ～ 标称 1.00",
+            "low_eval": lambda: _eval_metering_scale(obs_ratio),
+            "high_eval": lambda: (b_u_ii, b_n1_i, b_loss, b_n1_ug),
+            "required_field_document": f"{target_cabinet} 柜 CT 变比、计量接线核校报告与试验记录",
+            "rationale": "决定有功驱动潮流与实测电流包络之间的口径偏差，是下井双回 N-1 载流安全裁决的主导变量。",
+        },
+        {
+            "param_key": "cable_length_km",
+            "label": "1009/1010 下井电缆长度",
+            "unit": "km",
+            "base_value": round(base_len, 2),
+            "low_value": round(base_len * 0.70, 2),
+            "high_value": round(base_len * 1.30, 2),
+            "perturbation_label": f"{base_len * 0.70:.2f} ～ {base_len * 1.30:.2f} km（±30%）",
+            "low_eval": lambda: _eval_case(cable_length_km=round(base_len * 0.70, 3)),
+            "high_eval": lambda: _eval_case(cable_length_km=round(base_len * 1.30, 3)),
+            "required_field_document": "下井双回电缆型号、截面（mm²）、敷设长度及井筒降容台账",
+            "rationale": "直接控制井下 1535 中央变电所受端压降与线路铜损测算精度。",
+        },
+        {
+            "param_key": "transformer_vk_percent",
+            "label": "1#/2# 主变短路阻抗 Uk%",
+            "unit": "%",
+            "base_value": round(base_vk, 2),
+            "low_value": round(base_vk * 0.80, 2),
+            "high_value": round(base_vk * 1.20, 2),
+            "perturbation_label": f"{base_vk * 0.80:.1f}% ～ {base_vk * 1.20:.1f}%（±20%）",
+            "low_eval": lambda: _eval_case(transformer_vk_percent=round(base_vk * 0.80, 3)),
+            "high_eval": lambda: _eval_case(transformer_vk_percent=round(base_vk * 1.20, 3)),
+            "required_field_document": "1#/2# 主变出厂试验报告（实测短路阻抗 Uk% 与空载/负载损耗）",
+            "rationale": "影响重载及单进线带双主变工况下的主变内部阻抗压降。",
+        },
+        {
+            "param_key": "transformer_sn_mva",
+            "label": "1#/2# 主变额定容量 Sn",
+            "unit": "MVA",
+            "base_value": round(base_sn, 2),
+            "low_value": round(base_sn * 0.75, 2),
+            "high_value": round(base_sn * 1.25, 2),
+            "perturbation_label": f"{base_sn * 0.75:.1f} ～ {base_sn * 1.25:.1f} MVA（±25%）",
+            "low_eval": lambda: _eval_case(transformer_sn_mva=round(base_sn * 0.75, 3)),
+            "high_eval": lambda: _eval_case(transformer_sn_mva=round(base_sn * 1.25, 3)),
+            "required_field_document": "1#/2# 主变铭牌额定容量与冷却方式核定单",
+            "rationale": "影响主变标幺阻抗及单进线/N-1 负载率热稳定判定基准。",
+        },
+    ]
+
+    items: list[dict[str, Any]] = []
+    for sp in specs:
+        lu, li, ll, lnug = sp["low_eval"]()
+        hu, hi, hl, hnug = sp["high_eval"]()
+        d_u_low = round(lu - b_u_ii, 4)
+        d_u_high = round(hu - b_u_ii, 4)
+        v_span = round(max(abs(lu - hu), abs(lnug - hnug)), 4)
+
+        d_i_low = round(li - b_n1_i, 2)
+        d_i_high = round(hi - b_n1_i, 2)
+        i_span = round(abs(li - hi), 2)
+
+        d_l_low = round(ll - b_loss, 3)
+        d_l_high = round(hl - b_loss, 3)
+        l_span = round(abs(ll - hl), 3)
+
+        v_norm = min(1.0, v_span / 0.50)
+        i_norm = min(1.0, i_span / 45.0)
+        l_norm = min(1.0, l_span / 15.0)
+        voi_score = round((0.45 * v_norm + 0.40 * i_norm + 0.15 * l_norm) * 100.0, 1)
+
+        if i_norm >= v_norm and i_norm >= l_norm and i_span > 1.0:
+            dominant = f"N-1 受电电流跨度 {i_span:.2f} A"
+        elif v_norm >= l_norm:
+            dominant = f"母线/末端电压跨度 {v_span:.4f} kV"
+        else:
+            dominant = f"系统总网损跨度 {l_span:.3f} kW"
+
+        items.append({
+            "param_key": sp["param_key"],
+            "label": sp["label"],
+            "unit": sp["unit"],
+            "base_value": sp["base_value"],
+            "low_value": sp["low_value"],
+            "high_value": sp["high_value"],
+            "perturbation_label": sp["perturbation_label"],
+            "low_delta_u_kv": d_u_low,
+            "high_delta_u_kv": d_u_high,
+            "voltage_span_kv": v_span,
+            "low_delta_n1_i_a": d_i_low,
+            "high_delta_n1_i_a": d_i_high,
+            "n1_current_span_a": i_span,
+            "low_delta_loss_kw": d_l_low,
+            "high_delta_loss_kw": d_l_high,
+            "loss_span_kw": l_span,
+            "voi_score": voi_score,
+            "dominant_impact": dominant,
+            "required_field_document": sp["required_field_document"],
+            "rationale": sp["rationale"],
+        })
+
+    items.sort(key=lambda r: (-r["voi_score"], -r["voltage_span_kv"], -r["n1_current_span_a"]))
+    voi_ranking = []
+    for rank, item in enumerate(items, 1):
+        item["priority_rank"] = rank
+        voi_ranking.append({
+            "rank": rank,
+            "param_key": item["param_key"],
+            "label": item["label"],
+            "voi_score": item["voi_score"],
+            "dominant_impact": item["dominant_impact"],
+            "required_field_document": item["required_field_document"],
+            "rationale": item["rationale"],
+        })
+
+    top1, top2 = voi_ranking[0], voi_ranking[1]
+    summary = (
+        f"参数不确定性与信息价值（VoI）排序（电压断面 {at_time}、N-1 峰值断面 {n1_time}）："
+        f"最优先核查「{top1['label']}」（VoI={top1['voi_score']:.1f}，{top1['dominant_impact']}），"
+        f"其次为「{top2['label']}」（VoI={top2['voi_score']:.1f}，{top2['dominant_impact']}）；"
+        f"建议按上述顺序向现场索要铭牌与核校台账以收窄安全边界。"
+    )
+    out = {
+        "status": "ok",
+        "at_time": at_time,
+        "n1_time": n1_time,
+        "target_cabinet": target_cabinet,
+        "baseline": {
+            "bus_10kv_ii_kv": round(b_u_ii, 4),
+            "n1_min_ug_kv": round(b_n1_ug, 4),
+            "n1_current_a": round(b_n1_i, 2),
+            "total_loss_kw": round(b_loss, 3),
+        },
+        "tornado_items": items,
+        "voi_ranking": voi_ranking,
+        "summary": summary,
+        "model_assumptions": prof.model_assumption_disclaimer,
+    }
+    if len(_SENSITIVITY_VOI_CACHE) < 16:
+        _SENSITIVITY_VOI_CACHE[skey] = deepcopy(out)
+    return out

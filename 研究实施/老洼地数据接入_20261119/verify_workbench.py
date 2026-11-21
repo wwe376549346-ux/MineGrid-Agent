@@ -6,15 +6,21 @@ from contextlib import closing
 import hashlib
 from http.server import ThreadingHTTPServer
 import json
+import math
 from pathlib import Path
 import time
 import re
 from tempfile import TemporaryDirectory
 import threading
+from unittest.mock import patch
 from urllib.parse import quote
 from urllib.request import Request, urlopen
 
+from fastapi.testclient import TestClient
+
+from laowadi.api import create_app
 from laowadi.monitor import EVENT_DB
+from laowadi.security import issue_token
 from laowadi.storage import DB, ROOT, connect
 from laowadi.workbench import BUILD, SOURCE_DIR, Handler, Workbench
 
@@ -32,17 +38,64 @@ def fetch_json(base: str, path: str, payload: dict | None = None):
         return json.loads(resp.read().decode("utf-8"))
 
 
+def verify_sensitivity_voi(workbench: Workbench) -> dict:
+    path = "/api/powerflow/sensitivity-voi"
+    with TestClient(create_app(workbench, require_auth=True)) as client:
+        headers = {"Authorization": f"Bearer {issue_token('workbench-voi', 'viewer')['access_token']}"}
+        assert client.get(path).status_code == 401
+        assert client.get(path, headers=headers, params={"at_time": "2026-11-13 17:15:00"}).status_code == 400
+        assert client.get(path, headers=headers, params={"at_time": "2026-11-31 17:00:00"}).status_code == 400
+        assert client.get(path, headers=headers, params={"target_cabinet": "unknown"}).status_code == 400
+        assert client.get(path, headers=headers, params={"target_cabinet": "303"}).status_code == 400
+        assert client.get(path, headers=headers, params={"target_cabinet": "9999"}).status_code == 404
+        assert client.get(path, headers=headers, params={"at_time": "2026-11-17 17:00:00"}).status_code == 404
+        for cabinet in ("1009", "1020"):
+            unsupported = client.get(path, headers=headers, params={"target_cabinet": cabinet})
+            assert unsupported.status_code == 422 and "1010" in unsupported.json()["error"]
+        with patch("laowadi.powerflow.analyze_parameter_sensitivity_voi", None):
+            assert client.get(path, headers=headers).status_code == 503
+        response = client.get(path, headers=headers)
+        assert response.status_code == 200, response.text
+        result = response.json()
+        explicit = client.get(path, headers=headers, params={"at_time": "2026-11-13T17:00:00", "target_cabinet": "1010"})
+        assert explicit.status_code == 200 and explicit.json() == result
+
+    assert result["status"] == "ok" and result["at_time"] == "2026-11-13 17:00:00"
+    assert result["target_cabinet"] == "1010"
+    for field in ("bus_10kv_ii_kv", "n1_min_ug_kv", "n1_current_a", "total_loss_kw"):
+        assert math.isfinite(result["baseline"][field]) and result["baseline"][field] > 0
+    items, ranking = result["tornado_items"], result["voi_ranking"]
+    assert len(items) >= 2 and len(items) == len(ranking)
+    assert len({item["param_key"] for item in items}) == len(items)
+    scores = [item["voi_score"] for item in items]
+    assert scores == sorted(scores, reverse=True) and 0 <= scores[-1] <= scores[0] <= 100
+    fields = (
+        "base_value", "low_value", "high_value", "low_delta_u_kv", "high_delta_u_kv", "voltage_span_kv",
+        "low_delta_n1_i_a", "high_delta_n1_i_a", "n1_current_span_a",
+        "low_delta_loss_kw", "high_delta_loss_kw", "loss_span_kw",
+    )
+    for rank, (item, row) in enumerate(zip(items, ranking), 1):
+        assert row["rank"] == item["priority_rank"] == rank
+        assert all(item[key] == row[key] for key in ("param_key", "label", "voi_score", "required_field_document", "rationale"))
+        assert item["unit"] and item["perturbation_label"] and row["required_field_document"] and row["dominant_impact"]
+        assert all(math.isfinite(item[k]) for k in fields)
+    assert ranking[0]["label"] in result["summary"]
+    return result
+
+
 def main():
     db_before = sha256(DB)
     ev_before = sha256(EVENT_DB)
     assert (BUILD / "index.html").is_file(), "dist/index.html missing; run npm run build first."
 
     with TemporaryDirectory() as tmp:
-        reviews_db = Path(tmp) / "reviews.sqlite3"
-        sessions_db = Path(tmp) / "sessions.sqlite3"
+        runtime = Path(tmp)
         server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
         server.app = Workbench(
-            DB, EVENT_DB, SOURCE_DIR, model="deepseek-v4-pro", reviews_db=reviews_db, sessions_db=sessions_db
+            DB, EVENT_DB, SOURCE_DIR, model="deepseek-v4-pro",
+            reviews_db=runtime / "reviews.sqlite3", sessions_db=runtime / "sessions.sqlite3",
+            audit_db=runtime / "audit.sqlite3", jobs_db=runtime / "jobs.sqlite3",
+            database_url=f"sqlite+pysqlite:///{runtime / 'enterprise.sqlite3'}",
         )
         port = server.server_port
         base = f"http://127.0.0.1:{port}"
@@ -59,6 +112,13 @@ def main():
             for asset in assets:
                 with urlopen(base + asset, timeout=10) as resp:
                     assert resp.status == 200 and resp.read(), f"Missing or empty asset: {asset}"
+            flow_assets = list((BUILD / "assets").glob("PowerFlowPanel-*.js"))
+            assert len(flow_assets) == 1, f"Expected one compiled PowerFlowPanel chunk, got {flow_assets}"
+            with urlopen(base + "/assets/" + flow_assets[0].name, timeout=10) as resp:
+                flow_bundle = resp.read().decode("utf-8")
+                assert resp.status == 200
+                assert "/api/powerflow/sensitivity-voi" in flow_bundle and "参数灵敏度龙卷风图" in flow_bundle
+            sensitivity = verify_sensitivity_voi(server.app)
 
             # 2. /api/dates
             dates = fetch_json(base, "/api/dates")
@@ -331,6 +391,7 @@ def main():
         finally:
             server.shutdown()
             server.server_close()
+            server.app.db_manager.dispose()
 
     assert sha256(DB) == db_before, "laowadi.sqlite3 was modified!"
     assert sha256(EVENT_DB) == ev_before, "laowadi_events.sqlite3 was modified!"
@@ -339,6 +400,7 @@ def main():
             {
                 "status": "ok",
                 "static_assets_verified": len(assets),
+                "sensitivity_voi_items_verified": len(sensitivity["voi_ranking"]),
                 "cabinets_cards": len(health["cabinets_cards"]),
                 "diagrams_verified": len(diagrams),
                 "review_feedback_loop_verified": True,

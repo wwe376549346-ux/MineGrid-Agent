@@ -30,6 +30,7 @@ from urllib.parse import quote, unquote
 import uuid
 
 from fastapi import FastAPI, Query, Request
+from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, PlainTextResponse, Response, StreamingResponse
 
@@ -61,6 +62,7 @@ from laowadi.schemas import (
     ReviewCreateRequest,
     ReviewDeleteRequest,
     SecurityPromptTestRequest,
+    SensitivityVoiQuery,
     SessionIdRequest,
     StorageMigrateRequest,
     SupplementRequest,
@@ -84,12 +86,14 @@ from laowadi.workbench import BUILD, RequestError, Workbench
 
 
 WEEKLY_SCHEDULE_PATH = "/api/powerflow/weekly-schedule"
+SENSITIVITY_VOI_PATH = "/api/powerflow/sensitivity-voi"
+READ_ONLY_COMPUTE_PATHS = {WEEKLY_SCHEDULE_PATH, SENSITIVITY_VOI_PATH}
 
 COMPUTE_RATE_LIMITED_PATHS = {
     "/api/diagnose",
     "/api/diagnose/stream",
     "/api/powerflow",
-    WEEKLY_SCHEDULE_PATH,
+    *READ_ONLY_COMPUTE_PATHS,
     "/api/multi-agent/consult",
     "/api/jobs",
 }
@@ -358,7 +362,7 @@ def create_app(
 
         # 3. Cross-Process Shared Sliding-Window Rate Limiter (consistent across all Uvicorn worker PIDs!)
         if path in COMPUTE_RATE_LIMITED_PATHS and (
-            method == "POST" or (method == "GET" and path == WEEKLY_SCHEDULE_PATH)
+            method == "POST" or (method == "GET" and path in READ_ONLY_COMPUTE_PATHS)
         ):
             allowed, _remaining, retry_after = workbench.task_broker.check_shared_rate_limit(
                 f"{client_host}:{actor}",
@@ -392,10 +396,11 @@ def create_app(
 
     @app.exception_handler(RequestValidationError)
     async def handle_validation_error(_request: Request, exc: RequestValidationError):
-        first = exc.errors()[0] if exc.errors() else {"msg": "参数校验失败"}
+        errors = jsonable_encoder(exc.errors(), custom_encoder={Exception: str})
+        first = errors[0] if errors else {"msg": "参数校验失败"}
         loc = ".".join(str(x) for x in first.get("loc", []))
         msg = f"请求参数校验失败（{loc}）：{first.get('msg', '')}" if loc else str(first.get("msg", "参数校验失败"))
-        return JSONResponse(status_code=400, content={"error": msg, "detail": exc.errors()}, headers=_security_headers())
+        return JSONResponse(status_code=400, content={"error": msg, "detail": errors}, headers=_security_headers())
 
     @app.exception_handler(ValueError)
     async def handle_value_error(_request: Request, exc: ValueError):
@@ -754,6 +759,34 @@ def create_app(
                 return analyze(archive, target_cabinet=query.target_cabinet, pareto_day=query.pareto_day.isoformat())
         except ValueError as exc:
             raise RequestError(400, str(exc)) from None
+
+    @app.get(SENSITIVITY_VOI_PATH, tags=["AC Power Flow"])
+    def api_sensitivity_voi(query: Annotated[SensitivityVoiQuery, Query()]):
+        try:
+            from laowadi import powerflow
+        except ImportError as exc:
+            raise RequestError(503, "参数灵敏度计算所需的潮流模块暂不可用。") from exc
+
+        analyze = getattr(powerflow, "analyze_parameter_sensitivity_voi", None)
+        if analyze is None:
+            raise RequestError(503, "参数灵敏度与信息价值计算暂未就绪。")
+        profile = load_mine_profile()
+        station = profile.primary_station
+        with workbench.archive() as archive:
+            if (station, query.target_cabinet) not in archive.devices:
+                raise RequestError(404, f"归档中未找到 {query.target_cabinet} 柜。")
+            feeder = profile.feeder_map().get(query.target_cabinet)
+            if not feeder or not feeder.downstream_bus_id:
+                raise RequestError(400, f"{query.target_cabinet} 柜缺少可用于灵敏度分析的下游馈线模型。")
+            if query.target_cabinet != "1010":
+                raise RequestError(422, "当前 N-1 灵敏度以 1009 退运、1010 受电为固定工况，目标柜须为 1010。")
+            reading = archive.db.execute(
+                "SELECT 1 FROM reading WHERE station = ? AND time = ? LIMIT 1",
+                (station, query.at_time),
+            ).fetchone()
+            if reading is None:
+                raise RequestError(404, f"归档中未找到 {query.at_time} 的整点断面。")
+            return analyze(archive, at_time=query.at_time, target_cabinet=query.target_cabinet)
 
     # ── Monitoring, Health, Topology & Cabinet Endpoints ───────────────────────
     @app.get("/api/dates", tags=["Monitoring & Topology"])

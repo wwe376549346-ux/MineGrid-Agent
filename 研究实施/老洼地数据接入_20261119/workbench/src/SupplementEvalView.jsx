@@ -17,6 +17,26 @@ const STATUS_BADGE = {
   conditionally_violated: {label: "条件越限 (v2 复算)", variant: "error"},
 };
 
+function priorityRank(value) {
+  const rank = typeof value === "number" || typeof value === "string" ? Number(value) : NaN;
+  return Number.isInteger(rank) && rank > 0 ? rank : null;
+}
+
+function VoiBadges({rank, hints}) {
+  const entries = Array.isArray(hints) ? hints : [hints];
+  const labels = new Set();
+  const directRank = priorityRank(rank);
+  if (directRank !== null) labels.add(`VoI 优先级 #${directRank}`);
+  for (const hint of entries) {
+    const value = priorityRank(hint?.voi_rank ?? hint?.rank ?? hint?.priority_rank);
+    if (value !== null) {
+      const label = hint.lead_param_label ?? hint.label;
+      labels.add(`VoI 优先级 #${value}${typeof label === "string" && label ? ` · ${label}` : ""}`);
+    }
+  }
+  return [...labels].map(label => <Badge key={label} variant="info" label={label} />);
+}
+
 export function SupplementEvalView({section = "all"}) {
   const [graphSubMode, setGraphSubMode] = useState("stategraph");
   const [suppData, setSuppData] = useState(null);
@@ -95,6 +115,7 @@ export function SupplementEvalView({section = "all"}) {
   const v1 = suppData?.baseline_v1;
   const v2 = suppData?.supplemented_v2;
   const activeRun = showBaselineOnly ? v1 : (v2 || v1);
+  const voiHints = activeRun?.voi_hints ?? suppData?.voi_hints;
   const ev = evalData?.evaluation;
   const corpus = evalData?.corpus;
   const rag = evalData?.rag_ablation;
@@ -171,6 +192,7 @@ export function SupplementEvalView({section = "all"}) {
                 variant={activeRun.version > 1 ? "success" : "warning"}
                 label={activeRun.version > 1 ? "v2 局部复算已生效" : "v1 原始缺证基线"}
               />
+              <VoiBadges rank={activeRun.voi_rank ?? suppData?.voi_rank} hints={voiHints?.top_parameters?.[0] ?? voiHints} />
               <code className="mono">
                 {activeRun.version > 1
                   ? `${activeRun.parent_run_id} ➔ ${activeRun.run_id}`
@@ -255,6 +277,12 @@ export function SupplementEvalView({section = "all"}) {
                 <div className="detail-badges">
                   <code className="mono">{item.id}</code>
                   <Badge variant={stMeta.variant} label={stMeta.label} />
+                  <VoiBadges
+                    rank={item.voi_rank}
+                    hints={item.voi_hints ?? voiHints?.item_priorities?.[item.id] ?? (Array.isArray(voiHints)
+                      ? voiHints.filter(hint => hint?.item_id === item.id)
+                      : voiHints?.[item.id])}
+                  />
                   {item.recalculated && <Badge variant="teal" label="本轮重算" />}
                   {item.reused_from_run && <Badge variant="neutral" label="复用 v1" />}
                 </div>

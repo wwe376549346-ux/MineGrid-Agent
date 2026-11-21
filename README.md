@@ -1,72 +1,112 @@
-# MineGrid-Agent：面向煤矿配电网运行健康监测与反事实诊断的证据约束型多智能体系统
+<div align="center">
 
-**MineGrid-Agent** 是针对煤矿配电网日常运行监测数据量大、跨站档案不完备、通用大语言模型（LLM）易产生数值幻觉与错误因果归因等核心难题构建的垂直领域多智能体系统（Domain-Specific Multi-Agent System）。
+# MineGrid-Agent
 
-本项目以**老洼地煤矿 35/10 kV 地面变电所（25 柜）与井下 1535 中央变电所（15 柜）**真实运行日报（16,800 条小时级遥测 + 2,100 条页尾统计）、监控一次系统图与《煤矿安全规程（2025）》《GB/T 50417-2017》《GB/T 12325》等 68 条规程国标为只读黄金基准，构建了**「四维确定性电气体检 + 句级神经符号证据核验 + 竞争假设多轮取证证伪 + 量测/潮流/安规多智能体协同仲裁 + 状态图人机协同补证（HITL）」**的完整研究与交互闭环。
+**Evidence-Grounded Multi-Agent Platform for Coal-Mine Distribution Network Health Monitoring, AC Power-Flow Optimization & Counterfactual Diagnostics**
+
+[![CI](https://github.com/wwe376549346-ux/MineGrid-Agent/actions/workflows/ci.yml/badge.svg)](https://github.com/wwe376549346-ux/MineGrid-Agent/actions/workflows/ci.yml)
+[![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-OpenAPI%203.1-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![React 19](https://img.shields.io/badge/React-19%20%2B%20Meta%20Astryx-61DAFB?logo=react&logoColor=black)](https://react.dev/)
+[![pandapower](https://img.shields.io/badge/AC%20Power%20Flow-pandapower%203.x-orange)](https://www.pandapower.org/)
+[![MCP](https://img.shields.io/badge/MCP-JSON--RPC%202.0%20Read--Only-6B4FBB)](https://modelcontextprotocol.io/)
+
+</div>
 
 ---
 
-## 一、 核心架构与学术创新点
+**MineGrid-Agent** is a domain-specific neuro-symbolic multi-agent system engineered for continuous health monitoring, evidence-grounded root-cause diagnosis, AC power-flow verification, and operator decision support in coal-mine 35/10 kV distribution networks.
+
+Built on real hourly SCADA operational archives (35 kV surface substation with 25 switch cabinets, 1535 underground central substation with 15 switch cabinets, 16,800 hourly telemetry cells, 2,100 daily summary rows, primary one-line diagrams, and 68 safety regulations & national standards including *Coal Mine Safety Regulations 2025*, *GB/T 50417-2017*, and *GB/T 12325*), MineGrid-Agent eliminates numeric hallucinations and unverified causal leaps by tightly coupling LLM reasoning with deterministic electrical verification, nonlinear Newton-Raphson AC power flow, and human-in-the-loop (HITL) state graphs.
+
+---
+
+## System Architecture
 
 ```mermaid
 flowchart LR
-  subgraph Data["只读黄金数据与知识底座"]
-    A1["7 份运行日报 (.xls)<br/>16,800 整点 + 2,100 页尾"]
-    A2["2 张监控系统图 (.png)<br/>地面 25 柜 + 井下 15 柜"]
-    A3["68 条煤矿安规与国标<br/>+ 8 张本矿动态证据卡"]
+  subgraph Data["Read-Only Operational Archive & Domain Knowledge"]
+    A1["Hourly SCADA Reports (.xls → SQLite)<br/>16,800 hourly cells · 2,100 footer stats"]
+    A2["Primary One-Line Diagrams (.png)<br/>Surface 25 cabinets · Underground 15 cabinets"]
+    A3["68 Safety Regulations & Standards<br/>MineProfile Metadata Schema (Pydantic v2)"]
   end
 
-  subgraph Core["MineGrid-Agent 核心推理与机理层"]
-    B1["GSSC 上下文工程<br/>平稳段折叠 · 关键拐点 100% 保留"]
-    B2["条件化混合 RAG<br/>BM25 + 领域语义 RRF + 跨站门控"]
-    B3["竞争假设多步证伪循环<br/>H1 极性/轮询 vs H2 瓦斯反送 vs H3 环流"]
-    B4["五角色多智能体协同与潮流复算<br/>量测 ⇄ pandapower 交流潮流 ⇄ 安规质疑"]
-    B5["UnifiedDAGRuntime 状态图<br/>跨进程断点挂起与 HITL 零重复查库恢复"]
+  subgraph Core["MineGrid-Agent Reasoning & Physics Engine"]
+    B1["GSSC Context Engineering<br/>Steady-state folding · 100% inflection retention"]
+    B2["Conditional Hybrid RAG<br/>BM25 + Domain Semantic RRF + Cross-Station Gate"]
+    B3["Hypothesis-Driven Falsification Loop<br/>3 Scenarios · Cross-Turn Follow-Ups"]
+    B4["Data-Physics Multi-Agent Arbitration<br/>Telemetry ⇄ pandapower AC Flow ⇄ Safety Audit"]
+    B5["Discrete DP Optimizer & VoI Sensitivity<br/>24h/168h Tap-Cap Scheduling · Tornado VoI"]
+    B6["UnifiedDAGRuntime (HITL)<br/>Cross-Process Suspend & Zero-Requery Resume"]
   end
 
-  subgraph Guard["句级神经-符号双层核验与审计"]
-    C1["证据槽位强绑定 [[1]] / [[delta]]<br/>原表单元格 + 工具计算回执对齐"]
-    C2["独立语义审计 + Reflection 自修正<br/>拦截错柜/错时/假数值/越权控制"]
+  subgraph Guard["Neuro-Symbolic Verification & Interfaces"]
+    C1["Claim-Level Grounding [[1]] / [[delta]]<br/>Cell Coordinates + Tool Receipts"]
+    C2["Patch-Only Reflection<br/>Targeted Claim Repair · Zero Hallucination"]
+    C3["React 19 Workbench · FastAPI · MCP Server<br/>Proactive Incident Tickets · Read-Only Sandbox"]
   end
 
   Data --> Core --> Guard
 ```
 
-1. **句级神经-符号双层证据核验（Neuro-Symbolic Claim Grounding & Reflection）**：
-   - 模型按照 `现象归纳 (observation) → 候选假设 (hypothesis) → 交叉检验 (cross_check) → 规程对标 (standard) → 待补证据 (gap) → 排查建议 (followup)` 撰写工程诊断推演；
-   - 每个数值、柜号、时刻及同柜跨时差值（`[[delta]]`）强制绑定至原表单元格（如 `1112.xls / New Sheet1!H16`）或只读工具计算回执（`T1.1`），经本地确定性校验与独立语义审计双重把关，未通过项按断言索引退回模型触发 Reflection 重写（[laowadi/diagnostic_claims.py](研究实施/老洼地数据接入_20261119/laowadi/diagnostic_claims.py)、[laowadi/verifier.py](研究实施/老洼地数据接入_20261119/laowadi/verifier.py)）。
-2. **竞争假设驱动的多步科学证伪（Hypothesis-Driven Falsification Loop）**：
-   - 面对 `2# 主变（306/312/1006）` 全链负有功等复杂异常，智能体基于上一轮回执动态规划最具区分力的下一轮只读查询，利用同期 `1027 瓦斯发电站 I 回` 实测 `0 kW / 0 A` 原表证据在采样点证伪“下级反送电”假设，并严格区分“表计极性/SCADA 轮询偏移”与“母联环流”所需的现场待补证据（[laowadi/hypothesis.py](研究实施/老洼地数据接入_20261119/laowadi/hypothesis.py)）。
-3. **数据驱动与物理潮流机理协同会诊（Data-Physics Multi-Agent Arbitration）**：
-   - 集成 `pandapower` 牛顿-拉夫逊真实交流潮流求解器（[laowadi/powerflow.py](研究实施/老洼地数据接入_20261119/laowadi/powerflow.py)）；
-   - 当 `1010` 柜低功率因数（`0.62`）末端无功补偿需求与 `10 kV II 段` 母线既有过压（`10.83–11.01 kV`）发生跨专业冲突时，安规专家对单投电容方案发起结构化合规质疑（`reactive-challenge`），驱动物理潮流专家同点复算“先将 2# 主变分接头调至 `+2 档` 降压至 `10.585 kV`、再投末端补偿提升功率因数至 `0.952`”的联合寻优方案（[laowadi/reactive_collaboration.py](研究实施/老洼地数据接入_20261119/laowadi/reactive_collaboration.py)、[laowadi/multi_agent.py](研究实施/老洼地数据接入_20261119/laowadi/multi_agent.py)）。
-4. **GSSC 上下文工程、条件化混合 RAG 与统一动态 DAG 状态图（HITL）**：
-   - **GSSC 上下文压缩**：长周期窗口查询净压缩 **45.2%** 字符，同时 100% 保留目标时刻、极值拐点与负有功单元格（[laowadi/context.py](研究实施/老洼地数据接入_20261119/laowadi/context.py)）；
-   - **条件化混合 RAG**：Okapi BM25 + 煤矿电力概念语义向量 + RRF 融合，自动对无日报的井下 1535 中央变电所（`1101–1207` 柜）触发跨站适用性前置拦截（[laowadi/rag.py](研究实施/老洼地数据接入_20261119/laowadi/rag.py)）；
-   - **统一动态 DAG 与 HITL 补证**：主诊断、多智能体会诊与补证审计图统一运行于 `UnifiedDAGRuntime`，支持缺铭牌/开关参数时原地挂起，跨进程补充参数或反向证词后 **0 重复查库** 增量恢复（[laowadi/dag_engine.py](研究实施/老洼地数据接入_20261119/laowadi/dag_engine.py)、[laowadi/supplement.py](研究实施/老洼地数据接入_20261119/laowadi/supplement.py)）。
+---
+
+## Core Capabilities
+
+### 1. Neuro-Symbolic Claim Grounding & Patch-Only Reflection
+- Structures every diagnostic explanation into six verifiable slots: `observation` → `hypothesis` → `cross_check` → `standard` → `gap` → `followup`.
+- Every numeric value, cabinet ID, timestamp, and intra-cabinet delta (`[[delta]]`) is bound to exact source spreadsheet coordinates (e.g., `1112.xls / New Sheet1!H16`) or read-only tool calculation receipts (`T1.1`).
+- Deterministic local verification and independent semantic auditing intercept fabricated coordinates, swapped cabinets, unit mismatches, and unauthorized control recommendations. Failed claims trigger **Patch-Only Reflection**, repairing only failing claim indices while preserving verified reasoning ([laowadi/diagnostic_claims.py](研究实施/老洼地数据接入_20261119/laowadi/diagnostic_claims.py), [laowadi/verifier.py](研究实施/老洼地数据接入_20261119/laowadi/verifier.py)).
+
+### 2. Multi-Scenario Hypothesis Falsification & Cross-Turn Follow-Ups
+- Dynamically plans high-discriminative read-only tool queries across iterative verification rounds instead of single-shot guessing ([laowadi/hypothesis.py](研究实施/老洼地数据接入_20261119/laowadi/hypothesis.py)).
+- Covers three core coal-mine operational fault classes with structured cross-turn follow-up tracking:
+  - **Reverse Power Chain (`REVERSE_POWER`)**: Cross-checks 2# transformer chain (`306 / 312 / 1006`) negative active power against contemporaneous gas-generation incomer (`1027`, `0 kW / 0 A`) to falsify downstream backfeed at sampled hours.
+  - **Feeder Metering Polarity (`FEEDER_POLARITY`)**: Separates CT/PT secondary polarity reversal from load shedding via multi-metric `P / Q / Ia / cosφ` consistency.
+  - **Single-Incomer Zero-Load Regime (`ZERO_INCOMER`)**: Distinguishes scheduled switch-out maintenance from metering failure via companion incomer load transfer and bus-tie coupling.
+
+### 3. Data-Physics Multi-Agent Arbitration (`pandapower` AC Power Flow)
+- Integrates a calibrated `pandapower` Newton-Raphson AC power-flow solver driven by declarative `MineProfile` metadata (multi-mine ready with zero code changes; [laowadi/powerflow.py](研究实施/老洼地数据接入_20261119/laowadi/powerflow.py), [laowadi/mine_schema.py](研究实施/老洼地数据接入_20261119/laowadi/mine_schema.py)).
+- Five specialized agent roles (`Measurement`, `PowerFlow`, `Safety`, `Topology`, `Arbitrator`) conduct structured evidence exchange and cross-professional challenges ([laowadi/multi_agent.py](研究实施/老洼地数据接入_20261119/laowadi/multi_agent.py), [laowadi/reactive_collaboration.py](研究实施/老洼地数据接入_20261119/laowadi/reactive_collaboration.py)):
+  - **Reactive vs. Overvoltage Arbitration**: When low power factor on feeder `1010` (`cosφ = 0.62`) conflicts with existing overvoltage on `10 kV Bus II` (`10.83–11.01 kV`), the Safety Agent challenges capacitor-only compensation and drives the Physics Agent to jointly optimize **2# transformer tap `+2`** (`10.585 kV`) + **terminal compensation** (`cosφ = 0.952`).
+  - **Counterfactual N-1 Transfer Re-Arbitration**: Evaluates `1009 → 1010` dual-basis N-1 load transfer across both measured and CT-ratio-corrected envelopes, automatically re-arbitrating under tighter thermal limits (e.g., `160 A` safe-limit counterfactual).
+
+### 4. Multi-Horizon Optimal Switching, Pareto Frontier & Parameter VoI Sensitivity
+- **24-Hour & 168-Hour Discrete Dynamic Programming**: Optimizes discrete OLTC tap positions and capacitor banks under strict daily switching budgets and GB/T 12325 voltage bounds. On the full 7-day (168 h) archive, voltage violations drop from **35 h → 0 h** while cutting active losses by **109.02 kWh (+1.85%)**.
+- **6-Budget Switching-Cost vs. Loss-Saving Pareto Frontier**: Quantifies exact engineering trade-offs between switching wear and energy savings (`0/0` through `2/6` tap/cap operations per day).
+- **Parameter Uncertainty Sensitivity & Value-of-Information (VoI)**: Perturbs unverified equivalent parameters (transformer tap position, CT metering ratio, transformer rated capacity, short-circuit impedance `uk%`, underground cable length) via AC power flow to rank which missing field nameplate/log document yields the highest diagnostic information gain.
+
+### 5. Unified Dynamic DAG Runtime (HITL) & Proactive Monitoring
+- **UnifiedDAGRuntime** ([laowadi/dag_engine.py](研究实施/老洼地数据接入_20261119/laowadi/dag_engine.py), [laowadi/supplement.py](研究实施/老洼地数据接入_20261119/laowadi/supplement.py)): Suspends execution deterministically when nameplate ratings or switch logs are missing, persists checkpoints across processes, and resumes with **0 redundant archive queries** once field evidence is supplied—preserving conflict states whenever field testimony contradicts archived telemetry.
+- **Proactive Incident Watcher & Pre-Diagnosis** ([laowadi/proactive.py](研究实施/老洼地数据接入_20261119/laowadi/proactive.py)): Continuously scans operational windows, generates structured incident tickets with automatic root-cause pre-diagnosis, and supports one-click escalation into interactive chat sessions.
+- **Standard Read-Only MCP Server** ([laowadi/mcp_server.py](研究实施/老洼地数据接入_20261119/laowadi/mcp_server.py)): Exposes 15 strictly read-only JSON-RPC 2.0 tools (`readOnlyHint: true`) for seamless integration with external AI clients and industrial copilots.
 
 ---
 
-## 二、 仓库目录结构
+## Engineering Evaluation & Ablation Metrics
 
-| 目录 / 文件 | 说明 |
-| :--- | :--- |
-| [AGENTS.md](AGENTS.md) | 项目研发铁律、数据边界与**课题组双人协同开发分工契约** |
-| [项目知识库/老洼地智能体知识库.html](项目知识库/老洼地智能体知识库.html) | 交互式项目知识库（含 15 个构建阶段、现场资料原件预览、复验台与全部更新记录） |
-| [项目知识库/资料/老洼地/](项目知识库/资料/老洼地/) | 老洼地 7 份原始运行日报（`1110.xls`–`1116.xls`）与 2 张一次系统图（100% 只读基准） |
-| [研究实施/老洼地数据接入_20261119/laowadi/](研究实施/老洼地数据接入_20261119/laowadi/) | **MineGrid-Agent 核心 Python 包**（含 `diagnose.py`、`diagnostic_claims.py`、`hypothesis.py`、`verifier.py`、`multi_agent.py`、`reactive_collaboration.py`、`powerflow.py`、`dag_engine.py`、`rag.py`、`context.py`、`supplement.py`、`api.py` 等） |
-| [研究实施/老洼地数据接入_20261119/workbench/](研究实施/老洼地数据接入_20261119/workbench/) | **React 19 + Meta Astryx 智能体交互工作台前端**（透明思考流、假设证伪卡、主接线动态潮流图、调压与无功协同复算台、对话内嵌 HITL 补证） |
-| [研究实施/老洼地数据接入_20261119/thesis_eval/](研究实施/老洼地数据接入_20261119/thesis_eval/) | **48 题六维硕士论文评测基准与四项消融实验套件**（含 `cases.json`、`gold.json`、`probe.py`、`run.py`、`score.py` 及自动生成的 LaTeX 三线表报告 [本地实验结果.md](研究实施/老洼地数据接入_20261119/thesis_eval/results/本地实验结果.md)） |
-| [研究实施/老洼地数据接入_20261119/scripts/setup_collab.sh](研究实施/老洼地数据接入_20261119/scripts/setup_collab.sh) | 课题组协同开发一键环境初始化、SHA-256 校验与合并前门禁自检脚本 |
-| [公开数据与标准_20261113/](公开数据与标准_20261113/) / [文献精读/](文献精读/) | 《煤矿安全规程（2025）》《GB/T 50417-2017》原文核验记录与领域文献调研精读笔记 |
+All metrics below are deterministically reproduced against the read-only operational archive via the automated verification suite:
+
+| Evaluation Dimension | Sample Size | Full System (`MineGrid-Agent`) | Baseline / Ablation (`w/o Module`) | Measured Engineering Gain |
+| :--- | :---: | :---: | :---: | :--- |
+| **Point & Multi-Cabinet Telemetry Receipts (`S01–S08`, `M01–M08`)** | 16 cases | **100.0%** (16/16 value & cell match) | Manual stitching / context overflow | Median latency `0.111 ms`, 100% source cell binding |
+| **Conditional Hybrid RAG Cross-Station Gate (`C1535`)** | 4 cases | **100.0%** (2/2 missing-archive gate) | **0.0%** (pure BM25) | Prevents fabricating readings for unarchived underground cabinets |
+| **GSSC Context Engineering (`w/o GSSC`)** | 16 cases | **45.2%** net compression (`179.7k → 98.4k` chars) | 0.0% compression | **100.0% (28/28)** retention of extrema & reverse-power anomalies |
+| **`pandapower` AC Power Flow, Tap & N-1 (`P01–P06`)** | 6 cases | **100.0%** (6/6 NR convergence & gold match) | **0.0%** (no nonlinear solver) | Calibrated residual `≤ 0.05 kV`; exact tap `+2` voltage & loss quantification |
+| **Neuro-Symbolic Verification & Hallucination Blocking** | 32 adversarial | **100.0% (32/32)** blocked + Reflection repair | **0.0%** (unverified generation) | Blocks fake values on real cells, swapped cabinets, unit & coordinate errors |
+| **HITL State-Graph Dynamic Supplement (`H01–H08`)** | 8 cases | **100.0% (8/8)** state transitions & recalculation | No checkpoint / conflict tracking | Reuses 50%–75% unaffected nodes; preserves field-vs-archive conflicts |
+| **168-Hour Discrete Tap-Cap DP Optimization** | 7 days (168 h) | **0 / 168 h** violations (`-109.02 kWh` loss) | **35 / 168 h** violations (baseline) | Eliminates 100% overvoltage hours while saving `1.85%` network loss |
 
 ---
 
-## 三、 快速开始与课题组协同开发指南
+## Quick Start
 
-### 1. 克隆仓库并一键初始化环境（推荐）
+### Prerequisites
+- **Python 3.11+** (3.12 recommended)
+- **Node.js 20+** (only required when rebuilding the React 19 frontend)
+- **PostgreSQL 16 + pgvector** *(optional; automatically falls back to local SQLite for runtime state)*
 
-新成员克隆仓库后，在项目根目录直接运行一键初始化脚本（自动配置 Python 3.12 虚拟环境 `.venv-power`、生成本地密钥配置模板、核验只读源库 SHA-256 并运行 5 套核心门禁测试）：
+### 1. Clone & Bootstrap Environment
 
 ```bash
 git clone git@github.com:wwe376549346-ux/MineGrid-Agent.git
@@ -74,38 +114,122 @@ cd MineGrid-Agent
 bash 研究实施/老洼地数据接入_20261119/scripts/setup_collab.sh
 ```
 
-> **配置真实 DeepSeek 密钥（仅保存在个人本机，已被 `.gitignore` 隔离）**：
-> 编辑 `研究实施/大模型接入_20261115/.env.local`，填入 `COAL_API_BASE_URL`、`COAL_API_MODEL=deepseek-v4-pro` 与 `COAL_API_KEY`。
+The bootstrap script creates the virtual environment (`.venv-power`), installs `laowadi-power-agent` in editable mode, verifies the SHA-256 checksums of the read-only archives, and runs the core pre-merge test gates.
 
-### 2. 启动 8765 智能体交互工作台
+### 2. Configure LLM Provider *(Optional — Local Deterministic Mode Works Offline)*
+
+MineGrid-Agent works completely offline in deterministic local mode. To enable LLM-assisted tool planning and synthesis, configure your OpenAI-compatible endpoint in `研究实施/大模型接入_20261115/.env.local` (ignored by Git):
+
+```dotenv
+COAL_API_BASE_URL=https://api.deepseek.com/v1
+COAL_API_MODEL=deepseek-v4-pro
+COAL_API_KEY=your-api-key-here
+```
+
+### 3. Launch the Interactive Operator Workbench
 
 ```bash
 cd 研究实施/老洼地数据接入_20261119
-../.venv-power/bin/python -B -m laowadi workbench --port 8765
+../.venv-power/bin/python -B -m laowadi workbench --port 8765 --workers 1 --external-workers 1
 ```
-启动后在浏览器访问 `http://127.0.0.1:8765/` 即可体验：
-- **值班问答与透明推理流**：实时查看工具并发取证、GSSC 压缩率、逐轮竞争假设证伪（`HypothesisTrace`）、六段式断言与原表单元格点击下载；
-- **主接线巡检（40 柜图模自动排版）**：168 小时动态潮流断面回放与 4 条 KCL 功率守恒方程实时校核；
-- **交流潮流与多智体会诊**：`pandapower` 分接头灵敏度扫描、N-1 转供潮流、以及 `1010` 无功补偿 vs `10 kV II 段` 过压四工况协同复算对比表；
-- **状态图补证与离线评测**：对话内或画布内在线提交设备铭牌参数触发 `v1 → v2` 局部复算（0 重复查库）。
 
-### 3. 运行 48 题硕士论文评测基准与消融探针
+Open **`http://127.0.0.1:8765/`** in your browser:
+- **Operator Q&A & Live Reasoning Stream (SSE)**: Watch parallel tool calls, GSSC compression metrics, multi-round hypothesis falsification cards, claim verification badges, and clickable source Excel cell previews.
+- **Primary One-Line Topology Inspector (40 Cabinets)**: Replay 168-hour telemetry snapshots and live KCL power-balance equations across surface & underground buses.
+- **AC Power-Flow, Optimal Scheduling & VoI Lab**: Inspect Newton-Raphson calibration, tap sweeps, N-1 counterfactual transfers, 24h/168h DP schedules, Pareto curves, and parameter sensitivity tornado charts.
+- **HITL Supplement & Proactive Incident Center**: Submit field nameplate/switch-log packets to trigger `v1 → v2` selective recalculation, or triage auto-diagnosed incident tickets.
 
+### 4. CLI, REST API & Read-Only MCP Server
+
+**CLI Quick Commands**:
 ```bash
 cd 研究实施/老洼地数据接入_20261119
-../.venv-power/bin/python -B -m thesis_eval.probe --output thesis_eval/results
+
+# Inspect read-only archive summary
+../.venv-power/bin/python -m laowadi status
+
+# Run grounded root-cause diagnosis
+../.venv-power/bin/python -m laowadi diagnose "请排查 2026年11月12日 1006 柜负有功原因并核验 1027 瓦斯发电站状态"
+
+# Run pandapower AC power-flow tap sensitivity
+../.venv-power/bin/python -m laowadi powerflow --scenario tap_sensitivity --at "2026-11-13 17:00:00"
+
+# Start stdio JSON-RPC 2.0 Read-Only MCP Server
+../.venv-power/bin/python -m laowadi mcp
 ```
-运行后自动在 [`thesis_eval/results/本地实验结果.md`](研究实施/老洼地数据接入_20261119/thesis_eval/results/本地实验结果.md) 生成完整的六维组件评测表与可直接粘贴进硕士论文的 **LaTeX `booktabs` 三线表**。
+
+**FastAPI OpenAPI Documentation**:
+- Interactive Swagger UI: `http://127.0.0.1:8765/docs`
+- OpenAPI 3.1 Schema (60+ typed endpoints): `http://127.0.0.1:8765/openapi.json`
+- Liveness & Readiness Probes: `GET /healthz`, `GET /readyz`
+
+**MCP Client Configuration Example**:
+```json
+{
+  "mcpServers": {
+    "minegrid-agent": {
+      "command": "/path/to/.venv-power/bin/python",
+      "args": ["-m", "laowadi", "mcp"],
+      "cwd": "/path/to/MineGrid-Agent/研究实施/老洼地数据接入_20261119"
+    }
+  }
+}
+```
 
 ---
 
-## 四、 核心组件离线探针与消融实验结果摘要
+## Repository Structure
 
-| 测试维度 / 评测模块 | 样本量 | 完整方法 (`MineGrid-Agent`) | 消融对照 (`w/o Module`) | 核心机理增益 |
-| :--- | :---: | :---: | :---: | :--- |
-| **单点与多柜时空统计回执 (`S01–S08`, `M01–M08`)** | 16 题 | **100.0%** (16/16 数值与单元格对齐) | 需逐点拼接（易超上下文） | 中位耗时 `0.111 ms`，100% 附原表坐标 |
-| **条件化混合检索跨站门控 (`C1535` 适用性拦截)** | 4 题 | **100.0%** (2/2 跨站缺日报前置拦截) | **0.0%** (0/2 拦截，纯 BM25) | 阻断对井下无日报分柜编造读数 |
-| **GSSC 上下文工程 (`w/o GSSC`)** | 16 题 | 净压缩 **45.2%** (`179,672 → 98,424` 字符) | 0.0% 压缩 | 关键拐点与负有功证据保留率 **100.0% (28/28)** |
-| **`pandapower` 交流潮流与调压/N-1 (`P01–P06`)** | 6 题 | **100.0%** (6/6 收敛且匹配金标准) | **0.0%** (0/6，缺非线性潮流) | 量化 2# 主变 `+2 档` 降压至 `10.662 kV` 及补偿降损 |
-| **双层数值核验与幻觉阻断 (`S01–S08 × 4` 类反例)** | 32 组 | 幻觉拦截率 **100.0% (32/32)** + Reflection 修复 | 拦截率 **0.0% (0/32)** | 彻底阻断真坐标配假值、错单位、张冠李戴与假坐标 |
-| **HITL 状态图两轮动态补证 (`H01–H08`)** | 8 题 | 状态迁移与负载率复算 **100.0% (8/8)** | 无状态图与反向证词否决 | 覆盖满足、越限、缺项与联络闭锁否决，复用 50%–75% 节点 |
+| Path | Description |
+| :--- | :--- |
+| [研究实施/老洼地数据接入_20261119/laowadi/](研究实施/老洼地数据接入_20261119/laowadi/) | Core Python package (`diagnose.py`, `diagnostic_claims.py`, `hypothesis.py`, `verifier.py`, `powerflow.py`, `multi_agent.py`, `reactive_collaboration.py`, `dag_engine.py`, `supplement.py`, `proactive.py`, `rag.py`, `context.py`, `mcp_server.py`, `api.py`) |
+| [研究实施/老洼地数据接入_20261119/workbench/](研究实施/老洼地数据接入_20261119/workbench/) | React 19 + Meta Astryx + Vite frontend workbench (topology canvas, SSE chat stream, AC power-flow charts, sensitivity tornado chart, incident ticket panel, HITL supplement UI) |
+| [研究实施/老洼地数据接入_20261119/profiles/](研究实施/老洼地数据接入_20261119/profiles/) | Declarative YAML/JSON `MineProfile` topology & electrical parameter schemas |
+| [研究实施/老洼地数据接入_20261119/local/](研究实施/老洼地数据接入_20261119/local/) | Read-only SQLite telemetry & event golden archives (`laowadi.sqlite3`, `laowadi_events.sqlite3`) |
+| [研究实施/老洼地数据接入_20261119/scripts/setup_collab.sh](研究实施/老洼地数据接入_20261119/scripts/setup_collab.sh) | One-command environment setup, SHA-256 verification & pre-merge test gate script |
+| [研究实施/老洼地数据接入_20261119/thesis_eval/](研究实施/老洼地数据接入_20261119/thesis_eval/) | 48-case six-dimensional offline benchmark & 4-way ablation suite (`cases.json`, `gold.json`, `probe.py`, `run.py`, `score.py`) |
+| [项目知识库/资料/老洼地/](项目知识库/资料/老洼地/) | Original 7 operational `.xls` reports and 2 primary one-line `.png` diagrams (strictly read-only) |
+| [.github/workflows/ci.yml](.github/workflows/ci.yml) | Automated GitHub Actions CI pipeline (archive integrity, Python test matrix, React build) |
+
+---
+
+## Security & Read-Only Integrity Boundaries
+
+- **Immutable Source Archives**: Both `laowadi.sqlite3` and `laowadi_events.sqlite3` are opened in read-only mode (`mode=ro`) and checksum-verified (`SHA-256`) in every test gate and CI run.
+- **No Unattended Control Execution**: All 15 diagnostic & MCP tools carry `readOnlyHint: true`. Recommended switching actions (tap changes, capacitor switching, load transfer) are strictly advisory and require operator review and sign-off.
+- **Origin & Input Hardening**: FastAPI endpoints enforce strict Pydantic v2 schema validation, CSRF Origin allowlisting, and isolated local credential storage (`.env.local` excluded via `.gitignore`).
+
+---
+
+## Testing & Verification
+
+Run the automated verification suite from `研究实施/老洼地数据接入_20261119/`:
+
+```bash
+# Core correctness, claim grounding & reflection
+../.venv-power/bin/python -B verify_p0_correctness.py
+../.venv-power/bin/python -B verify_diagnostic_claims.py
+../.venv-power/bin/python -B verify_diagnose.py
+
+# Multi-agent arbitration, AC power flow, 24h/168h DP & VoI sensitivity
+../.venv-power/bin/python -B verify_multi_agent_and_governance.py
+../.venv-power/bin/python -B verify_enterprise_and_powerflow.py
+
+# Unified DAG HITL supplement, MCP parity & multi-mine generalization
+../.venv-power/bin/python -B verify_unified_dag.py
+../.venv-power/bin/python -B verify_supplement_and_mcp.py
+../.venv-power/bin/python -B verify_multimine_generalization.py
+
+# Proactive incident delivery, workbench API & 48-case offline benchmark
+../.venv-power/bin/python -B verify_proactive_delivery.py
+../.venv-power/bin/python -B verify_workbench.py
+../.venv-power/bin/python -B -m thesis_eval.probe --output thesis_eval/results
+```
+
+To rebuild the React 19 workbench bundle:
+
+```bash
+cd 研究实施/老洼地数据接入_20261119/workbench
+npm ci
+npm run build
+```

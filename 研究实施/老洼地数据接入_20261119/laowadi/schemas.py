@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class HealthzResponse(BaseModel):
@@ -118,6 +118,16 @@ class PowerFlowRequest(BaseModel):
 class WeeklyScheduleQuery(BaseModel):
     target_cabinet: str = Field(default="1010", min_length=1, max_length=16)
     pareto_day: date = date(2026, 11, 13)
+
+
+class SensitivityVoiQuery(BaseModel):
+    at_time: str = Field(default="2026-11-13 17:00:00", pattern=r"^\d{4}-\d{2}-\d{2}[ T]\d{2}:00:00$")
+    target_cabinet: str = Field(default="1010", pattern=r"^[0-9]{1,16}$")
+
+    @field_validator("at_time")
+    @classmethod
+    def validate_archived_hour(cls, value: str) -> str:
+        return datetime.fromisoformat(value).isoformat(sep=" ")
 
 
 class DiagnosticFact(BaseModel):
