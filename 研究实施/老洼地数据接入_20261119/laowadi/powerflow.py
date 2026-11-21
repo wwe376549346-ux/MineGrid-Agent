@@ -955,6 +955,60 @@ def _solve_hour_grid_inplace(
 
 
 _DAILY_SCHEDULE_CACHE: dict[tuple, dict[str, Any]] = {}
+_DAY_GRID_CACHE: dict[tuple, tuple] = {}
+_WEEKLY_PARETO_CACHE: dict[tuple, dict[str, Any]] = {}
+
+
+def _get_day_hourly_grids(
+    archive,
+    prof: MineProfile,
+    day: str,
+    day_sha: str,
+    target_cabinet: str,
+    transformer_id: str,
+    tap_grid: list[int],
+    cap_grid: list[float],
+    supply_bus: str,
+    receiving_bus: str,
+    voltage_cabinet: str,
+    v_lo: float,
+    v_hi: float,
+    base_tap: int,
+):
+    grid_key = (prof.mine_id, day, day_sha, target_cabinet, tuple(tap_grid), tuple(cap_grid))
+    if day_sha and grid_key in _DAY_GRID_CACHE:
+        return _DAY_GRID_CACHE[grid_key]
+
+    hour_rows = archive.db.execute(
+        """
+        SELECT DISTINCT time FROM reading
+        WHERE station = ? AND day = ?
+        ORDER BY time ASC
+        """,
+        (prof.primary_station, day),
+    ).fetchall()
+    hours = [row["time"] for row in hour_rows]
+    if not hours:
+        return [], [], [], []
+
+    hourly_baselines: list[dict[str, Any]] = []
+    hourly_grids: list[dict[tuple[int, float], dict[str, Any]]] = []
+    hourly_snaps: list[dict[str, dict[str, dict[str, Any]]]] = []
+    for at_time in hours:
+        snap = _load_hour_snapshot(archive, at_time, prof.primary_station)
+        base_st, grid = _solve_hour_grid_inplace(
+            prof, snap, target_cabinet, transformer_id,
+            tap_grid, cap_grid, supply_bus, receiving_bus,
+            voltage_cabinet, v_lo, v_hi, base_tap,
+        )
+        hourly_baselines.append(base_st)
+        hourly_grids.append(grid)
+        hourly_snaps.append(snap)
+
+    bundle = (hours, hourly_baselines, hourly_grids, hourly_snaps)
+    if day_sha and len(_DAY_GRID_CACHE) < 16:
+        _DAY_GRID_CACHE[grid_key] = bundle
+    return bundle
 
 
 def optimize_daily_tap_cap_schedule(
@@ -1002,32 +1056,13 @@ def optimize_daily_tap_cap_schedule(
     steps_n = max(1, int(round(max_cap_kvar / max(cap_step_kvar, 10.0))))
     cap_grid = [round(i * cap_step_kvar, 1) for i in range(steps_n + 1)]
 
-    # Load all available archived hours for `day`
-    hour_rows = archive.db.execute(
-        """
-        SELECT DISTINCT time FROM reading
-        WHERE station = ? AND day = ?
-        ORDER BY time ASC
-        """,
-        (prof.primary_station, day),
-    ).fetchall()
-    hours = [row["time"] for row in hour_rows]
+    hours, hourly_baselines, hourly_grids, hourly_snaps = _get_day_hourly_grids(
+        archive, prof, day, day_sha, target_cabinet, transformer.id,
+        tap_grid, cap_grid, supply_bus, receiving_bus, voltage_cabinet,
+        v_lo, v_hi, base_tap,
+    )
     if not hours:
         return {"status": "missing_day", "day": day, "summary": f"归档库中缺少 {day} 的小时级数据。"}
-
-    hourly_baselines: list[dict[str, Any]] = []
-    hourly_grids: list[dict[tuple[int, float], dict[str, Any]]] = []
-    hourly_snaps: list[dict[str, dict[str, dict[str, Any]]]] = []
-    for at_time in hours:
-        snap = _load_hour_snapshot(archive, at_time, prof.primary_station)
-        base_st, grid = _solve_hour_grid_inplace(
-            prof, snap, target_cabinet, transformer.id,
-            tap_grid, cap_grid, supply_bus, receiving_bus,
-            voltage_cabinet, v_lo, v_hi, base_tap,
-        )
-        hourly_baselines.append(base_st)
-        hourly_grids.append(grid)
-        hourly_snaps.append(snap)
 
     # Exact DP over (tap, qc, tap_changes_used, cap_changes_used)
     INF = 1e18
@@ -1202,6 +1237,135 @@ def optimize_daily_tap_cap_schedule(
         "summary": summary,
         "model_assumptions": prof.model_assumption_disclaimer,
     }
-    if day_sha and len(_DAILY_SCHEDULE_CACHE) < 32:
+    if day_sha and len(_DAILY_SCHEDULE_CACHE) < 64:
         _DAILY_SCHEDULE_CACHE[cache_key] = deepcopy(out)
+    return out
+
+
+def analyze_weekly_schedule_pareto(
+    archive,
+    *,
+    target_cabinet: str = "1010",
+    pareto_day: str = "2026-11-13",
+    cap_step_kvar: float = 50.0,
+    max_cap_kvar: float = 400.0,
+    profile: MineProfile | None = None,
+) -> dict[str, Any]:
+    """Run 7-day (168h) discrete tap/cap optimization and switching-budget Pareto frontier on `pareto_day`."""
+    from copy import deepcopy
+
+    prof = profile or load_mine_profile()
+    rep_rows = archive.db.execute("SELECT day, sha256 FROM report ORDER BY day ASC").fetchall()
+    days = [row["day"] for row in rep_rows]
+    archive_sig = tuple((row["day"], row["sha256"]) for row in rep_rows)
+    if pareto_day not in days and days:
+        pareto_day = days[0]
+
+    wkey = (prof.mine_id, archive_sig, target_cabinet, pareto_day, round(float(cap_step_kvar), 3), round(float(max_cap_kvar), 3))
+    if wkey in _WEEKLY_PARETO_CACHE:
+        return deepcopy(_WEEKLY_PARETO_CACHE[wkey])
+
+    weekly_days: list[dict[str, Any]] = []
+    featured_schedule: dict[str, Any] | None = None
+    total_hours = 0
+    base_viols_tot = 0
+    opt_viols_tot = 0
+    base_loss_tot = 0.0
+    opt_loss_tot = 0.0
+
+    for d in days:
+        sched = optimize_daily_tap_cap_schedule(
+            archive,
+            d,
+            target_cabinet=target_cabinet,
+            cap_step_kvar=cap_step_kvar,
+            max_cap_kvar=max_cap_kvar,
+            max_tap_changes=2,
+            max_cap_changes=4,
+            profile=prof,
+        )
+        if sched.get("status") != "ok":
+            continue
+        if d == pareto_day:
+            featured_schedule = sched
+        total_hours += len(sched["hours"])
+        base_viols_tot += sched["baseline_violations_count"]
+        opt_viols_tot += sched["optimized_violations_count"]
+        base_loss_tot += sched["baseline_loss_kwh"]
+        opt_loss_tot += sched["optimized_loss_kwh"]
+        weekly_days.append({
+            "day": d,
+            "all_hours_safe": sched["all_hours_safe"],
+            "baseline_violations_count": sched["baseline_violations_count"],
+            "optimized_violations_count": sched["optimized_violations_count"],
+            "tap_changes": sched["tap_changes"],
+            "cap_changes": sched["cap_changes"],
+            "baseline_loss_kwh": sched["baseline_loss_kwh"],
+            "optimized_loss_kwh": sched["optimized_loss_kwh"],
+            "loss_saving_kwh": sched["loss_saving_kwh"],
+            "loss_saving_pct": sched["loss_saving_pct"],
+            "actions_count": len(sched["actions"]),
+        })
+
+    base_loss_tot = round(base_loss_tot, 3)
+    opt_loss_tot = round(opt_loss_tot, 3)
+    saving_tot = round(base_loss_tot - opt_loss_tot, 3)
+    saving_pct = round(saving_tot / max(base_loss_tot, 1e-6) * 100.0, 2)
+
+    pareto_budgets = [
+        ("固定运行 (0/0)", 0, 0),
+        ("仅调档 1 次 (1/0)", 1, 0),
+        ("低频分时 (1/2)", 1, 2),
+        ("标准分时 (1/4)", 1, 4),
+        ("均衡分时 (2/4)", 2, 4),
+        ("高频分时 (2/6)", 2, 6),
+    ]
+    pareto_frontier: list[dict[str, Any]] = []
+    if pareto_day in days:
+        for label, mt, mc in pareto_budgets:
+            p_sched = optimize_daily_tap_cap_schedule(
+                archive,
+                pareto_day,
+                target_cabinet=target_cabinet,
+                cap_step_kvar=cap_step_kvar,
+                max_cap_kvar=max_cap_kvar,
+                max_tap_changes=mt,
+                max_cap_changes=mc,
+                profile=prof,
+            )
+            pareto_frontier.append({
+                "label": label,
+                "max_tap_changes": mt,
+                "max_cap_changes": mc,
+                "tap_changes": p_sched["tap_changes"],
+                "cap_changes": p_sched["cap_changes"],
+                "violations": p_sched["optimized_violations_count"],
+                "all_hours_safe": p_sched["all_hours_safe"],
+                "loss_kwh": p_sched["optimized_loss_kwh"],
+                "loss_saving_kwh": p_sched["loss_saving_kwh"],
+                "loss_saving_pct": p_sched["loss_saving_pct"],
+            })
+
+    out = {
+        "status": "ok",
+        "target_cabinet": target_cabinet,
+        "pareto_day": pareto_day,
+        "weekly_days": weekly_days,
+        "weekly_summary": {
+            "total_days": len(weekly_days),
+            "total_hours": total_hours,
+            "baseline_violations_total": base_viols_tot,
+            "optimized_violations_total": opt_viols_tot,
+            "total_baseline_loss_kwh": base_loss_tot,
+            "total_optimized_loss_kwh": opt_loss_tot,
+            "total_loss_saving_kwh": saving_tot,
+            "total_loss_saving_pct": saving_pct,
+            "all_week_safe": opt_viols_tot == 0,
+        },
+        "pareto_frontier": pareto_frontier,
+        "featured_day_schedule": featured_schedule,
+        "model_assumptions": prof.model_assumption_disclaimer,
+    }
+    if len(_WEEKLY_PARETO_CACHE) < 16:
+        _WEEKLY_PARETO_CACHE[wkey] = deepcopy(out)
     return out

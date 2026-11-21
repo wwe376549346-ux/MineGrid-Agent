@@ -190,7 +190,27 @@ def main():
         assert {"reflection", "claim_audit", "verify"} <= {event["type"] for event in events}
         assert "UNVERIFIED_MODEL_TEXT_SENTINEL" not in json.dumps(events, ensure_ascii=False)
         markdown = render_diagnosis_markdown(result)
-        assert "## 交叉检验" in markdown and START in markdown and "已经证实目标柜" not in markdown
+        assert markdown and "## 交叉检验" in markdown and START in markdown and "已经证实目标柜" not in markdown
+
+        # Patch-Only incremental reflection: lock unaffected claims and patch only index 4
+        from laowadi.diagnostic_claims import apply_claim_patches
+
+        patch_only = {"patches": [{"index": 4, **valid["claims"][3]}]}
+        bad_patch = {"patches": [{"index": 99, **valid["claims"][3]}]}
+        _, _, perrs = apply_claim_patches(bad_number, bad_patch)
+        assert perrs and perrs[0]["reason"] == "patch_schema"
+
+        patch_session = DiagnosisSession(archive)
+        patch_client = ScriptClient(trace, [bad_number, patch_only], ["pass"])
+        patch_result = diagnose_question(archive, QUESTION, client=patch_client, session=patch_session)
+        assert patch_result["status"] == "ok" and patch_result["business_trusted"]
+        assert patch_result["reflections_triggered"] == 1
+        assert patch_result["patch_reflections_used"] == 1
+        assert patch_client.reflections[0]["mode"] == "patch_only_preferred"
+        assert 4 not in patch_client.reflections[0]["locked_indices"]
+        assert len(patch_client.reflections[0]["failed_claims"]) == 1
+        assert patch_result["verification"]["verified_claims_count"] == len(valid["claims"])
+        assert patch_result["claim_audit_runs"][-1]["patched_indices"] == [4]
 
         for action, reason in (("incomplete", "audit_protocol"), ("unavailable", "audit_unavailable"),
                                ("wrong_attribution", "wrong_attribution")):

@@ -39,12 +39,14 @@ def correction(store):
 
 def verify_backlog(store):
     watcher = ProactiveWatcherDaemon(archive, store)
-    scans = [watcher.scan_once(max_new_tickets=4) for _ in range(3)]
-    assert [scan["created_count"] for scan in scans] == [4, 3, 0], scans
-    assert scans[-1]["skipped_existing"] == 7
+    scans = [watcher.scan_once(max_new_tickets=4) for _ in range(5)]
+    assert [scan["created_count"] for scan in scans] == [4, 4, 4, 2, 0], scans
+    assert scans[-1]["skipped_existing"] == 14
+    created = [ticket for scan in scans for ticket in scan["created_tickets"]]
+    assert [ticket["severity"] for ticket in created] == ["high"] * 7 + ["medium"] * 7
     tickets = store.list_tickets()
-    assert len({ticket["dedup_key"] for ticket in tickets}) == 7
-    assert store.sla_metrics()["outbox_delivered"] == 7
+    assert len(tickets) == len({ticket["dedup_key"] for ticket in tickets}) == 14
+    assert store.sla_metrics()["outbox_delivered"] == 14
 
 
 def verify_claim_and_retry(store):

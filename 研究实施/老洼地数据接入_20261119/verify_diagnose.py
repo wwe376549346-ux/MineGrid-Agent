@@ -297,6 +297,35 @@ def _verify_multiscenario_hypotheses(archive):
     result = diagnose_question(archive, "2026-11-13 306柜为什么连续13小时零有功和零电流？")
     assert result["report"]["hypothesis_trace"]["time"] == "2026-11-13 15:00:00"
 
+    # Model-mode claim synthesis enabled for FEEDER_POLARITY and ZERO_INCOMER when max_rounds >= 6
+    class SynthPlanner:
+        model = "stub-multiscenario-synth"
+
+        def __init__(self, primary_cell, alt_cell):
+            self.primary_cell = primary_cell
+            self.alt_cell = alt_cell
+
+        def chat(self, messages, *, json_mode, **options):
+            if messages[0]["content"] == AUDIT_PROMPT:
+                return {"content": json.dumps(audit_pass(messages))}, {}
+            if "result_atoms" in messages[-1]["content"]:
+                draft = diagnostic_draft(self.primary_cell, self.alt_cell)
+                return {"content": json.dumps(draft, ensure_ascii=False)}, {}
+            context = json.loads(messages[-1]["content"])
+            return {"content": json.dumps(context["available_checks"][0]["action"])}, {}
+
+    for q_text, c1, c2 in (
+        ("1018 馈线全周持续负有功和负功率因数是什么原因？是否二采区反送电？",
+         "1116.xls / New Sheet1!BX25", "1116.xls / New Sheet1!AN25"),
+        ("2026年11月13日15:00，306柜有功和电流为何归零？请查证失压、表计死数和单进线转供。",
+         "1113.xls / New Sheet1!H19", "1113.xls / New Sheet1!D19"),
+    ):
+        synth_res = diagnose_question(archive, q_text, client=SynthPlanner(c1, c2), max_rounds=6)
+        assert synth_res["status"] == "ok" and synth_res["business_trusted"]
+        assert synth_res["verification"]["verified_claims_count"] == 7
+        assert len(synth_res["report"]["diagnostic_claims"]) == 7
+        assert synth_res["report"]["hypothesis_trace"]["checks"]
+
 
 def _verify_hypothesis_followups(archive):
     reverse = ("2026年11月12日12:00，2号主变通道306/312/1006有功为负。"

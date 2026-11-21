@@ -164,8 +164,8 @@ def verify_pandapower_all_scenarios(archive: Archive) -> dict:
     assert d["line_loss_reduction_pct"] > 20.0
     assert d["total_loss_reduction_kw"] > 3.0
 
-    # 5. 24-hour discrete tap & capacitor switching DP schedule (2026-11-13)
-    from laowadi.powerflow import optimize_daily_tap_cap_schedule
+    # 5. 24-hour discrete tap & capacitor switching DP schedule + 7-day weekly Pareto analysis
+    from laowadi.powerflow import analyze_weekly_schedule_pareto, optimize_daily_tap_cap_schedule
 
     sched = optimize_daily_tap_cap_schedule(archive, "2026-11-13", target_cabinet="1010")
     assert sched["status"] == "ok" and len(sched["hours"]) == 24
@@ -175,6 +175,19 @@ def verify_pandapower_all_scenarios(archive: Archive) -> dict:
     assert sched["cap_changes"] <= sched["max_cap_changes"]
     assert sched["optimized_loss_kwh"] < sched["baseline_loss_kwh"]
     assert all(h["feeder_q_kvar"] >= -1e-6 for h in sched["hours"])
+
+    weekly = analyze_weekly_schedule_pareto(archive, target_cabinet="1010", pareto_day="2026-11-13")
+    assert weekly["status"] == "ok" and len(weekly["weekly_days"]) == 7
+    ws = weekly["weekly_summary"]
+    assert ws["total_hours"] == 168
+    assert ws["optimized_violations_total"] < ws["baseline_violations_total"]
+    assert ws["total_loss_saving_kwh"] > 0
+    frontier = weekly["pareto_frontier"]
+    assert len(frontier) == 6
+    # Relaxing budget from (0/0) to (2/6) monotonically eliminates violations and reduces/keeps loss
+    assert frontier[-1]["violations"] <= frontier[0]["violations"]
+    assert frontier[-1]["all_hours_safe"] is True
+    assert weekly["featured_day_schedule"]["day"] == "2026-11-13"
 
     # 6. Agent Tool 11 end-to-end groundedness check
     diag = diagnose_question(

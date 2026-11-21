@@ -20,6 +20,7 @@ import {Collapsible} from "@astryxdesign/core/Collapsible";
 import {ProgressBar} from "@astryxdesign/core/ProgressBar";
 import {Spinner} from "@astryxdesign/core/Spinner";
 import {apiRequest, cellHref} from "./api.js";
+import {DailyScheduleChart} from "./DailyScheduleChart.jsx";
 
 const SCENARIOS = [
   {
@@ -54,6 +55,115 @@ const TIME_PRESETS = [
   {value: "2026-11-10 06:00:00", label: "11-10 06:00 · 1009+1010 下井同步峰值 (159.7 A)"},
   {value: "2026-11-10 12:00:00", label: "11-10 12:00 · LW-000010 303跃升整点"},
 ];
+
+const weeklyNumber = new Intl.NumberFormat("zh-CN", {maximumFractionDigits: 2});
+const displayNumber = value => Number.isFinite(value) ? weeklyNumber.format(value) : "—";
+
+function WeeklyScheduleCard() {
+  const [weeklyData, setWeeklyData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  async function loadWeeklySchedule() {
+    setLoading(true);
+    setError("");
+    try {
+      const result = await apiRequest("/api/powerflow/weekly-schedule");
+      if (!result.weekly_summary || !Array.isArray(result.weekly_days) || !Array.isArray(result.pareto_frontier)) {
+        throw new Error(result.summary || "当前归档未返回完整的全周优化结果。");
+      }
+      setWeeklyData(result);
+    } catch (err) {
+      setError(err.message || "全周分时优化加载失败。");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const summary = weeklyData?.weekly_summary;
+  return (
+    <Card padding={16} className="pf-hero-card">
+      <Collapsible trigger="全周 168h 分时优化与帕累托权衡" defaultIsOpen={false}>
+        {!weeklyData && (
+          <div style={{margin: "12px 0"}} aria-busy={loading}>
+            <p>1010 柜 · 典型日 2026-11-13</p>
+            <Button
+              size="sm"
+              variant="primary"
+              label={loading ? "正在计算全周方案…" : error ? "重新计算全周方案" : "计算并加载全周方案"}
+              onClick={loadWeeklySchedule}
+              disabled={loading}
+            />
+            {error && <Banner variant="error" title="全周分时优化未载入" description={error} />}
+          </div>
+        )}
+        {summary && <>
+          <div className="pf-kpi-grid" style={{margin: "12px 0"}}>
+            <div className="pf-kpi-tile">
+              <span className="pf-kpi-label">回放覆盖</span>
+              <strong className="pf-kpi-value mono">{summary.total_days} 天 · {summary.total_hours} h</strong>
+              <small className="muted">{summary.all_week_safe ? "全周通过约束校核" : "仍有整点未通过校核"}</small>
+            </div>
+            <div className="pf-kpi-tile">
+              <span className="pf-kpi-label">全周净减少越限整点</span>
+              <strong className="pf-kpi-value mono">{summary.baseline_violations_total - summary.optimized_violations_total}</strong>
+              <small className="muted">基线 {summary.baseline_violations_total} → 优化后 {summary.optimized_violations_total}</small>
+            </div>
+            <div className="pf-kpi-tile">
+              <span className="pf-kpi-label">全周网损节省</span>
+              <strong className="pf-kpi-value mono">{displayNumber(summary.total_loss_saving_kwh)} kWh</strong>
+              <small className="muted">{displayNumber(summary.total_loss_saving_pct)}% · 基线 {displayNumber(summary.total_baseline_loss_kwh)} → 优化后 {displayNumber(summary.total_optimized_loss_kwh)} kWh</small>
+            </div>
+          </div>
+          <div className="pf-table-wrap">
+            <table className="pf-table">
+              <caption>7 日分时优化明细</caption>
+              <thead>
+                <tr>
+                  <th>日期</th><th>约束校核</th><th>基线越限</th><th>优化后越限</th><th>调档</th><th>投切</th>
+                  <th>动作合计</th><th>基线网损 kWh</th><th>优化网损 kWh</th><th>节电 kWh</th><th>节电率</th>
+                </tr>
+              </thead>
+              <tbody>
+                {weeklyData.weekly_days.map(day => (
+                  <tr key={day.day} className={day.day === weeklyData.pareto_day ? "is-current" : undefined}>
+                    <td>{day.day}</td><td>{day.all_hours_safe ? "通过" : "未通过"}</td>
+                    <td>{day.baseline_violations_count}</td><td>{day.optimized_violations_count}</td>
+                    <td>{day.tap_changes}</td><td>{day.cap_changes}</td><td>{day.actions_count}</td>
+                    <td>{displayNumber(day.baseline_loss_kwh)}</td><td>{displayNumber(day.optimized_loss_kwh)}</td>
+                    <td>{displayNumber(day.loss_saving_kwh)}</td><td>{displayNumber(day.loss_saving_pct)}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="pf-table-wrap" style={{marginTop: 16}}>
+            <table className="pf-table">
+              <caption>{weeklyData.pareto_day} 动作次数预算对比</caption>
+              <thead>
+                <tr>
+                  <th>方案</th><th>调档/投切预算</th><th>实际调档/投切</th><th>越限整点</th>
+                  <th>网损 kWh</th><th>节电 kWh</th><th>节电率</th>
+                </tr>
+              </thead>
+              <tbody>
+                {weeklyData.pareto_frontier.map(row => (
+                  <tr key={`${row.max_tap_changes}/${row.max_cap_changes}`}>
+                    <td>{row.label}</td><td>{row.max_tap_changes}/{row.max_cap_changes}</td>
+                    <td>{row.tap_changes}/{row.cap_changes}</td><td>{row.violations}</td>
+                    <td>{displayNumber(row.loss_kwh)}</td><td>{displayNumber(row.loss_saving_kwh)}</td>
+                    <td>{displayNumber(row.loss_saving_pct)}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <DailyScheduleChart schedule={weeklyData.featured_day_schedule} />
+        </>}
+      </Collapsible>
+    </Card>
+  );
+}
 
 export function PowerFlowPanel({onAskDiagnose}) {
   const [scenario, setScenario] = useState("tap_sensitivity");
@@ -304,6 +414,8 @@ export function PowerFlowPanel({onAskDiagnose}) {
         </>}
       </div>
     </Card>
+
+    <WeeklyScheduleCard />
 
     {err && <Banner variant="error" title="潮流计算错误" description={err} />}
 

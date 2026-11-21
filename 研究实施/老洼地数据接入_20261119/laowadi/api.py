@@ -25,6 +25,7 @@ import os
 from pathlib import Path
 import sqlite3
 import time
+from typing import Annotated
 from urllib.parse import quote, unquote
 import uuid
 
@@ -67,6 +68,7 @@ from laowadi.schemas import (
     TicketTransitionRequest,
     TokenIssueRequest,
     VectorSearchRequest,
+    WeeklyScheduleQuery,
 )
 from laowadi.security import (
     ROLE_DESCRIPTIONS,
@@ -81,10 +83,13 @@ from laowadi.task_queue import TERMINAL_STATUSES
 from laowadi.workbench import BUILD, RequestError, Workbench
 
 
+WEEKLY_SCHEDULE_PATH = "/api/powerflow/weekly-schedule"
+
 COMPUTE_RATE_LIMITED_PATHS = {
     "/api/diagnose",
     "/api/diagnose/stream",
     "/api/powerflow",
+    WEEKLY_SCHEDULE_PATH,
     "/api/multi-agent/consult",
     "/api/jobs",
 }
@@ -352,7 +357,9 @@ def create_app(
             )
 
         # 3. Cross-Process Shared Sliding-Window Rate Limiter (consistent across all Uvicorn worker PIDs!)
-        if method == "POST" and path in COMPUTE_RATE_LIMITED_PATHS:
+        if path in COMPUTE_RATE_LIMITED_PATHS and (
+            method == "POST" or (method == "GET" and path == WEEKLY_SCHEDULE_PATH)
+        ):
             allowed, _remaining, retry_after = workbench.task_broker.check_shared_rate_limit(
                 f"{client_host}:{actor}",
                 max_requests=max_rpm,
@@ -734,6 +741,19 @@ def create_app(
     @app.post("/api/powerflow", tags=["AC Power Flow"])
     def api_powerflow(req: PowerFlowRequest):
         return workbench.powerflow(req.model_dump())
+
+    @app.get(WEEKLY_SCHEDULE_PATH, tags=["AC Power Flow"])
+    def api_weekly_schedule(query: Annotated[WeeklyScheduleQuery, Query()]):
+        from laowadi import powerflow
+
+        analyze = getattr(powerflow, "analyze_weekly_schedule_pareto", None)
+        if analyze is None:
+            raise RequestError(503, "全周分时优化计算暂未就绪。")
+        try:
+            with workbench.archive() as archive:
+                return analyze(archive, target_cabinet=query.target_cabinet, pareto_day=query.pareto_day.isoformat())
+        except ValueError as exc:
+            raise RequestError(400, str(exc)) from None
 
     # ── Monitoring, Health, Topology & Cabinet Endpoints ───────────────────────
     @app.get("/api/dates", tags=["Monitoring & Topology"])

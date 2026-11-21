@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -112,6 +113,11 @@ class PowerFlowRequest(BaseModel):
     outage_mode: Literal["feeder_1009", "incomer_306", "transformer_t2"] = "feeder_1009"
     target_cabinet: str = Field(default="1010", max_length=16)
     qc_kvar: float | None = Field(default=None, ge=0.0, le=5000.0)
+
+
+class WeeklyScheduleQuery(BaseModel):
+    target_cabinet: str = Field(default="1010", min_length=1, max_length=16)
+    pareto_day: date = date(2026, 11, 13)
 
 
 class DiagnosticFact(BaseModel):

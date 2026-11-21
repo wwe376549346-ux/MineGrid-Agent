@@ -24,6 +24,7 @@ import {Card} from "@astryxdesign/core/Card";
 import {Collapsible} from "@astryxdesign/core/Collapsible";
 import {Spinner} from "@astryxdesign/core/Spinner";
 import {apiRequest, cellHref, setAuthToken} from "./api.js";
+import {DailyScheduleChart} from "./DailyScheduleChart.jsx";
 import {EvidenceDownloadLink} from "./IncidentTicketPanel.jsx";
 
 const MA_PRESETS = [
@@ -129,6 +130,7 @@ function DailySwitchingSchedule({schedule}) {
         越限整点 {schedule.baseline_violations_count ?? "—"} → {schedule.optimized_violations_count ?? "—"}。
       </p>
       {schedule.summary && <p>{schedule.summary}</p>}
+      <DailyScheduleChart schedule={schedule} />
       {actions.length > 0 ? (
         <div className="pf-table-wrap">
           <table className="pf-table">
