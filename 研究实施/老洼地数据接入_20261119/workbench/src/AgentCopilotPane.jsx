@@ -1,4 +1,4 @@
-import React, {useEffect, useMemo, useRef, useState} from "react";
+import React, {useCallback, useEffect, useMemo, useRef, useState} from "react";
 import {
   Activity,
   ArrowUp,
@@ -30,6 +30,67 @@ import {Badge} from "@astryxdesign/core/Badge";
 import {ProgressBar} from "@astryxdesign/core/ProgressBar";
 import {Spinner} from "@astryxdesign/core/Spinner";
 import {apiRequest, authHeaders, cellHref} from "./api.js";
+import {AgentStreamArtifacts, AgentStreamStyles, applyAgentEvent, emptyAgentStream} from "./AgentStreamArtifacts.jsx";
+
+async function consumeAgentStream(response, onEvent) {
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null);
+    throw new Error(payload?.error || `请求失败 (${response.status})`);
+  }
+  if (!response.body || !response.headers.get("content-type")?.includes("text/event-stream")) {
+    throw new Error("自主深度 Agent 未返回事件流。");
+  }
+
+  const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
+  let buffer = "";
+  let eventName = "";
+  let data = [];
+  try {
+    while (true) {
+      const {value, done} = await reader.read();
+      if (done) throw new Error("连接已提前结束，未收到自主 Agent 的完成事件。");
+      const lines = (buffer + value).split(/\r?\n/);
+      buffer = lines.pop();
+      for (const line of lines) {
+        if (line.startsWith("event:")) {
+          eventName = line.slice(6).trim();
+        } else if (line.startsWith("data:")) {
+          data.push(line.slice(5).replace(/^ /, ""));
+        } else if (line === "") {
+          if (data.length) {
+            const payload = JSON.parse(data.join("\n"));
+            const event = {...payload, type: eventName || payload.type};
+            if (event.type === "error") {
+              throw new Error(event.error ?? event.message ?? event.data?.error ?? "自主深度 Agent 执行中断。");
+            }
+            onEvent(event);
+            if (event.type === "done") return;
+          }
+          eventName = "";
+          data = [];
+        }
+      }
+    }
+  } finally {
+    await reader.cancel().catch(() => {});
+    reader.releaseLock();
+  }
+}
+
+function AutonomousTurn({turn, onTextProgress}) {
+  return <div className="chat-turn">
+    <div className="chat-user-row"><div className="chat-user-bubble">{turn.question}</div></div>
+    <div className="chat-agent-row">
+      <div className="chat-agent-avatar" aria-hidden="true"><Sparkles size={14} /></div>
+      <div className="chat-agent-body">
+        <AgentStreamArtifacts stream={turn.stream} onTextProgress={onTextProgress} />
+        {turn.stream.status === "running" && <div className="duty-progress" role="status"><Spinner size="sm" /> 正在分析</div>}
+        {turn.stream.status === "stopped" && <small className="muted">已停止接收</small>}
+        {turn.error && <div className="chat-error-box" role="alert">{turn.error}</div>}
+      </div>
+    </div>
+  </div>;
+}
 
 const DUTY_PROMPTS = [
   {
@@ -917,6 +978,7 @@ export function AgentCopilotPane({
   navigation,
 }) {
   const [sessionId, setSessionId] = useState(() => "sess-" + Date.now().toString(36));
+  const [agentKind, setAgentKind] = useState("audit");
   const [mode, setMode] = useState("local");
   const [input, setInput] = useState("");
   const [turns, setTurns] = useState([]);
@@ -970,6 +1032,13 @@ export function AgentCopilotPane({
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [turns, loading, liveTrace]);
+
+  const followTypedAnswer = useCallback(() => {
+    const thread = scrollRef.current;
+    if (thread && thread.scrollHeight - thread.clientHeight - thread.scrollTop < 48) {
+      thread.scrollTop = thread.scrollHeight;
+    }
+  }, []);
 
   async function loadHistorySession(sid) {
     const request = ++historyRequest.current;
@@ -1205,6 +1274,30 @@ export function AgentCopilotPane({
     return {finalPayload, streamError};
   }
 
+  async function sendAutonomousQuestion(clean, turnId, ctrl) {
+    setTurns(prev => [...prev, {id: turnId, question: clean, stream: emptyAgentStream}]);
+    const updateTurn = update => setTurns(prev => prev.map(turn => turn.id === turnId ? update(turn) : turn));
+    try {
+      const response = await fetch("/api/agent/stream", {
+        method: "POST",
+        headers: authHeaders({"Content-Type": "application/json", Accept: "text/event-stream"}),
+        body: JSON.stringify({question: clean, mode: "auto", sessionId}),
+        signal: ctrl.signal,
+      });
+      await consumeAgentStream(response, event => {
+        if (!ctrl.signal.aborted) {
+          updateTurn(turn => ({...turn, stream: applyAgentEvent(turn.stream, event)}));
+        }
+      });
+    } catch (error) {
+      if (!ctrl.signal.aborted) {
+        updateTurn(turn => ({...turn, error: error.message, stream: {...turn.stream, status: "error"}}));
+      }
+    } finally {
+      if (!ctrl.signal.aborted) setLoading(false);
+    }
+  }
+
   async function sendQuestion(text, targetMode = mode) {
     const clean = (text || "").trim();
     if (!clean || loading) return;
@@ -1213,9 +1306,14 @@ export function AgentCopilotPane({
     const ctrl = new AbortController();
     abortRef.current = ctrl;
     setLoading(true);
-    setPendingPrompt(clean);
     setInput("");
     setShowMemory(false);
+    const turnId = Date.now();
+    if (agentKind === "autonomous") {
+      await sendAutonomousQuestion(clean, turnId, ctrl);
+      return;
+    }
+    setPendingPrompt(clean);
     setLiveTrace({
       phase: targetMode === "deepseek" ? "正在连接 DeepSeek…" : "正在查阅归档…",
       mode: targetMode === "deepseek" ? "model" : "local",
@@ -1226,8 +1324,6 @@ export function AgentCopilotPane({
       streamKind: "",
       streamChars: 0,
     });
-    const turnId = Date.now();
-
     try {
       const response = await fetch("/api/diagnose/stream", {
         method: "POST",
@@ -1333,6 +1429,11 @@ export function AgentCopilotPane({
     setLoading(false);
     setPendingPrompt("");
     setLiveTrace(null);
+    if (agentKind === "autonomous") {
+      setTurns(prev => prev.map(turn => turn.stream?.status === "running"
+        ? {...turn, stream: {...turn.stream, status: "stopped"}}
+        : turn));
+    }
     try {
       sessionStorage.removeItem("laowadi_active_sse_job");
     } catch {}
@@ -1368,7 +1469,7 @@ export function AgentCopilotPane({
   }
 
   const composer = <div className="duty-composer-wrap">
-    {anchorChips.length > 0 && <p className="duty-context">当前上下文 <span>{anchorChips.join(" · ")}</span></p>}
+    {agentKind === "audit" && anchorChips.length > 0 && <p className="duty-context">当前上下文 <span>{anchorChips.join(" · ")}</span></p>}
     <form className="copilot-composer duty-composer" onSubmit={e => {
       e.preventDefault();
       sendQuestion(input);
@@ -1407,13 +1508,13 @@ export function AgentCopilotPane({
               ))}
             </div>
           </details>
-          <div className="duty-engine-select">
+          {agentKind === "audit" && <div className="duty-engine-select">
             <select value={mode} onChange={e => setMode(e.target.value)} aria-label="问答方式" disabled={loading}>
               <option value="local">本地分析</option>
               <option value="deepseek" disabled={!model}>{model ? "DeepSeek" : "DeepSeek 未配置"}</option>
             </select>
             <ChevronDown size={13} aria-hidden="true" />
-          </div>
+          </div>}
         </div>
         {loading
           ? <button type="button" className="copilot-send-btn is-stop" onClick={stopWaiting} aria-label="停止等待" title="停止等待">
@@ -1483,6 +1584,13 @@ export function AgentCopilotPane({
     </aside>
 
     <main className="copilot-pane duty-chat" hidden={!chatVisible} aria-label="值班问答">
+      <AgentStreamStyles />
+      <div className="agent-stream-mode" role="group" aria-label="诊断模式">
+        <button type="button" aria-pressed={agentKind === "autonomous"} disabled={loading}
+          onClick={() => setAgentKind("autonomous")}>自主深度 Agent</button>
+        <button type="button" aria-pressed={agentKind === "audit"} disabled={loading}
+          onClick={() => setAgentKind("audit")}>严格审计单</button>
+      </div>
       {connectionError && <div className="duty-notice" role="alert">
         <span>{connectionError}</span>
         <button type="button" onClick={onRetry}>重新连接</button>
@@ -1506,7 +1614,9 @@ export function AgentCopilotPane({
           </div>
         ) : (
           <div className="duty-thread-column">
-            {turns.map((t, index) => (
+            {turns.map((t, index) => t.stream ? (
+              <AutonomousTurn key={t.id} turn={t} onTextProgress={followTypedAnswer} />
+            ) : (
               <AgentTurnMessage
                 key={t.id}
                 turn={t}
@@ -1519,7 +1629,7 @@ export function AgentCopilotPane({
                 canCompareAdjacent={!loading && index === turns.length - 1}
               />
             ))}
-            {loading && (
+            {loading && agentKind === "audit" && (
               <div className="chat-turn">
                 {pendingPrompt && <div className="chat-user-row"><div className="chat-user-bubble">{pendingPrompt}</div></div>}
                 <div className="duty-progress" role="status"><Spinner size="sm" /> 正在查证{elapsed > 0 ? ` · ${elapsed} 秒` : ""}</div>

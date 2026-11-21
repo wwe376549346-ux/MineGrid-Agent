@@ -52,6 +52,7 @@ jobs:
 
       - name: Run core correctness & claim grounding gates
         run: |
+          python -B verify_autonomous_sandbox.py
           python -B verify_p0_correctness.py
           python -B verify_diagnostic_claims.py
           python -B verify_diagnose.py

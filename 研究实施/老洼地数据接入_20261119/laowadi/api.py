@@ -17,6 +17,8 @@ Enterprise Capabilities:
 from __future__ import annotations
 
 import asyncio
+from contextlib import suppress
+from importlib import import_module
 from importlib.metadata import PackageNotFoundError, version
 import json
 import logging
@@ -29,6 +31,7 @@ from typing import Annotated
 from urllib.parse import quote, unquote
 import uuid
 
+import anyio
 from fastapi import FastAPI, Query, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
@@ -42,8 +45,10 @@ from psycopg import Error as PostgresError
 from laowadi.db.postgres import probe_runtime
 from laowadi.source_files import document_manifest, verified_original
 from laowadi.logging_config import bind_log_context, configure_logging, get_logger, log_event
+from laowadi.llm import ChatClient, LLMError
 from laowadi.mine_schema import load_mine_profile
 from laowadi.schemas import (
+    AgentStreamRequest,
     AskRequest,
     CircuitBreakerResetRequest,
     CircuitBreakerTripRequest,
@@ -61,6 +66,7 @@ from laowadi.schemas import (
     ReadyzResponse,
     ReviewCreateRequest,
     ReviewDeleteRequest,
+    SandboxRunRequest,
     SecurityPromptTestRequest,
     SensitivityVoiQuery,
     SessionIdRequest,
@@ -92,6 +98,8 @@ READ_ONLY_COMPUTE_PATHS = {WEEKLY_SCHEDULE_PATH, SENSITIVITY_VOI_PATH}
 COMPUTE_RATE_LIMITED_PATHS = {
     "/api/diagnose",
     "/api/diagnose/stream",
+    "/api/agent/stream",
+    "/api/sandbox/run",
     "/api/powerflow",
     *READ_ONLY_COMPUTE_PATHS,
     "/api/multi-agent/consult",
@@ -104,6 +112,8 @@ AUDITED_PATHS = {
     "/api/ask",
     "/api/diagnose",
     "/api/diagnose/stream",
+    "/api/agent/stream",
+    "/api/sandbox/run",
     "/api/diagnose/reset",
     "/api/powerflow",
     "/api/multi-agent/consult",
@@ -117,6 +127,21 @@ AUDITED_PATHS = {
     "/api/runtime/circuit-breaker/trip",
     "/api/runtime/circuit-breaker/reset",
 }
+
+AUTONOMOUS_EVENT_TYPES = {
+    "plan_update", "reasoning_delta", "tool_start", "tool_end", "code_run",
+    "content_delta", "verification_badge", "done", "error",
+}
+
+
+def _load_optional_runner(module: str, name: str, unavailable: str):
+    try:
+        runner = getattr(import_module(f"laowadi.{module}"), name, None)
+    except ImportError as exc:
+        raise RequestError(503, unavailable) from exc
+    if not callable(runner):
+        raise RequestError(503, unavailable)
+    return runner
 
 
 def _security_headers(headers: dict[str, str] | None = None) -> dict[str, str]:
@@ -294,6 +319,11 @@ def create_app(
 
         # 2. RBAC & HMAC-SHA256 Bearer Authentication
         req_role = required_role_for(method, path)
+        if method == "POST":
+            req_role = {
+                "/api/agent/stream": "dispatcher",
+                "/api/sandbox/run": "engineer",
+            }.get(path, req_role)
         actor = "local-workbench"
         role = "engineer"
         auth_header = request.headers.get("authorization", "").strip()
@@ -869,6 +899,78 @@ def create_app(
                 "X-Job-Id": job_id,
             },
         )
+
+    @app.post(
+        "/api/agent/stream",
+        tags=["Autonomous Agent"],
+        response_class=StreamingResponse,
+        responses={200: {"content": {"text/event-stream": {}}}, 503: {"description": "Agent 暂未就绪"}},
+    )
+    async def api_agent_stream(req: AgentStreamRequest):
+        run_agent = _load_optional_runner(
+            "autonomous_agent", "run_autonomous_agent", "自主深度 Agent 暂未就绪。",
+        )
+        security = inspect_prompt_security(req.question)
+        if not security["allowed"]:
+            raise RequestError(400, security["message"])
+
+        client = None
+        if req.mode == "deepseek" or (req.mode == "auto" and workbench.model is not None):
+            try:
+                client = ChatClient.from_env(stream=True)
+            except LLMError:
+                if req.mode == "deepseek":
+                    raise RequestError(409, "本次工作台尚未启用可用的 DeepSeek 配置。") from None
+
+        async def events():
+            sender, receiver = anyio.create_memory_object_stream[str](16)
+
+            def emit(event):
+                kind = event["type"]
+                if kind in AUTONOMOUS_EVENT_TYPES:
+                    # Serialize here because the runner mutates plan steps between callbacks.
+                    data = json.dumps(jsonable_encoder(event), ensure_ascii=False, allow_nan=False)
+                    anyio.from_thread.run(sender.send, f"event: {kind}\ndata: {data}\n\n")
+
+            def run():
+                with workbench.archive() as archive:
+                    session = workbench._get_or_restore_session(archive, req.sessionId) if req.sessionId else None
+                    run_agent(archive, req.question, client=client, session=session, max_steps=req.maxSteps, on_event=emit)
+
+            async def produce():
+                async with sender:
+                    try:
+                        await anyio.to_thread.run_sync(run, abandon_on_cancel=True)
+                    except (anyio.BrokenResourceError, anyio.ClosedResourceError):
+                        return
+                    except Exception:
+                        api_logger.exception("Autonomous agent stream failed")
+                        data = json.dumps({"type": "error", "error": "自主深度 Agent 执行中断。"}, ensure_ascii=False)
+                        await sender.send(f"event: error\ndata: {data}\n\n")
+
+            worker = asyncio.create_task(produce())
+            try:
+                async with receiver:
+                    async for frame in receiver:
+                        yield frame
+            finally:
+                worker.cancel()
+                with suppress(asyncio.CancelledError):
+                    await worker
+
+        return StreamingResponse(
+            events(),
+            media_type="text/event-stream",
+            headers=_security_headers({"Cache-Control": "no-cache, no-store", "X-Accel-Buffering": "no"}),
+        )
+
+    @app.post("/api/sandbox/run", tags=["Autonomous Agent"])
+    def api_sandbox_run(req: SandboxRunRequest):
+        run_python = _load_optional_runner(
+            "code_sandbox", "run_python_analysis", "Python 分析沙盒暂未就绪。",
+        )
+        with workbench.archive() as archive:
+            return run_python(archive, req.code, timeout_s=req.timeout_s)
 
     # ── State Graph, Supplement Recalculation & Evaluation ─────────────────────
     @app.get("/api/supplement", tags=["State Graph & Evaluation"])

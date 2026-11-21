@@ -53,6 +53,18 @@ class DiagnoseRequest(BaseModel):
     sessionId: str = Field(default="default", max_length=64)
 
 
+class AgentStreamRequest(BaseModel):
+    question: str = Field(min_length=1, max_length=600, pattern=r"\S")
+    mode: Literal["auto", "local", "deepseek"] = "auto"
+    sessionId: str | None = Field(default=None, max_length=64)
+    maxSteps: int = Field(default=8, ge=1, le=12)
+
+
+class SandboxRunRequest(BaseModel):
+    code: str = Field(min_length=1, max_length=16_000, pattern=r"\S")
+    timeout_s: float = Field(default=6.0, ge=0.5, le=15.0)
+
+
 class SessionIdRequest(BaseModel):
     model_config = ConfigDict(extra="ignore")
 

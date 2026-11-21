@@ -5,8 +5,8 @@
     "points_total": 16800,
     "p50_ms": 0.0024,
     "p95_ms": 0.0033,
-    "p99_ms": 0.0068,
-    "max_ms": 0.0127,
+    "p99_ms": 0.0056,
+    "max_ms": 0.0104,
     "mean_ms": 0.0024
   },
   "baseline_alerts_total": 323,

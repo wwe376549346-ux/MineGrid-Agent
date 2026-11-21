@@ -425,6 +425,37 @@ DIAGNOSTIC_TOOL_SCHEMAS = [
     },
 ]
 
+SANDBOX_TOOL_SCHEMA = {
+    "type": "function",
+    "function": {
+        "name": "run_python_analysis",
+        "description": (
+            "在隔离的只读 Python/SQL/NumPy/SciPy/pandapower 沙盒中执行自定义分析脚本，用于回答固定工具未覆盖的开放式工程计算"
+            "（如相关性/线性回归、负荷曲线聚类、多柜统计对比、假设性潮流敏感性试算与生成结构化表格/SVG 图表）。"
+            "沙盒已预注入 query_sql(sql, params)、query_events(sql, params)、emit_table(title, columns, rows)、"
+            "emit_chart(title, chart_type, x_label, y_label, series)、np、math、statistics、json、re、datetime、collections，"
+            "并允许按需 import scipy / pandapower。严禁写文件、访问网络或修改数据库。"
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string",
+                    "description": "要执行的只读 Python 分析脚本。表结构：reading(day,time,station,cabinet,metric,value,marker,source_row,source_col)、report(day,filename,sheet,sha256)、cabinet(station,number,label,aliases)、summary(...)。",
+                },
+                "timeout_s": {
+                    "type": "number",
+                    "description": "可选超时时间（秒，默认 6.0，最大 15.0）。",
+                },
+            },
+            "required": ["code"],
+            "additionalProperties": False,
+        },
+    },
+}
+
+AUTONOMOUS_TOOL_SCHEMAS = [*DIAGNOSTIC_TOOL_SCHEMAS, SANDBOX_TOOL_SCHEMA]
+
 
 class DiagnosticToolbox:
     """Read-only diagnostic toolbox bound to an Archive instance."""
@@ -458,6 +489,7 @@ class DiagnosticToolbox:
             "query_electrical_analytics": self.query_electrical_analytics,
             "simulate_electrical_engineering": self.simulate_electrical_engineering,
             "run_ac_power_flow": self.run_ac_power_flow,
+            "run_python_analysis": self.run_python_analysis,
         }
         handler = dispatch.get(name)
         if not handler:
@@ -1575,3 +1607,9 @@ class DiagnosticToolbox:
             target_cabinet=target_cabinet,
             qc_kvar=qc_kvar,
         )
+
+    def run_python_analysis(self, code: str, timeout_s: float = 6.0) -> dict:
+        from laowadi.code_sandbox import run_python_analysis as _run_sandbox
+
+        res = _run_sandbox(self.archive, code, timeout_s=timeout_s)
+        return {"kind": "python_analysis", **res}

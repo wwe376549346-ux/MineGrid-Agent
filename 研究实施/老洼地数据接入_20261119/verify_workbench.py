@@ -2,16 +2,20 @@
 
 from __future__ import annotations
 
+import asyncio
 from contextlib import closing
 import hashlib
 from http.server import ThreadingHTTPServer
+from importlib import import_module
 import json
 import math
 from pathlib import Path
+import sys
 import time
 import re
 from tempfile import TemporaryDirectory
 import threading
+from types import SimpleNamespace
 from unittest.mock import patch
 from urllib.parse import quote
 from urllib.request import Request, urlopen
@@ -83,6 +87,138 @@ def verify_sensitivity_voi(workbench: Workbench) -> dict:
     return result
 
 
+def verify_autonomous_endpoints(workbench: Workbench) -> dict:
+    agent_path, sandbox_path = "/api/agent/stream", "/api/sandbox/run"
+    agent_module, sandbox_module = "laowadi.autonomous_agent", "laowadi.code_sandbox"
+    question = "用老洼地全周数据分析 1006 柜有功功率与线电压的相关性，给出散点图。"
+    code = "print(6 * 7)"
+    app = create_app(workbench, require_auth=True)
+
+    def auth(subject, role):
+        return {"Authorization": f"Bearer {issue_token(subject, role)['access_token']}"}
+
+    dispatcher, engineer = auth("test-agent", "dispatcher"), auth("test-sandbox", "engineer")
+    expected = [
+        {"type": "plan_update", "items": [{"id": "archive", "title": "查询原表", "status": "running"}]},
+        {"type": "reasoning_delta", "delta": "按柜号和整点查归档。"},
+        {"type": "tool_start", "tool": "get_hourly_reading", "step": 1},
+        {"type": "tool_end", "tool": "get_hourly_reading", "step": 1, "status": "ok"},
+        {"type": "code_run", "code": code, "result": {"stdout": "42\n", "stderr": ""}},
+        {"type": "content_delta", "delta": "查询完成。"},
+        {"type": "verification_badge", "business_trusted": True, "status": "verified"},
+        {"type": "done", "session_id": "test-agent-stream"},
+    ]
+
+    def decode_events(body):
+        frames = [frame.splitlines() for frame in body.strip().split("\n\n") if frame]
+        events = []
+        for frame in frames:
+            data = [line[5:].lstrip() for line in frame if line.startswith("data:")]
+            if data:
+                event = json.loads("\n".join(data))
+                assert f"event: {event['type']}" in frame, frame
+                events.append(event)
+        return events
+
+    async def verify_arrival_before_completion():
+        first_sent = threading.Event()
+        sent = bytearray()
+        request_read = False
+        body = json.dumps({"question": question, "sessionId": "test-agent-stream"}).encode()
+
+        model_client = object()
+
+        def run_agent(archive, task, *, client, session, max_steps, on_event):
+            assert ("S35", "1006") in archive.devices and task == question
+            assert client is model_client and session is not None and max_steps == 8
+            on_event(expected[0])
+            assert first_sent.wait(timeout=3), "Agent SSE buffered the first frame until completion"
+            for event in expected[1:]:
+                on_event(event)
+
+        async def receive():
+            nonlocal request_read
+            if not request_read:
+                request_read = True
+                return {"type": "http.request", "body": body, "more_body": False}
+            await asyncio.Event().wait()
+
+        async def send(message):
+            if message["type"] == "http.response.start":
+                assert message["status"] == 200
+                headers = dict(message["headers"])
+                assert headers[b"content-type"].startswith(b"text/event-stream")
+                assert headers[b"x-accel-buffering"] == b"no"
+            elif message.get("body"):
+                sent.extend(message["body"])
+                if not first_sent.is_set():
+                    assert decode_events(sent.decode()) == expected[:1]
+                    first_sent.set()
+
+        scope = {
+            "type": "http", "asgi": {"version": "3.0", "spec_version": "2.4"},
+            "http_version": "1.1", "method": "POST", "scheme": "http", "path": agent_path,
+            "raw_path": agent_path.encode(), "query_string": b"", "root_path": "",
+            "server": ("testserver", 80), "client": ("testclient", 1),
+            "headers": [
+                (b"host", b"testserver"), (b"content-type", b"application/json"),
+                (b"authorization", dispatcher["Authorization"].encode()),
+            ],
+        }
+        with (patch.dict(sys.modules, {agent_module: SimpleNamespace(run_autonomous_agent=run_agent)}),
+              patch("laowadi.api.ChatClient.from_env", return_value=model_client)):
+            await asyncio.wait_for(app(scope, receive, send), timeout=5)
+        assert first_sent.is_set() and decode_events(sent.decode()) == expected
+
+    asyncio.run(verify_arrival_before_completion())
+
+    with TestClient(app) as client:
+        assert client.post(agent_path, json={"question": question}).status_code == 401
+        assert client.post(sandbox_path, headers=dispatcher, json={"code": code}).status_code == 403
+        assert client.post(agent_path, headers=dispatcher, json={"question": " ", "maxSteps": 0}).status_code == 400
+        assert client.post(sandbox_path, headers=engineer, json={"code": code, "timeout_s": 0}).status_code == 400
+        with patch.dict(sys.modules, {agent_module: SimpleNamespace(), sandbox_module: None}):
+            assert client.post(agent_path, headers=dispatcher, json={"question": question}).status_code == 503
+            assert client.post(sandbox_path, headers=engineer, json={"code": code}).status_code == 503
+
+        def run_sandbox(archive, script, *, timeout_s):
+            assert ("S35", "1006") in archive.devices and script == code and timeout_s == 6.0
+            return {"stdout": "42\n", "stderr": ""}
+
+        with TestClient(create_app(workbench, require_auth=True, rate_limit_per_min=1)) as limited:
+            with patch.dict(sys.modules, {sandbox_module: SimpleNamespace(run_python_analysis=run_sandbox)}):
+                headers = auth("test-sandbox-limited", "engineer")
+                response = limited.post(sandbox_path, headers=headers, json={"code": code})
+                assert response.status_code == 200 and response.json() == {"stdout": "42\n", "stderr": ""}
+                assert limited.post(sandbox_path, headers=headers, json={"code": code}).status_code == 429
+
+        coverage = {}
+        for module, entrypoint, path, headers, payload in (
+            (agent_module, "run_autonomous_agent", agent_path, dispatcher, {"question": question, "mode": "local"}),
+            (sandbox_module, "run_python_analysis", sandbox_path, engineer, {"code": code}),
+        ):
+            try:
+                ready = callable(getattr(import_module(module), entrypoint, None))
+            except ImportError:
+                ready = False
+            response = client.post(path, headers=headers, json=payload)
+            if not ready:
+                assert response.status_code == 503, response.text
+                coverage[path] = "503 (runner unavailable)"
+                continue
+            assert response.status_code == 200, response.text
+            if path == agent_path:
+                events = decode_events(response.text)
+                assert events[-1]["type"] == "done" and all(event["type"] != "error" for event in events), events
+                assert {event["type"] for event in events} == {event["type"] for event in expected}, events
+                run = next(event for event in events if event["type"] == "code_run")
+                assert run["status"] == "ok" and run["tables"] and run["charts"][0]["chart_type"] == "scatter", run
+            else:
+                assert response.json()["stdout"].strip() == "42", response.text
+            coverage[path] = "end-to-end"
+        return coverage
+
+
 def main():
     db_before = sha256(DB)
     ev_before = sha256(EVENT_DB)
@@ -119,6 +255,7 @@ def main():
                 assert resp.status == 200
                 assert "/api/powerflow/sensitivity-voi" in flow_bundle and "参数灵敏度龙卷风图" in flow_bundle
             sensitivity = verify_sensitivity_voi(server.app)
+            autonomous_endpoints = verify_autonomous_endpoints(server.app)
 
             # 2. /api/dates
             dates = fetch_json(base, "/api/dates")
@@ -401,6 +538,7 @@ def main():
                 "status": "ok",
                 "static_assets_verified": len(assets),
                 "sensitivity_voi_items_verified": len(sensitivity["voi_ranking"]),
+                "autonomous_endpoints": autonomous_endpoints,
                 "cabinets_cards": len(health["cabinets_cards"]),
                 "diagrams_verified": len(diagrams),
                 "review_feedback_loop_verified": True,
