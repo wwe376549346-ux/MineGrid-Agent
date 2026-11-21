@@ -672,9 +672,9 @@ footer {margin-top:24px;color:var(--sub);font-size:.86rem}
       "deps": [
         "tools"
       ],
-      "now": "企业级复审第 1–5 项已实现并通过老洼地离线复验。原表读数绑定站点、柜号、整点、指标、单位、有符号值、原格和日报哈希。计算走本地工具回执，绑定查询参数、统计口径和具体结果字段。拒绝错柜错时、零证据定性、常数冒充实测、错误公式及无依据报告段落。 DeepSeek 深度诊断现由模型逐句撰写推演，已接入出处绑定、差值复算、独立请求的语义复核与反思重写。 假设检验与证伪引擎（hypothesis.py）已扩展至三类真实异常场景：① 2#主变三柜（306/312/1006）同负反向有功查证（证伪 1027 反送，表计极性与母联环流留待补证）；② 1018 馈线全周持续负有功与负功率因数查证（FEEDER_POLARITY，证伪二采区 1023 同步反送，二次极性待核）；③ 2026-11-13 306 进线连续 13h 归零查证（ZERO_INCOMER，证伪母线完全失压与表计假死，单进线转供待查遥信与操作票）。",
+      "now": "企业级复审第 1–5 项已实现并通过老洼地离线复验。原表读数绑定站点、柜号、整点、指标、单位、有符号值、原格和日报哈希。计算走本地工具回执，绑定查询参数、统计口径和具体结果字段。拒绝错柜错时、零证据定性、常数冒充实测、错误公式及无依据报告段落。 DeepSeek 深度诊断现由模型逐句撰写推演，已接入出处绑定、差值复算、独立请求的语义复核与反思重写。 假设检验与证伪引擎（hypothesis.py）已扩展至三类真实异常场景：① 2#主变三柜（306/312/1006）同负反向有功查证（证伪 1027 反送，表计极性与母联环流留待补证）；② 1018 馈线全周持续负有功与负功率因数查证（FEEDER_POLARITY，证伪二采区 1023 同步反送，二次极性待核）；③ 2026-11-13 306 进线连续 13h 归零查证（ZERO_INCOMER，证伪母线完全失压与表计假死，单进线转供待查遥信与操作票）。 三类诊断可沿用上一轮已核验的场景，切换同日整点或对照柜。306 归零窗口的单进线带载与 10 kV II 段高电压已按小时对照，记录窗内重叠、窗外超线及共因待核。",
       "implementation": "轻量查数走 agent.py。diagnose.py 调度白名单取证，diagnostic_claims.py 校验逐条引用、插入可信证据并复算同柜跨时差值。语义复核逐句检查自由表述与引文是否相符。任一条失败均按断言索引反馈给模型，最终未通过时阻断正文发布。保留原表、计算回执、归档筛查和条件潮流各自的证据边界。 hypothesis.py 接收模型提交的假设、只读工具和参数。本地核对柜号与整点，上一轮的取证结果进入下一轮计划。查询预算用尽时保留待执行检验。",
-      "output": "带原表坐标或工具回执的 JSON / Markdown 诊断单、出处和计算参数、拒答状态及 P0 回归脚本。 新增断言级 JSON、Markdown 和工作台诊断推演及核验进度。 JSON 和 Markdown 包含初始读数、每轮查询及原表证据、局部证伪、未执行检验和补证条件。",
+      "output": "带原表坐标或工具回执的 JSON / Markdown 诊断单、出处和计算参数、拒答状态及 P0 回归脚本。 新增断言级 JSON、Markdown 和工作台诊断推演及核验进度。 JSON 和 Markdown 包含初始读数、每轮查询及原表证据、局部证伪、未执行检验和补证条件。 假设检验记录包含上一轮参照、逐点签名判定及核验后的原表事实。",
       "checks": [
         "用原表 D15、D16、H15、H16 核对四个读数",
         "跨日需查实际日期，错位或缺一个点时停止计算",
@@ -686,7 +686,8 @@ footer {margin-top:24px;color:var(--sub);font-size:.86rem}
         "验证终审前 SSE/事件回放与工作台不暴露未核验模型文本，且运行完成状态与业务可信状态（business_trusted）严格分离。",
         "复验错格、错单位、差值方向、无绑定数字、语义误归因、终审失败和会话隔离。",
         "在二号主变场景同时保留假设检验步骤、复算回执和模型撰写的证据推演，工作台正文可查回每句出处。",
-        "复验真三柜同负、模型逐轮接收上步回执、错时请求拦截、1027 缺值与非零后续查询、预算截止及原表回查。"
+        "复验真三柜同负、模型逐轮接收上步回执、错时请求拦截、1027 缺值与非零后续查询、预算截止及原表回查。",
+        "核验三类跨轮反事实对照的实际读数、坐标和日报 SHA-256，并用 1113.xls 复核窗内外电压与进线方式的共因边界。"
       ],
       "files": [
         [
@@ -858,15 +859,16 @@ footer {margin-top:24px;color:var(--sub);font-size:.86rem}
       "deps": [
         "agent-loop"
       ],
-      "now": "已完成复审第 9 项修复：sessions.py 与 reviews.py 新增 mine_id、station、archive_snapshot_sha256 持久化字段与自动迁移，context.py 实现矿站切换、事件切换与归档版本订正时的会话工作记忆自动清空与人工复核意见显式隔离（partition_relevant_reviews），移除显式对象查询时的零分兜底泄漏。本机待执行 verify_reliability_and_contracts.py 实测验证。",
+      "now": "已完成复审第 9 项修复：sessions.py 与 reviews.py 新增 mine_id、station、archive_snapshot_sha256 持久化字段与自动迁移，context.py 实现矿站切换、事件切换与归档版本订正时的会话工作记忆自动清空与人工复核意见显式隔离（partition_relevant_reviews），移除显式对象查询时的零分兜底泄漏。本机待执行 verify_reliability_and_contracts.py 实测验证。 已核验的假设整点、柜号和签名状态进入会话摘要。明确切换整点或柜号时沿用同一签名，常规点查及矿站和归档隔离规则仍适用。",
       "implementation": "参考 GSSC 收集工具原始回执、按当前问题锚点（日期、整点、柜号、站名、健康维度）筛选并折叠平稳点，原表单元格坐标与 SHA-256 保持原样；DiagnosisSession 绑定矿井、站点与归档快照 SHA-256，切换矿站/事件或原始资料订正后自动隔离旧读数与旧人工复核意见。",
-      "output": "laowadi/context.py、laowadi/sessions.py、laowadi/reviews.py、按矿站与版本隔离的 context_snapshot / partition_relevant_reviews 及 verify_reliability_and_contracts.py 验收脚本。",
+      "output": "laowadi/context.py、laowadi/sessions.py、laowadi/reviews.py、按矿站与版本隔离的 context_snapshot / partition_relevant_reviews 及 verify_reliability_and_contracts.py 验收脚本。 会话摘要同时提供三类真实场景的追问入口。",
       "checks": [
         "从事件 A 改问 B 时无串柜、串日期",
         "来源哈希与原始数值在压缩后仍可追查",
         "失效、未知和缺证的原因进入上下文",
         "同期追问继承指标与整点；不匹配当前对象和时段的人工记录不进入事实或复核记忆",
-        "换矿站（S35↔C1535）、换事件或原始日报订正后，旧读数与旧版本人工意见被正确隔离"
+        "换矿站（S35↔C1535）、换事件或原始日报订正后，旧读数与旧版本人工意见被正确隔离",
+        "复验同日单整点、多个整点及切柜追问。另用电压点查验证场景识别边界。"
       ],
       "files": [
         [
@@ -892,6 +894,10 @@ footer {margin-top:24px;color:var(--sub);font-size:.86rem}
         [
           "11 月 20 日值班智能体审查",
           "研究实施/老洼地数据接入_20261119/值班智能体审查_20261120.md"
+        ],
+        [
+          "跨轮整点与对照柜回归",
+          "研究实施/老洼地数据接入_20261119/verify_diagnose.py"
         ]
       ],
       "adapt": "第 9 章的上下文组织比堆长历史更有用。资料索引、会话记忆与受审核证据分开管理。"
@@ -1308,9 +1314,9 @@ footer {margin-top:24px;color:var(--sub);font-size:.86rem}
         "monitor",
         "tools"
       ],
-      "now": "已有事件工单台、通知回执、问答首页和值班工具和 60 条 OpenAPI 路径。复审 26 已修复。工单仅展示合法操作，销项和复开均要求依据，旧版本提交返回 409。代码中业务署名与令牌主体的绑定仍待专项处理。真实班表、交接签认、对象权限、并发状态与目标环境工作台待验。 本轮工作台区分已核验读数、条件计算、待核原因、人工复核备注及待核参考条款。历史会话仍保留原记录，主对话提示重新核验。条件复算单独进入会话记录。 生产 API 和外部 Worker 共用 PostgreSQL 队列、SSE、熔断及工单状态。双节点 kind 在运行中强制删除一只 Worker Pod，另一节点接管，SSE 从原事件号跨 API 续读。 8765 首页改为以问答为主。历史对话、主接线、工单、柜级档案和人工复核从侧栏进入，研究工具默认收起。回复先呈现结论，原表证据可展开，回答完成后保持在对话中。 首页可用三类异常查证入口打开检验。1440 和 390 像素浏览器均已复验检验记录、逐轮查询展开和日报下载。 研究工作台支持两类五步证据交换与质疑仲裁（reactive_collaboration.py）：① 1010 无功补偿与 II 段过压的同点复算（单投、仅调压、先调压再补偿）；② 下井双回 1009→1010 N-1 转供双口径包络仲裁（pandapower 平衡潮流 110.78 A vs 表计代数峰值 159.69 A vs 比例修正包络 167.70 A），并在 GovernanceMultiAgentPanel.jsx 展示三口径包络对比表与角色消息。",
+      "now": "已有事件工单台、通知回执、问答首页和值班工具和 60 条 OpenAPI 路径。复审 26 已修复。工单仅展示合法操作，销项和复开均要求依据，旧版本提交返回 409。代码中业务署名与令牌主体的绑定仍待专项处理。真实班表、交接签认、对象权限、并发状态与目标环境工作台待验。 本轮工作台区分已核验读数、条件计算、待核原因、人工复核备注及待核参考条款。历史会话仍保留原记录，主对话提示重新核验。条件复算单独进入会话记录。 生产 API 和外部 Worker 共用 PostgreSQL 队列、SSE、熔断及工单状态。双节点 kind 在运行中强制删除一只 Worker Pod，另一节点接管，SSE 从原事件号跨 API 续读。 8765 首页改为以问答为主。历史对话、主接线、工单、柜级档案和人工复核从侧栏进入，研究工具默认收起。回复先呈现结论，原表证据可展开，回答完成后保持在对话中。 首页可用三类异常查证入口打开检验。1440 和 390 像素浏览器均已复验检验记录、逐轮查询展开和日报下载。 研究工作台支持两类五步证据交换与质疑仲裁（reactive_collaboration.py）：① 1010 无功补偿与 II 段过压的同点复算（单投、仅调压、先调压再补偿）；② 下井双回 1009→1010 N-1 转供双口径包络仲裁（pandapower 平衡潮流 110.78 A vs 表计代数峰值 159.69 A vs 比例修正包络 167.70 A），并在 GovernanceMultiAgentPanel.jsx 展示三口径包络对比表与角色消息。 最近一轮已核验且完成的假设检验可一键对照相邻整点。调压补偿和 N-1 卡片可显示跨时段校核与原表链接。",
       "implementation": "后端已升级为FastAPI + Uvicorn ASGI 单机多进程运行时、统一动态 DAG 编排内核（laowadi/dag_engine.py）、PostgreSQL 16 + TimescaleDB + pgvector 存储与运维保障体系，提供 60 条 OpenAPI 3.1 路径（/docs，含 /api/dag/run|resume|threads、/api/storage/* 与 /api/ops/*）、默认 2×API Worker + 2×独立外部 Job Worker OS 进程水平扩展、持久化外部任务队列与 Last-Event-ID 断点续传 SSE、跨进程共享三态熔断器、标准 NDJSON 结构化日志及在线热备与沙箱 DR 演练；React 19 + Meta Astryx 前端 SingleLineDiagram.jsx 实现 100% 图模自动排版，GovernanceMultiAgentPanel.jsx 集成统一动态 DAG 任意节点挂起/恢复控制台、多 Worker 进程池、熔断器、TimescaleDB/pgvector 与热备/DR/JSON 日志面板。 Astryx 页面的值班外壳由 main.jsx 与 duty-layout.css 提供。AgentCopilotPane.jsx 维护历史会话、简洁输入和结果证据，非首页工具按需加载。 工单使用数据库版本校验流转，工作台可直接下载源表、查看站内通知和撤销回执。 AgentCopilotPane.jsx 从 SSE 展示查证计划，终审后显示各轮判定和可下载的原表出处。",
-      "output": "FastAPI 单机多进程服务、统一 DAG、SQLite 任务队列及 SSE 续接、存储与运维控制台、Astryx 工作台及本轮企业级 Agent 复审。 PostgreSQL 跨 Pod 共享运行态与演练记录。 8765 对话首页、侧栏和按需加载的值班工具入口。 工单合法流转、并发版本保护、原表证据和撤销记录。 反向有功假设检验面板及诊断单。",
+      "output": "FastAPI 单机多进程服务、统一 DAG、SQLite 任务队列及 SSE 续接、存储与运维控制台、Astryx 工作台及本轮企业级 Agent 复审。 PostgreSQL 跨 Pod 共享运行态与演练记录。 8765 对话首页、侧栏和按需加载的值班工具入口。 工单合法流转、并发版本保护、原表证据和撤销记录。 反向有功假设检验面板及诊断单。 假设检验快捷追问及调压补偿、N-1 跨时段稳健性校核表。",
       "checks": [
         "回放 11 月 13 日 14:00 的 1010 与 1006，核验单投、仅调压与联合候选。验证正常电压下可选单投，以及过补、非整点缺证和不收敛时可停止。",
         "能从值班问题跳到实际证据或待查资料",
@@ -1332,7 +1338,8 @@ footer {margin-top:24px;color:var(--sub);font-size:.86rem}
         "通过两个 API Pod 校验同一任务和熔断状态，终止运行中的 Worker Pod 后，从另一 API 使用 Last-Event-ID 续读。",
         "用桌面和窄屏验证首次打开为问答页，能展开侧栏、进入工单和原图、返回原草稿、发送只读问题、打开原表并恢复历史会话。",
         "用 11 月 10 日 12:00 的 303 柜回放建立隔离工单，验证原表下载、306 柜同期对照、认领、销项、复开、旧版本冲突、模拟订正和撤销回执。",
-        "用工作台快捷问法查看初始断面、三项假设状态和各轮回执，下载 1112.xls 核实 AF16 和 AE16。"
+        "用工作台快捷问法查看初始断面、三项假设状态和各轮回执，下载 1112.xls 核实 AF16 和 AE16。",
+        "复核快捷按钮沿用当前诊断会话，卡片展示工况、电压、首端功率因数、结果及原表出处，兼容缺项和旧回执。"
       ],
       "files": [
         [
@@ -1996,6 +2003,39 @@ footer {margin-top:24px;color:var(--sub);font-size:.86rem}
       ],
       "verified": "全量 15 套自动化验证套件（verify_diagnose、verify_diagnostic_claims、verify_task_alignment、verify_p0_correctness、verify_p1_autonomy_and_ops、verify_reliability_and_contracts、verify_multi_agent_and_governance、verify_unified_dag、verify_enterprise_and_powerflow、verify_rag_and_graph、verify_supplement_and_mcp、verify_multimine_generalization、verify_evaluation、verify_workbench 及 thesis_eval.probe）100% 通过；Vite 生产构建（255ms）通过；两份只读黄金归档库 SHA-256 严格未变。",
       "next": "将双线合并成果提交并推送至 GitHub 远程仓库 MineGrid-Agent (origin/main)，供课题组后续协同实验与论文撰写直接调用。"
+    },
+    {
+      "date": "2026-11-21",
+      "title": "三类异常支持跨轮整点对照，补齐 306 归零与 II 段电压的同窗证据",
+      "stages": [
+        "agent-loop",
+        "context",
+        "review"
+      ],
+      "done": [
+        "二号主变三柜同负、1018 馈线负有功和 306 归零均可按上一轮检验追问整点或柜号。新整点的读数落到日报原格和 SHA-256，检验记录逐点说明异常签名是否出现。",
+        "1113.xls 的 07:00–19:00 有 13 个整点符合 303 单进线带双主变判据，其中 12 个整点 1006、1010 均高于 10.70 kV。303 有功峰值为 15:00 的 5710.12 kW（D19），A 相电流峰值为 18:00 的 100.06 A（C22）。1006、1010 的窗内电压峰值分别为 17:00 的 10.90 kV（Z21）和 10.96 kV（BJ21），窗外仍有 1010 超线读数（BJ4、BJ24）。",
+        "值班对话增加相邻整点快捷追问。调压补偿及 N-1 卡片支持后端返回的逐时校核数据与日报链接。"
+      ],
+      "verified": "指定 Python 环境下 verify_diagnose.py 全部通过。覆盖 11 月 12 日 11:00 和 13:00、11 月 16 日 20:00 的 1023 对照柜、11 月 13 日 06:00 和 20:00，以及 1018 相邻整点签名仍在。verify_workbench.py 和 Vite 生产构建通过。用临时会话库复验工作台重建实例后仍可追问相邻整点，并用样例回执复验按钮、两类逐时表格和缺项兼容。两份只读归档库的 SHA-256 与任务开始时一致。",
+      "next": "现场调取 300 母联同期遥信或 SOE、操作票、保护记录及主变分接头档位，复核实际转供路径和共因。待联合后端提供逐时校核回执后，用真实返回数据复验工作台。"
+    },
+    {
+      "date": "2026-11-21",
+      "title": "完成跨时段潮流包络校核、反事实载流限值 N-1 重仲裁、字符级断言自愈反馈与双线全量联合验收",
+      "stages": [
+        "agent-loop",
+        "model",
+        "graph",
+        "review"
+      ],
+      "done": [
+        "【提升点 A】在 laowadi/reactive_collaboration.py 与 multi_agent.py 新增 evaluate_multi_hour_envelope() 跨时段稳健性潮流包络校核：对 2026-11-13 14:00 选出的「先调 2#主变至 +2 档、再投容」联合方案自动代入当日轻载谷值（07:00，45.83 kW）、重载峰值（11:00，664.34 kW）、母线最高压（17:00，10.90 kV）与双进线方式恢复（20:00）4 个代表性断面跑 pandapower 交流潮流，检出 07:00 轻载无功倒送（-49.39 kvar，leading_feeder_q）与 20:00 切换断面电压越限，自动裁决为 time_of_use_switching_required（不可全天固定投入，须随负荷/运行方式分时投切），并与前端 GovernanceMultiAgentPanel.jsx 的 MultiHourEnvelope 表格无缝对接。",
+        "【方向一 · 多智体反事实重仲裁】升级 laowadi/reactive_collaboration.py 的 n1_transfer_request / n1_revise / n1_arbitrate 与 n1_conflict_record：支持自然语言覆写电缆长期允许安全载流量或热稳定限值（如 160 A），补齐三口径包络完整指标与多整点 N-1 包络；当输入 160 A 安全载流红线时，口径 A（110.78 A，69.24%）通过而口径 C（167.70 A，104.81%）超限，自动触发 CONFLICT-N1-COUNTERFACTUAL-LIMIT 并翻转裁决为 limit_exceeded_under_constraint（须核校 CT 变比并准备限荷/分流预案）；同步更新前端 N1TransferStudy 动态显示实际安全/热稳定限值表头。",
+        "【提升点 C】升级 laowadi/diagnostic_claims.py 的 prepare_claims 错误定位反馈：在不降低任何零幻觉与安全防火墙标准的前提下，精准指出 unbound_number 违规数字片段、multiple_sentences 违规分句标点、unsafe_text 非法方括号（与提示词注入严格隔离，绝不回显恶意指令）及 unknown_citation 无效引用与可用结果编号示例。"
+      ],
+      "verified": "双线合并后全量 15 套自动化验证脚本（verify_diagnose、verify_diagnostic_claims、verify_task_alignment、verify_p0_correctness、verify_p1_autonomy_and_ops、verify_reliability_and_contracts、verify_multi_agent_and_governance、verify_unified_dag、verify_enterprise_and_powerflow、verify_rag_and_graph、verify_supplement_and_mcp、verify_multimine_generalization、verify_evaluation、verify_workbench 及 thesis_eval.probe）100% 零报错通过；Vite 生产构建（257ms）通过；两份只读黄金归档库 SHA-256 严格未变。",
+      "next": "已将双线全部成果提交并推送至 GitHub 远程仓库 MineGrid-Agent (origin/main)；后续可按需接入矿方连续点表或启动论文正文与实测章节撰写。"
     }
   ]
 }

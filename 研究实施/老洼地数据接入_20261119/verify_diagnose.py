@@ -11,6 +11,7 @@ from pathlib import Path
 import sqlite3
 from unittest.mock import patch
 
+from laowadi.context import DiagnosisSession
 from laowadi.diag_tools import DiagnosticToolbox
 from laowadi.hypothesis import execute_reverse_power
 from laowadi.diagnose import (
@@ -22,7 +23,8 @@ from laowadi.llm import ChatClient, LLMError
 from laowadi.monitor import EVENT_DB
 from laowadi.queries import Archive
 from laowadi.standards import load_corpus, search_standards
-from laowadi.storage import DB, ROOT, connect
+from laowadi.storage import DB, ROOT, connect, label_column
+from laowadi.xls import read_rows
 
 
 from laowadi.diagnostic_claims import AUDIT_PROMPT
@@ -271,6 +273,14 @@ def _verify_multiscenario_hypotheses(archive):
                 assert "36.82 kV" in checks["H1"]["judgment"]
                 assert all(value in checks["H2"]["judgment"] for value in ("5710.12 kW", "5699.21 kW", "+10.91 kW"))
                 assert "13/13" in checks["H3"]["judgment"] and "SOE" in checks["H3"]["judgment"]
+                coupling = checks["H3"]["judgment"]
+                assert all(text in coupling for text in ("5710.12 kW", "100.06 A", "12/13", "10.90 kV", "10.96 kV",
+                                                         "窗外", "300 母联", "操作票", "分接头档位"))
+                coupling_cells = {cell for index in checks["H3"]["fact_indices"]
+                                  for cell in report["confirmed_facts"][index]["evidence"]}
+                assert {f"1113.xls / New Sheet1!{cell}" for cell in (
+                    "D19", "C22", "D21", "H21", "G21", "L21", "P21", "Z21", "BJ21", "BJ4", "BJ24",
+                )} <= coupling_cells
             else:
                 assert len(trace["observation_fact_indices"]) == 4
                 assert checks["H1"]["judgment"].count("168/168") == 2
@@ -286,6 +296,85 @@ def _verify_multiscenario_hypotheses(archive):
         assert result["verification"]["status"] == "verified"
     result = diagnose_question(archive, "2026-11-13 306柜为什么连续13小时零有功和零电流？")
     assert result["report"]["hypothesis_trace"]["time"] == "2026-11-13 15:00:00"
+
+
+def _verify_hypothesis_followups(archive):
+    reverse = ("2026年11月12日12:00，2号主变通道306/312/1006有功为负。"
+               "请查证1027反送电、表计异常和母联环流的可能性。")
+    feeder = "1018 馈线全周持续负有功和负功率因数是什么原因？是否二采区反送电？"
+    zero = "2026年11月13日15:00，306柜有功和电流为何归零？"
+    cases = [
+        (reverse, "那换到11:00呢？", "reverse_power_review", "2026-11-12 12:00:00", ["306", "312", "1006"],
+         {"11:00": {"H15": 377.43, "P15": 377.16, "AB15": 363.65}}),
+        (reverse, "同一天13:00还反向吗？", "reverse_power_review", "2026-11-12 12:00:00", ["306", "312", "1006"],
+         {"13:00": {"H17": 1814.33, "P17": 1821.22, "AB17": 1808.41}}),
+        (feeder, "那换到20:00的1023柜呢？", "feeder_polarity_review", "2026-11-16 21:00:00", ["1023"],
+         {"20:00": {"AL24": 10.73, "AM24": 48.18, "AN24": 535.93, "AO24": 0.90}}),
+        (zero.replace("15:00", "07:00"), "那换到06:00呢？", "zero_incomer_review", "2026-11-13 07:00:00",
+         ["303", "306"],
+         {"06:00": {"B10": 36.88, "C10": 48.98, "D10": 2977.38, "F10": 36.36, "G10": 29.59, "H10": 1695.59}}),
+        (zero, "那06:00和20:00呢？", "zero_incomer_review", "2026-11-13 15:00:00", ["303", "306"],
+         {"06:00": {"B10": 36.88, "C10": 48.98, "D10": 2977.38, "F10": 36.36, "G10": 29.59, "H10": 1695.59},
+          "20:00": {"B24": 37.74, "C24": 20.29, "D24": 1148.06, "F24": 36.57, "G24": 5.59, "H24": 123.44}}),
+    ]
+    from laowadi.workbench import SOURCE_DIR
+
+    for question, followup, scenario, prior_at, cabinets, expected in cases:
+        session = DiagnosisSession(archive)
+        first = diagnose_question(archive, question, session=session)
+        first_trace = first["report"]["hypothesis_trace"]
+        assert first["stop_reason"] == "checks_complete" and first["verification"]["status"] == "verified"
+        assert first_trace["signature_present"] is True and first_trace["time"] == prior_at
+        result = diagnose_question(archive, followup, session=session)
+        assert result["status"] == "ok" and result["stop_reason"] == "signature_absent"
+        assert result["tool_calls"] == 1
+        report, verdict = result["report"], result["verification"]
+        trace = report["hypothesis_trace"]
+        comparison = trace["comparison"]
+        day = prior_at[:10]
+        assert trace["scenario"] == scenario and trace["cabinets"] == cabinets
+        assert not trace["checks"] and not trace["pending"]
+        assert result["context_snapshot"]["inherited_anchors"]["days"] == [day]
+        assert result["context_snapshot"]["active_anchors"]["hours"] == list(expected)
+        assert comparison["prior_time"] == prior_at and comparison["prior_signature_present"] is True
+        assert comparison["prior_cabinets"] == first_trace["cabinets"]
+        assert prior_at in comparison["message"] and "观察到异常签名" in comparison["message"]
+        assert "异常签名" in trace["stop_message"] and "未" in trace["stop_message"]
+        assert verdict["status"] == "verified" and verdict["grounded_ratio"] == 1.0
+        assert verdict["verified_values_count"] == verdict["numeric_checks_total"] > 0
+        filename = f"{day[5:7]}{day[8:10]}.xls"
+        raw = (SOURCE_DIR / filename).read_bytes()
+        file_hash = hashlib.sha256(raw).hexdigest()
+        sheet, rows = read_rows(raw)
+        raw_cells = {f"{label_column(col)}{line}": value for line, row in enumerate(rows, 1)
+                     for col, value in enumerate(row, 1)}
+        assert len(comparison["samples"]) == len(expected)
+        for sample, (hour, readings) in zip(comparison["samples"], expected.items()):
+            at = f"{day} {hour}:00"
+            assert sample["time"] == at and sample["signature_present"] is False
+            facts = [report["confirmed_facts"][index] for index in sample["fact_indices"]]
+            assert {cell: raw_cells[cell] for cell in readings} == readings
+            assert {fact["source"]["cell"]: fact["source"]["value"] for fact in facts} == {
+                f"{filename} / {sheet}!{cell}": value for cell, value in readings.items()
+            }
+            assert all(fact["source"]["time"] == at and fact["source"]["sha256"] == file_hash
+                       and fact["source"]["cabinet"] in cabinets and fact["source"]["cell"] in verdict["verified_cells"]
+                       for fact in facts)
+
+    # 1018 stays negative at its neighboring hours. The workbench shortcut should report both samples.
+    session = DiagnosisSession(archive)
+    diagnose_question(archive, feeder, session=session)
+    result = diagnose_question(archive, "那相邻整点呢？", session=session)
+    comparison = result["report"]["hypothesis_trace"]["comparison"]
+    assert result["stop_reason"] == "comparison_complete" and result["verification"]["status"] == "verified"
+    assert [sample["time"] for sample in comparison["samples"]] == ["2026-11-16 20:00:00", "2026-11-16 22:00:00"]
+    assert all(sample["signature_present"] is True for sample in comparison["samples"])
+
+    session = DiagnosisSession(archive)
+    diagnose_question(archive, reverse, session=session)
+    other_topic = diagnose_question(archive, "那11:00的1006柜电压是多少？", session=session)
+    assert other_topic["verification"]["status"] == "verified"
+    assert "hypothesis_trace" not in other_topic["report"]
 
 
 def _verify_offline(archive: Archive) -> dict:
@@ -425,7 +514,6 @@ def _verify_offline(archive: Archive) -> dict:
         return _FakeSSEResponse([b"data: " + payload + b"\n\n", b"data: [DONE]\n\n"])
 
     from tempfile import TemporaryDirectory
-    from laowadi.context import DiagnosisSession
 
     stub_client = ChatClient(base_url="http://127.0.0.1:1/v1", model="stub-deepseek", stream=True, max_retries=0)
     stub_sess = DiagnosisSession(archive)
@@ -524,6 +612,7 @@ def _verify_offline(archive: Archive) -> dict:
 
     _verify_hypothesis_loop(archive)
     _verify_multiscenario_hypotheses(archive)
+    _verify_hypothesis_followups(archive)
 
     # 5. Verify local baseline across all 6 diagnostic cases
     local_results = []
@@ -547,6 +636,7 @@ def _verify_offline(archive: Archive) -> dict:
         "standards_corpus_size": len(corpus),
         "stub_parallel_sse_verified": True,
         "analytics_and_multiturn_verified": True,
+        "hypothesis_followups_and_topology_verified": True,
         "local_baseline_cases": local_results,
     }
 

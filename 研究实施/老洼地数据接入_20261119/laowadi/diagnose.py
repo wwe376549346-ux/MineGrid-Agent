@@ -235,6 +235,7 @@ def diagnose_question(
 
     tier_info = classify_query_tier(effective_question, anchors)
     hypothesis = hypothesis_scope(toolbox, effective_question, anchors)
+    hypothesis_followup = anchors.get("hypothesis_followup")
     if cap_params and hypothesis and hypothesis[0] is not REVERSE_POWER:
         hypothesis = None
     if hypothesis:
@@ -283,6 +284,7 @@ def diagnose_question(
                 archive, toolbox, effective_question, scenario, at, client=eff_client,
                 max_rounds=max_rounds, max_tool_calls=max_tool_calls, emit=emit,
                 fallback_to_local=fallback_to_local, summarize=_summarize_tool_result,
+                prior_turn=prior_turn if hypothesis_followup else None, followup=hypothesis_followup,
             )
             synthesis_rounds = min(max_rounds - planned["rounds"], MAX_SYNTHESIS_ROUNDS)
             if (scenario is not REVERSE_POWER or eff_client is None or planned.get("degraded_from_model")
@@ -347,6 +349,9 @@ def diagnose_question(
                 ver["status"] = "not_applicable"
         else:
             report, ver = finalize_diagnosis(archive, exec_out["report"], trace)
+        hypothesis_trace = report.get("hypothesis_trace") or {}
+        if ver["status"] == "verified" and len(hypothesis_trace.get("observation_times") or []) > 1:
+            report["summary"] = hypothesis_trace["stop_message"]
         if ctx.human_inputs.get("operator_note"):
             report["operator_note"] = str(ctx.human_inputs["operator_note"])[:1000]
         gssc_summary = exec_out.get("gssc_stats") or {"saved_pct": 0.0}

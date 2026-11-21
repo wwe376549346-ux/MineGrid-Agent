@@ -714,11 +714,17 @@ def run_multi_agent_consultation(
             objection = ctx.completed_outputs["reactive:challenge"]
             revision = ctx.completed_outputs["reactive:revise"]
             decision = reactive.arbitrate(profile, frame, proposal, objection, revision)
+            env_trace = []
+            if decision["payload"].get("selected"):
+                env_trace = reactive.evaluate_multi_hour_envelope(
+                    archive, profile, decision, objection["payload"]["policy"],
+                )
             case_facts, arb_trace = reactive.arbitration_evidence(
-                archive, [step for brief in ordered_briefs for step in brief["tool_trace"]], decision,
+                archive, [step for brief in ordered_briefs for step in brief["tool_trace"]] + env_trace, decision,
             )
             if case_facts is None:
                 raise NodeRestricted("reactive_evidence_mismatch", "复算断面与当前日报证据版本不一致。")
+            arb_trace = list(env_trace) + list(arb_trace)
             conflicts.extend(reactive.voltage_conflict_record(decision, objection))
         elif n1_req:
             _, proposal = _reactive_inputs(ctx)
@@ -730,6 +736,7 @@ def run_multi_agent_consultation(
             )
             if case_facts is None:
                 case_facts = []
+            conflicts.extend(reactive.n1_conflict_record(decision, objection))
         for conf in conflicts:
             emit("conflict_detected", conflict=conf)
 

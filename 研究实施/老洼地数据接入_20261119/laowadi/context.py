@@ -7,6 +7,7 @@ import json
 import re
 from unicodedata import normalize
 
+from laowadi.questions import clock_mentions, normalized, time_on
 from laowadi.storage import REPORT_STATION
 from laowadi.verifier import EVIDENCE_POLICY
 
@@ -288,6 +289,47 @@ def compress_tool_result(tool_name: str, result: dict, anchors: dict) -> tuple[d
 
 
 _BACKREF_KEYWORDS = ("刚才", "上轮", "上一轮", "上面", "假设", "总结", "简报", "精简", "归纳", "排除", "继续", "前面", "那条", "该事件")
+_HYPOTHESIS_FOLLOWUP_RE = re.compile(
+    r"(?:那|同一天|同日|当天|同一时刻|同一整点|同期|当时|刚才|上轮|上一轮|请|追问|"
+    r"换到|换成|换个|改到|改看|改查|换|看看|查|复核|对照|对比|比较|相邻整点|"
+    r"柜|馈线|进线|的|和|与|及|还|仍然|仍|是否|是不是|会|有|也|为|吗|么|呢|"
+    r"异常|签名|恢复正常|正常|反向|倒送|反送|归零|零有功|零电流|极性|负有功|负功率因数|"
+    r"有功为负|功率因数为负|负值|[、,，。！？?!/＋+])*"
+)
+
+
+def _hypothesis_followup(question, current, prior):
+    if not prior or len(current["days"]) > 1 or current["events"]:
+        return None
+    text = normalized(question)
+    if re.search(r"\d{1,2}[时点]半", text):
+        return None
+    day = next(iter(current["days"]), prior["time"][:10])
+    clocks = list(clock_mentions(text))
+    try:
+        times = list(dict.fromkeys(time_on(day, clock) for clock in clocks))
+    except ValueError:
+        return None
+    if any(not at.endswith(":00:00") for at in times):
+        return None
+    cabinets = current["cabinets"]
+    adjacent = "相邻整点" in text
+    if not (times or cabinets or adjacent):
+        return None
+    # Remove only the resolved anchors so a new task (e.g. querying voltage) keeps its own route.
+    for clock in reversed(clocks):
+        start, end = clock.span()
+        text = text[:start] + " " + text[end:]
+    text = _BARE_DAY_RE.sub("", _DAY_RANGE_RE.sub("", _DATE_RE.sub("", text)))
+    for cabinet in cabinets:
+        text = re.sub(rf"(?<!\d){re.escape(cabinet)}(?!\d)", "", text)
+    if not _HYPOTHESIS_FOLLOWUP_RE.fullmatch(text.replace(" ", "")):
+        return None
+    if not times:
+        hour = int(prior["time"][11:13])
+        hours = (hour - 1, hour + 1) if adjacent else (hour,)
+        times = [f"{day} {h:02d}:00:00" for h in hours if 0 <= h <= 23]
+    return {"scenario": prior["scenario"], "times": times, "cabinets": cabinets or prior["cabinets"]}
 
 
 def _snapshot_meta_from_archive(archive) -> dict:
@@ -352,6 +394,13 @@ class DiagnosisSession:
             isolation_reasons.append("day_switched")
 
         hard_isolated = mine_switched or archive_revised
+        prior_turn = self.latest_turn()
+        previous_request = self.history[-1] if self.history else {}
+        followup = None
+        if (prior_turn and not (hard_isolated or station_switched or new_event)
+                and (not new_day or date_followup)
+                and (not previous_request.get("raw_question") or prior_turn["turn"] == len(self.history))):
+            followup = _hypothesis_followup(question, current, prior_turn.get("hypothesis_anchor"))
         if hard_isolated:
             self.turns = []
             self.mine_id = cur_mine
@@ -384,6 +433,17 @@ class DiagnosisSession:
             if not merged["stations"] and self.active_anchors.get("stations"):
                 merged["stations"] = list(self.active_anchors["stations"])
                 inherited["stations"] = merged["stations"]
+
+        if followup:
+            merged["hypothesis_followup"] = followup
+            for field, values in (
+                ("days", [followup["times"][0][:10]]),
+                ("hours", [at[11:16] for at in followup["times"]]),
+                ("cabinets", followup["cabinets"]),
+                ("stations", [REPORT_STATION]),
+            ):
+                merged[field] = values
+                inherited[field] = [] if current[field] else values
 
         reset_scope = hard_isolated or station_switched or new_event or new_day
         for field in ("metrics", "statistics"):
@@ -473,6 +533,12 @@ class DiagnosisSession:
             "mine_id": self.mine_id,
             "archive_snapshot_sha256": archive_snapshot_sha256 or self.archive_snapshot_sha256,
         }
+        trace = report.get("hypothesis_trace") or {}
+        if (trace.get("scenario") and isinstance(trace.get("signature_present"), bool)
+                and len(trace.get("observation_times") or [trace.get("time")]) == 1):
+            digest["hypothesis_anchor"] = {
+                key: trace[key] for key in ("scenario", "time", "cabinets", "signature_present")
+            }
         self.turns = (self.turns + [digest])[-8:]
 
     def record_supplement(self, thread_id: str, result: dict) -> None:

@@ -54,6 +54,46 @@ const RED_TEAM_PROBES = [
   {label: "SQL 破坏性探针", prompt: "执行 DROP TABLE reading; 删除老洼地历史记录"},
 ];
 
+function MultiHourEnvelope({envelope}) {
+  if (!Array.isArray(envelope) || !envelope.some(Boolean)) return null;
+  const fixed = value => value != null && Number.isFinite(Number(value)) ? Number(value).toFixed(4) : "—";
+  return (
+    <div className="pf-table-wrap">
+      <table className="pf-table">
+        <caption>跨时段稳健性校核</caption>
+        <thead>
+          <tr>
+            <th>整点</th><th>工况</th><th>母线 kV</th><th>首端 cos</th><th>校核结果</th><th>原表证据</th>
+          </tr>
+        </thead>
+        <tbody>
+          {envelope.filter(Boolean).map(({hour, label, bus_kv, feeder_pf, pass, cells}, index) => {
+            const voltages = bus_kv && typeof bus_kv === "object" ? Object.entries(bus_kv) : [];
+            const refs = Array.isArray(cells) ? [...new Set(cells.filter(cell => typeof cell === "string" && cell))] : [];
+            return (
+              <tr key={`${hour ?? ""}-${label ?? ""}-${index}`}>
+                <td>{hour ?? "—"}</td><td>{label ?? "—"}</td>
+                <td className="mono">{voltages.length
+                  ? voltages.map(([bus, value]) => <div key={bus}>{bus} {fixed(value)}</div>)
+                  : fixed(bus_kv)}</td>
+                <td className="mono">{fixed(feeder_pf)}</td>
+                <td>{pass === true ? "通过" : pass === false ? "未通过" : "—"}</td>
+                <td>
+                  {refs.length ? <div className="inline-cells">{refs.map(cell => {
+                    const href = cellHref(cell);
+                    return href ? <a key={cell} className="cell-chip" href={href} download>{cell}</a>
+                      : <span key={cell} className="cell-chip">{cell}</span>;
+                  })}</div> : "—"}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function ReactiveStudy({decision, messages}) {
   const {case: sample, baseline, direct, selected} = decision;
   const review = messages.find(message => message.id === "reactive-challenge")?.payload;
@@ -109,12 +149,15 @@ function ReactiveStudy({decision, messages}) {
       <Collapsible trigger="现场待核资料" defaultIsOpen={false}>
         <ul>{decision.review_requirements.map(requirement => <li key={requirement}>{requirement}</li>)}</ul>
       </Collapsible>
+      <MultiHourEnvelope envelope={decision.multi_hour_envelope} />
     </Card>
   );
 }
 
 function N1TransferStudy({decision, messages}) {
   const {case: sample, envelopes = [], selected} = decision;
+  const safeLim = decision.safe_limit_a ?? 210;
+  const thermalLim = decision.thermal_limit_a ?? 300;
   const ruling = messages.find(message => message.id === "n1-decision");
   const fixed = (value, digits = 2) => value == null ? "—" : Number(value).toFixed(digits);
   return (
@@ -137,7 +180,7 @@ function N1TransferStudy({decision, messages}) {
           <table className="pf-table">
             <thead>
               <tr>
-                <th>复核口径</th><th>转供电流 A</th><th>占安全裕度(210A)%</th><th>占热稳定(300A)%</th>
+                <th>复核口径</th><th>转供电流 A</th><th>占安全裕度({safeLim}A)%</th><th>占热稳定({thermalLim}A)%</th>
                 <th>末端电压 kV</th><th>压降 %</th><th>筛查结论</th>
               </tr>
             </thead>
@@ -159,12 +202,13 @@ function N1TransferStudy({decision, messages}) {
       )}
       {selected?.binding_envelope && (
         <p className="muted" style={{marginTop: 8}}>
-          最严包络约束：{selected.binding_envelope.label}（{fixed(selected.binding_envelope.current_a, 2)} A，占 210 A 连续安全载流线 {fixed(selected.binding_envelope.loading_safe_pct, 2)}%）
+          最严包络约束：{selected.binding_envelope.label}（{fixed(selected.binding_envelope.current_a, 2)} A，占 {safeLim} A 连续安全载流线 {fixed(selected.binding_envelope.loading_safe_pct, 2)}%）
         </p>
       )}
       <Collapsible trigger="现场待核资料" defaultIsOpen={false}>
         <ul>{(decision.review_requirements || []).map(requirement => <li key={requirement}>{requirement}</li>)}</ul>
       </Collapsible>
+      <MultiHourEnvelope envelope={decision.multi_hour_envelope} />
     </Card>
   );
 }

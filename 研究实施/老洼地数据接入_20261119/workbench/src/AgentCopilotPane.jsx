@@ -491,7 +491,7 @@ const HYPOTHESIS_OUTCOMES = {
   inconclusive: "待进一步查证",
 };
 
-function HypothesisTrace({report}) {
+function HypothesisTrace({report, onCompareAdjacent}) {
   const diagnosis = report.hypothesis_trace;
   if (!diagnosis) return null;
 
@@ -514,7 +514,7 @@ function HypothesisTrace({report}) {
   return <section className="chat-more-panel" aria-label="假设检验记录">
     <div className="chat-subblock">
       <strong>假设检验记录</strong>
-      <small className="muted">{diagnosis.time} · 日报归档整点</small>
+      <small className="muted">{(diagnosis.observation_times || [diagnosis.time]).join(" / ")} · 日报归档整点</small>
       {diagnosis.observation_step && <details>
         <summary>初始观测 · 查询 #{diagnosis.observation_step} · {diagnosis.cabinets.join(" / ")} 柜</summary>
         {evidenceList(diagnosis.observation_fact_indices)}
@@ -545,10 +545,17 @@ function HypothesisTrace({report}) {
       </div>)}
     </div>
     <small className="muted">{diagnosis.stop_message}</small>
+    {diagnosis.stop_reason === "checks_complete" && diagnosis.signature_present === true && onCompareAdjacent && (
+      <div>
+        <button type="button" className="chat-artifact-btn" onClick={onCompareAdjacent}>
+          追问相邻整点对照
+        </button>
+      </div>
+    )}
   </section>;
 }
 
-function AgentTurnMessage({turn, sessionId, health, onSyncCanvas, onOpenCabinet, onReviewsUpdate, onQuickFollowUp}) {
+function AgentTurnMessage({turn, sessionId, health, onSyncCanvas, onOpenCabinet, onReviewsUpdate, onQuickFollowUp, canCompareAdjacent}) {
   const [showMore, setShowMore] = useState(false);
   const [memOpen, setMemOpen] = useState(false);
   const [memSaved, setMemSaved] = useState(false);
@@ -641,7 +648,10 @@ function AgentTurnMessage({turn, sessionId, health, onSyncCanvas, onOpenCabinet,
             </div>
           )}
           <p className="chat-summary">{rep.summary}</p>
-          <HypothesisTrace report={rep} />
+          <HypothesisTrace report={rep}
+            onCompareAdjacent={canCompareAdjacent && res.verification?.status === "verified"
+              ? () => onQuickFollowUp("那相邻整点呢？")
+              : undefined} />
           {claims && Object.entries({
             hypothesis: "候选原因 · 待现场复核", cross_check: "交叉检验", standard: "规程对标",
             gap: "待补证据", followup: "排查建议",
@@ -1496,7 +1506,7 @@ export function AgentCopilotPane({
           </div>
         ) : (
           <div className="duty-thread-column">
-            {turns.map(t => (
+            {turns.map((t, index) => (
               <AgentTurnMessage
                 key={t.id}
                 turn={t}
@@ -1506,6 +1516,7 @@ export function AgentCopilotPane({
                 onOpenCabinet={onOpenCabinet}
                 onReviewsUpdate={onReviewsUpdate}
                 onQuickFollowUp={q => sendQuestion(q)}
+                canCompareAdjacent={!loading && index === turns.length - 1}
               />
             ))}
             {loading && (

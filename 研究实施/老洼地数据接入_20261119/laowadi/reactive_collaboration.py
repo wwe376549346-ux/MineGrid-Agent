@@ -397,6 +397,175 @@ def arbitration_evidence(archive, trace, decision):
     return facts, []
 
 
+def evaluate_multi_hour_envelope(archive, profile, decision, policy):
+    """Cross-hour robustness check of a selected tap/capacitor scheme across valley, peak, and switching hours."""
+    from laowadi.diag_tools import DiagnosticToolbox
+
+    payload = decision["payload"]
+    selected = payload.get("selected")
+    case = payload.get("case") or {}
+    if not selected or case.get("status") != "ok" or not case.get("at_time"):
+        return []
+
+    day = case["at_time"][:10]
+    target = case["cabinet"]
+    voltage_cab = case["voltage_cabinet"]
+    supply_bus = case["supply_bus"]
+    final_state = selected["states"][-1]
+    sel_tap = final_state["tap"]
+    sel_qc = final_state["qc_kvar"]
+
+    load_cabs = {tr.lv_cabinet for tr in profile.transformers}
+    load_cabs.update(f.cabinet for f in profile.feeders if f.downstream_bus_id)
+    bus_cabs = {
+        b.reference_cabinet for b in profile.buses
+        if b.station == profile.primary_station and b.nominal_kv < 20 and b.reference_cabinet
+    }
+    incomers = set(profile.incomer_cabinets())
+    req_cabs = sorted(incomers | load_cabs | bus_cabs)
+    required = {(cab, metric) for cab in incomers for metric in ("Uab", "P", "Ia")}
+    required.update((cab, "P") for cab in load_cabs)
+    required.update((cab, "Uab") for cab in bus_cabs)
+
+    tb = DiagnosticToolbox(archive)
+    args = {
+        "start_time": f"{day} 00:00:00",
+        "end_time": f"{day} 23:00:00",
+        "cabinets": req_cabs,
+        "metrics": ["P", "cos", "Uab", "Ia"],
+    }
+    win = tb.execute("get_window_snapshot", args)
+    frames = win.get("frames") or []
+
+    valid_frames = []
+    for fr in frames:
+        snap = fr.get("readings") or {}
+        if any(not _valid((snap.get(cab) or {}).get(m)) for cab, m in required):
+            continue
+        if any(snap[cab]["Uab"]["value"] <= 0 for cab, m in required if m == "Uab"):
+            continue
+        bad_load = any(
+            snap[cab]["P"]["value"] < 0
+            or (snap[cab]["P"]["value"] > 0 and (
+                not _valid(snap[cab].get("cos")) or not 0 < snap[cab]["cos"]["value"] <= 1
+            ))
+            for cab in load_cabs
+        )
+        if bad_load or snap[target]["P"]["value"] <= 0:
+            continue
+        valid_frames.append(fr)
+
+    if not valid_frames:
+        return []
+
+    picked: list[tuple[str, dict]] = []
+    seen_times: set[str] = set()
+
+    def _add(label: str, fr: dict | None):
+        if fr is None or fr["time"] in seen_times:
+            return
+        seen_times.add(fr["time"])
+        picked.append((label, fr))
+
+    valley = min(valid_frames, key=lambda fr: (fr["readings"][target]["P"]["value"], fr["time"]))
+    peak_v = max(valid_frames, key=lambda fr: (fr["readings"][voltage_cab]["Uab"]["value"], fr["time"]))
+    peak_p = max(valid_frames, key=lambda fr: (fr["readings"][target]["P"]["value"], fr["time"]))
+    # Detect dual-incomer recovery hour (e.g. 306 returns from 0 to >0)
+    recovery = None
+    for idx in range(1, len(valid_frames)):
+        prev_306 = (valid_frames[idx - 1]["readings"].get("306") or {}).get("P", {}).get("value")
+        cur_306 = (valid_frames[idx]["readings"].get("306") or {}).get("P", {}).get("value")
+        if prev_306 is not None and cur_306 is not None and prev_306 == 0 and cur_306 > 0:
+            recovery = valid_frames[idx]
+            break
+    if recovery is None:
+        # Also check pre-outage dual-incomer boundary (e.g. 06:00 before 07:00 outage)
+        for idx in range(len(valid_frames) - 1):
+            cur_306 = (valid_frames[idx]["readings"].get("306") or {}).get("P", {}).get("value")
+            nxt_306 = (valid_frames[idx + 1]["readings"].get("306") or {}).get("P", {}).get("value")
+            if cur_306 is not None and nxt_306 is not None and cur_306 > 0 and nxt_306 == 0:
+                recovery = valid_frames[idx]
+                break
+
+    _add("轻载谷值断面", valley)
+    _add("母线最高压断面", peak_v)
+    _add("重载峰值断面", peak_p)
+    _add("双进线方式切换断面", recovery)
+    picked.sort(key=lambda item: item[1]["time"])
+
+    transformer = next(tr for tr in profile.transformers if tr.id == case["transformer"])
+    base_tap = transformer.calibrated_tap_pos
+
+    envelope_rows = []
+    for label, fr in picked:
+        base_h = _state(profile, fr, case, base_tap, 0.0)
+        cand_h = _state(profile, fr, case, sel_tap, sel_qc)
+        screen_h = _screen(cand_h, base_h, fr, profile, policy, require_pf=False)
+        snap = fr["readings"]
+        cells = [
+            snap[target]["P"]["cell"],
+            snap[target]["cos"]["cell"],
+            snap[voltage_cab]["Uab"]["cell"],
+        ]
+        violations = screen_h["violations"]
+        envelope_rows.append({
+            "hour": fr["time"],
+            "label": label,
+            "is_study_hour": fr["time"] == case["at_time"],
+            "target_p_kw": round(float(snap[target]["P"]["value"]), 2),
+            "measured_uab_kv": round(float(snap[voltage_cab]["Uab"]["value"]), 2),
+            "measured_cos": round(float(snap[target]["cos"]["value"]), 2),
+            "bus_kv": round(float(cand_h["bus_kv"][supply_bus]), 4) if cand_h.get("converged") else None,
+            "projected_bus_kv": (
+                round(float(screen_h["voltage_projection_kv"][supply_bus]), 4)
+                if supply_bus in screen_h["voltage_projection_kv"] else None
+            ),
+            "feeder_pf": round(float(cand_h["feeder_pf"]), 4) if cand_h.get("converged") else None,
+            "feeder_q_kvar": round(float(cand_h["feeder_q_kvar"]), 2) if cand_h.get("converged") else None,
+            "pass": len(violations) == 0,
+            "violations": [v["code"] for v in violations],
+            "cells": cells,
+        })
+
+    failed = [row for row in envelope_rows if not row["pass"]]
+    if failed:
+        reasons = sorted({code for row in failed for code in row["violations"]})
+        reason_zh = "、".join({
+            "leading_feeder_q": "轻载无功倒送（过补）",
+            "voltage_outside_screen": "母线电压越出筛查限值",
+            "modeled_thermal_limit": "模型载流超限",
+            "non_converged": "潮流未收敛",
+        }.get(code, code) for code in reasons)
+        hours_str = "、".join(f'{row["hour"][11:16]}（{row["label"]}）' for row in failed)
+        switching_mode = "time_of_use_switching_required"
+        verdict_text = (
+            f'跨时段包络校核（同日 {len(envelope_rows)} 个代表断面）：固定维持该档位与投容在 {hours_str} '
+            f'触发 {reason_zh}，不可全天固定投入，须随负荷/运行方式分时投切。'
+        )
+    else:
+        switching_mode = "fixed_daily_safe"
+        verdict_text = (
+            f'跨时段包络校核（同日 {len(envelope_rows)} 个代表断面）：轻载谷值、最高压、重载峰值及方式切换断面均通过电压与无功防倒送筛查，'
+            f'模型层支持当日固定档位/投容运行（现场实际投切仍须待铭牌与方式复核）。'
+        )
+
+    payload["multi_hour_envelope"] = envelope_rows
+    payload["envelope_verdict"] = {
+        "day": day,
+        "checked_hours": len(envelope_rows),
+        "passed_hours": len(envelope_rows) - len(failed),
+        "failed_hours": len(failed),
+        "switching_mode": switching_mode,
+        "summary": verdict_text,
+    }
+    decision["content"] = decision["content"].rstrip("。") + "。" + verdict_text
+    return [{"round": 3, "agent": "physics", "tool": "get_window_snapshot", "arguments": args, "result": win}]
+
+
+DEFAULT_N1_SAFE_LIMIT_A = 210.0
+DEFAULT_N1_THERMAL_LIMIT_A = 300.0
+
+
 N1_REVIEW_REQUIREMENTS = [
     "1009 与 1010 下井电缆铭牌型号、截面（mm²）、长度及井筒敷设降容系数",
     "1010 柜电流互感器（CT）变比、两表法/三表法接线与有功计量比例系数核校记录",
@@ -406,23 +575,37 @@ N1_REVIEW_REQUIREMENTS = [
 
 
 def n1_transfer_request(question, hints, profile):
-    """Detect underground dual-circuit N-1 transfer study requests (e.g. 1009 -> 1010)."""
+    """Detect underground dual-circuit N-1 transfer study requests (e.g. 1009 -> 1010) and counterfactual limits."""
     if not re.search(r"N-1|n-1|转供|(?:1009.*退出|1009.*停运)", question):
         return None
     if re.search(r"补偿|电容", question):
         return None
     if any(k in question for k in ("303", "306", "单进线")) and not any(k in question for k in ("1009", "1010", "下井")):
         return None
-    rated_m = re.search(r"(?:额定(?:电流|载流)?|载流量)[^\d]{0,10}(\d{2,4}(?:\.\d+)?)\s*A\b", question, re.I)
-    derate_m = re.search(r"降容[^\d]{0,6}(0\.\d+|1(?:\.\d+)?)", question)
+    safe_m = re.search(
+        r"(?:长期允许(?:安全)?载流(?:量)?|安全载流(?:量|限值|线)?|载流量(?:只有|为|按|限定)?|额定(?:电流|载流)?|电流限值)[^\d]{0,12}(\d{2,4}(?:\.\d+)?)\s*A\b",
+        question,
+        re.I,
+    )
+    thermal_m = re.search(
+        r"(?:热稳定(?:限值|电流|上限)?|最大允许(?:电流|载流))[^\d]{0,12}(\d{2,4}(?:\.\d+)?)\s*A\b",
+        question,
+        re.I,
+    )
+    derate_m = re.search(r"降容(?:系数)?[^\d]{0,8}(0\.\d+|1(?:\.\d+)?)", question)
     time = re.search(r"(?<!\d)\d{1,2}:(\d{2})(?::(\d{2}))?(?!\d)", question)
     non_hourly = bool(time and (time[1] != "00" or time[2] not in (None, "00")))
+    rated_a = float(safe_m.group(1)) if safe_m else None
+    thermal_a = float(thermal_m.group(1)) if thermal_m else None
+    derate = float(derate_m.group(1)) if derate_m else None
     return {
         "outage_cabinet": "1009",
         "receiving_cabinet": "1010",
         "outage_mode": "feeder_1009",
-        "rated_current_a": float(rated_m.group(1)) if rated_m else None,
-        "derating_factor": float(derate_m.group(1)) if derate_m else None,
+        "rated_current_a": rated_a,
+        "thermal_limit_a": thermal_a,
+        "derating_factor": derate,
+        "counterfactual_limit_applied": bool(rated_a is not None or thermal_a is not None or derate is not None),
         "non_hourly": non_hourly,
     }
 
@@ -476,6 +659,33 @@ def n1_telemetry_case(archive, profile, request, hints, scoped_call):
 
     comb_ia, best_time, best_frame, comb_p = max(candidates, key=lambda row: (row[0], row[1]))
     rd = best_frame["readings"]
+    # Pick valley & median/second-peak representative hours for multi-hour N-1 envelope check
+    sorted_by_ia = sorted(candidates, key=lambda row: (row[0], row[1]))
+    rep_samples = []
+    seen_rep = set()
+    for rep_label, row in (
+        ("轻载谷值断面", sorted_by_ia[0]),
+        ("中位负荷断面", sorted_by_ia[len(sorted_by_ia) // 2]),
+        ("重载峰值断面", sorted_by_ia[-1]),
+    ):
+        if row[1] in seen_rep:
+            continue
+        seen_rep.add(row[1])
+        r_rd = row[2]["readings"]
+        rep_samples.append({
+            "hour": row[1],
+            "label": rep_label,
+            "combined_metered_ia_a": row[0],
+            "combined_metered_p_kw": row[3],
+            "bus_voltage_kv": round(float(r_rd["1006"]["Uab"]["value"]), 2),
+            "cells": [
+                r_rd[out_cab]["Ia"]["cell"],
+                r_rd[rec_cab]["Ia"]["cell"],
+                r_rd["1006"]["Uab"]["cell"],
+            ],
+        })
+    rep_samples.sort(key=lambda item: item["hour"])
+
     payload = {
         "status": "ok",
         "at_time": best_time,
@@ -490,6 +700,10 @@ def n1_telemetry_case(archive, profile, request, hints, scoped_call):
         "combined_metered_p_kw": comb_p,
         "metering_scale_status": scale_status,
         "metering_ratio_median": ratio_median,
+        "peak_1010": {"time": best_time, "ia_a": rd[rec_cab]["Ia"]["value"], "cell": rd[rec_cab]["Ia"]["cell"]},
+        "peak_1009": {"time": best_time, "ia_a": rd[out_cab]["Ia"]["value"], "cell": rd[out_cab]["Ia"]["cell"]},
+        "worst_mismatch": {"time": best_time, "ratio": ratio_median, "p_cell": rd[rec_cab]["P"]["cell"]},
+        "representative_hours": rep_samples,
     }
     content = (
         f'{best_time} · {out_cab}+{rec_cab} 双回同期表计电流代数和峰值 {comb_ia:.2f} A'
@@ -583,91 +797,174 @@ def n1_challenge(profile, proposal, policy):
 def n1_revise(profile, proposal, objection, request):
     """PhysicsPowerFlowAgent computes the dual-basis thermal & voltage envelope in response to the challenge."""
     prop = proposal["payload"]
-    rev = objection["payload"]
     case = prop.get("case") or {}
     metered_ia = float(case.get("combined_metered_ia_a") or 0.0)
     sim_ia = float(prop.get("sim_receiving_i_a") or 0.0)
     ratio = float(case.get("metering_ratio_median") or 0.73)
     u_kv = float((case.get("bus_voltage") or {}).get("value") or 10.6)
-    # Re-estimate apparent power & voltage drop under both bases
-    s_powerflow_kva = round(1.7320508 * u_kv * sim_ia / 1000.0 * 1000.0, 2)
+    min_ug_kv = prop.get("min_underground_kv")
+    v_drop_pct = (
+        round((u_kv - float(min_ug_kv)) / max(u_kv, 0.1) * 100.0, 2)
+        if min_ug_kv is not None and u_kv > 0 else None
+    )
+
+    s_powerflow_kva = round(1.7320508 * u_kv * sim_ia, 2)
     s_metered_upper_kva = round(1.7320508 * u_kv * metered_ia, 2)
     scale_corrected_i_a = round(sim_ia / max(ratio, 0.5), 2) if ratio else metered_ia
 
     rated_a = request.get("rated_current_a")
     derate = request.get("derating_factor") or 1.0
-    eff_limit_a = round(rated_a * derate, 2) if rated_a else None
+    eff_limit_a = round(rated_a * derate, 2) if rated_a is not None else None
+    safe_limit_a = eff_limit_a if eff_limit_a is not None else DEFAULT_N1_SAFE_LIMIT_A
+    thermal_limit_a = (
+        round(float(request["thermal_limit_a"]) * derate, 2)
+        if request.get("thermal_limit_a") is not None
+        else max(DEFAULT_N1_THERMAL_LIMIT_A, safe_limit_a)
+    )
+    counterfactual_applied = bool(request.get("counterfactual_limit_applied"))
+
+    def _build_env(basis: str, label: str, current_a: float, s_kva: float, rec_kv, vd_pct):
+        load_safe = round(current_a / max(safe_limit_a, 0.1) * 100.0, 2)
+        load_max = round(current_a / max(thermal_limit_a, 0.1) * 100.0, 2)
+        return {
+            "basis": basis,
+            "label": label,
+            "current_a": current_a,
+            "apparent_power_kva": s_kva,
+            "min_underground_kv": rec_kv,
+            "receiving_kv": rec_kv,
+            "v_drop_pct": vd_pct,
+            "loading_safe_pct": load_safe,
+            "loading_max_pct": load_max,
+            "safe_pass": current_a <= safe_limit_a,
+            "thermal_pass": current_a <= thermal_limit_a,
+            "load_ratio_pct": round(current_a / eff_limit_a * 100.0, 2) if eff_limit_a else None,
+        }
 
     envelopes = [
-        {
-            "basis": "pandapower_active_power_driven",
-            "label": "口径 A：有功驱动平衡三相交流潮流",
-            "current_a": sim_ia,
-            "apparent_power_kva": s_powerflow_kva,
-            "min_underground_kv": prop.get("min_underground_kv"),
-            "load_ratio_pct": round(sim_ia / eff_limit_a * 100.0, 2) if eff_limit_a else None,
-        },
-        {
-            "basis": "metered_current_conservative_upper",
-            "label": "口径 B：表计实测电流代数和保守上限",
-            "current_a": metered_ia,
-            "apparent_power_kva": s_metered_upper_kva,
-            "min_underground_kv": prop.get("min_underground_kv"),
-            "load_ratio_pct": round(metered_ia / eff_limit_a * 100.0, 2) if eff_limit_a else None,
-        },
-        {
-            "basis": "scale_offset_corrected_projection",
-            "label": f"口径 C：计及 {case.get('receiving_cabinet')} 比例系数({ratio})修正折算",
-            "current_a": scale_corrected_i_a,
-            "apparent_power_kva": round(1.7320508 * u_kv * scale_corrected_i_a, 2),
-            "min_underground_kv": prop.get("min_underground_kv"),
-            "load_ratio_pct": round(scale_corrected_i_a / eff_limit_a * 100.0, 2) if eff_limit_a else None,
-        },
+        _build_env(
+            "pandapower_active_power_driven",
+            "口径 A：有功驱动平衡三相交流潮流",
+            sim_ia, s_powerflow_kva, min_ug_kv, v_drop_pct,
+        ),
+        _build_env(
+            "metered_current_conservative_upper",
+            "口径 B：表计实测电流代数和保守上限",
+            metered_ia, s_metered_upper_kva, min_ug_kv, v_drop_pct,
+        ),
+        _build_env(
+            "scale_offset_corrected_projection",
+            f"口径 C：计及 {case.get('receiving_cabinet')} 比例系数({ratio})修正折算",
+            scale_corrected_i_a, round(1.7320508 * u_kv * scale_corrected_i_a, 2), min_ug_kv, v_drop_pct,
+        ),
     ]
+    binding_env = max(envelopes, key=lambda item: item["current_a"])
+    multi_hour_rows = []
+    for rep in case.get("representative_hours") or []:
+        rep_ia = float(rep["combined_metered_ia_a"])
+        multi_hour_rows.append({
+            "hour": rep["hour"],
+            "label": rep["label"],
+            "bus_kv": rep["bus_voltage_kv"],
+            "feeder_pf": None,
+            "combined_metered_ia_a": rep_ia,
+            "loading_safe_pct": round(rep_ia / max(safe_limit_a, 0.1) * 100.0, 2),
+            "pass": rep_ia <= safe_limit_a,
+            "cells": rep["cells"],
+        })
+
     payload = {
         "at_time": case.get("at_time"),
         "envelopes": envelopes,
         "effective_limit_a": eff_limit_a,
+        "safe_limit_a": safe_limit_a,
+        "thermal_limit_a": thermal_limit_a,
+        "counterfactual_limit_applied": counterfactual_applied,
         "conservative_governing_current_a": max(metered_ia, sim_ia),
+        "strictest_envelope_current_a": binding_env["current_a"],
+        "binding_envelope": binding_env,
+        "multi_hour_envelope": multi_hour_rows,
     }
+    limit_note = (
+        f'（按用户给定反事实安全限值 {safe_limit_a:.1f} A 校核，最严口径 {binding_env["current_a"]:.2f} A 占比 {binding_env["loading_safe_pct"]:.2f}%）'
+        if counterfactual_applied else ""
+    )
     return _message(
         "n1-revision", "PhysicsPowerFlowAgent", "SkepticAuditorAgent",
         "counterproposal",
-        f'已按质疑完成三口径复算：潮流口径 {sim_ia:.2f} A vs 表计实测代数和保守上限 {metered_ia:.2f} A vs 比例修正折算 {scale_corrected_i_a:.2f} A。',
+        f'已按质疑完成三口径复算：潮流口径 {sim_ia:.2f} A vs 表计实测代数和保守上限 {metered_ia:.2f} A vs 比例修正折算 {scale_corrected_i_a:.2f} A{limit_note}。',
         payload, proposal, objection,
     )
 
 
 def n1_arbitrate(profile, proposal, objection, revision):
-    """SkepticAuditorAgent arbitrates the dual-basis N-1 envelope and signs off conditional verdict."""
+    """SkepticAuditorAgent arbitrates the dual-basis N-1 envelope and signs off conditional or counterfactual verdict."""
     prop = proposal["payload"]
     rev = objection["payload"]
     recomp = revision["payload"]
     case = prop.get("case") or {}
+    envelopes = recomp.get("envelopes") or []
     gov_i = recomp.get("conservative_governing_current_a")
+    strictest_i = recomp.get("strictest_envelope_current_a") or gov_i
+    binding_env = recomp.get("binding_envelope") or (max(envelopes, key=lambda e: e["current_a"]) if envelopes else None)
     sim_i = prop.get("sim_receiving_i_a")
     min_ug = prop.get("min_underground_kv")
     eff_lim = recomp.get("effective_limit_a")
+    safe_lim = recomp.get("safe_limit_a") or DEFAULT_N1_SAFE_LIMIT_A
+    thermal_lim = recomp.get("thermal_limit_a") or DEFAULT_N1_THERMAL_LIMIT_A
+    counterfactual = bool(recomp.get("counterfactual_limit_applied"))
 
-    if eff_lim:
-        gov_ratio = round(gov_i / eff_lim * 100.0, 2)
-        verdict_str = (
-            f'按输入有效限值 {eff_lim:.1f} A 校核，保守包络负载率 {gov_ratio:.2f}%（{"越限" if gov_ratio > 100 else "满足热稳定条件"}）。'
-        )
+    any_safe_exceeded = any(not env.get("safe_pass", True) for env in envelopes)
+    any_thermal_exceeded = any(not env.get("thermal_pass", True) for env in envelopes)
+    pf_passes = envelopes[0].get("safe_pass", True) if envelopes else True
+
+    constraint_verdict = "pending_field_rating"
+    status = "conditional_candidate" if prop.get("status") == "ok" else prop.get("status", "error")
+    if counterfactual and eff_lim is not None:
+        strictest_ratio = round(strictest_i / max(eff_lim, 0.1) * 100.0, 2)
+        gov_ratio = round(gov_i / max(eff_lim, 0.1) * 100.0, 2)
+        if any_safe_exceeded or any_thermal_exceeded:
+            status = "limit_exceeded_under_constraint"
+            constraint_verdict = "exceeded_require_load_shedding"
+            pf_contrast = (
+                f'单一潮流口径（{sim_i:.2f} A，{round(sim_i / eff_lim * 100.0, 2):.2f}%）虽未触发告警，'
+                if pf_passes else ""
+            )
+            verdict_str = (
+                f'按反事实输入有效安全限值 {eff_lim:.1f} A 校核，{pf_contrast}'
+                f'最严包络口径（{binding_env["label"]}，{strictest_i:.2f} A）负载率已达 {strictest_ratio:.2f}%（超限，表计代数上限占比 {gov_ratio:.2f}%），'
+                f'仲裁否决全负荷盲目单回转供，须先核校 1010 CT 变比并制定非保安负荷限荷/分流预案。'
+            )
+        else:
+            constraint_verdict = "within_counterfactual_limit"
+            verdict_str = (
+                f'按反事实输入有效限值 {eff_lim:.1f} A 校核，表计保守包络占比 {gov_ratio:.2f}%、最严包络占比 {strictest_ratio:.2f}%（均在给定限值内，仍须核验 1200 联络开关与现场铭牌）。'
+            )
     else:
-        verdict_str = "因归档缺失下井电缆真实额定载流量与 1200 联络开关操作票，保留双口径包络区间待 HITL 补证终审。"
+        verdict_str = (
+            f'因归档缺失下井电缆真实额定载流量与 1200 联络开关操作票，按参考连续安全线 {safe_lim:.0f} A 保留三口径包络区间'
+            f'（最严 {strictest_i:.2f} A，占参考线 {round(strictest_i / safe_lim * 100.0, 2):.2f}%）待 HITL 补证终审。'
+        )
 
     statement = (
         f'{case.get("at_time")} 下井双回（{case.get("outage_cabinet")}→{case.get("receiving_cabinet")}）N-1 转供会诊裁决：'
-        f'采纳安规专家质疑，拒绝单一偏低潮流值，确立「三相潮流 {sim_i:.2f} A ～ 表计实测代数和上限 {gov_i:.2f} A」双口径安全校核包络'
+        f'采纳安规专家质疑，拒绝单一偏低潮流值，确立「三相潮流 {sim_i:.2f} A ～ 表计实测代数和上限 {gov_i:.2f} A ～ 比例修正 {strictest_i:.2f} A」三口径安全校核包络'
         f'（井下仿真最低母线电压 {min_ug:.3f} kV）。{verdict_str}'
     )
     decision = {
         "study_kind": "n1_dual_basis_arbitration",
-        "status": "conditional_candidate" if prop.get("status") == "ok" else prop.get("status", "error"),
+        "status": status,
+        "constraint_verdict": constraint_verdict,
+        "counterfactual_limit_applied": counterfactual,
+        "effective_limit_a": eff_lim,
+        "safe_limit_a": safe_lim,
+        "thermal_limit_a": thermal_lim,
         "case": case,
-        "envelopes": recomp.get("envelopes") or [],
+        "envelopes": envelopes,
+        "selected": {"binding_envelope": binding_env} if binding_env else None,
+        "multi_hour_envelope": recomp.get("multi_hour_envelope") or [],
         "governing_current_a": gov_i,
+        "strictest_envelope_current_a": strictest_i,
         "powerflow_current_a": sim_i,
         "min_underground_kv": min_ug,
         "discrepancy_a": rev.get("discrepancy_a"),
@@ -678,6 +975,27 @@ def n1_arbitrate(profile, proposal, objection, revision):
         "n1-decision", "SkepticAuditorAgent", "Consensus",
         "arbitration", statement, decision, objection, revision,
     )
+
+
+def n1_conflict_record(decision, objection):
+    """Emit structured cross-agent conflict when counterfactual limit flips N-1 verdict across bases."""
+    payload = decision["payload"]
+    if not payload.get("counterfactual_limit_applied") or payload.get("status") != "limit_exceeded_under_constraint":
+        return []
+    eff_lim = payload.get("effective_limit_a")
+    sim_i = payload.get("powerflow_current_a")
+    strictest_i = payload.get("strictest_envelope_current_a")
+    return [{
+        "id": "CONFLICT-N1-COUNTERFACTUAL-LIMIT",
+        "severity": "high",
+        "agents_involved": ["TelemetryMeteringAgent", "PhysicsPowerFlowAgent", "StandardsComplianceAgent"],
+        "tension": (
+            f'在用户给定 {eff_lim:.1f} A 反事实安全载流限值下，平衡三相潮流口径（{sim_i:.2f} A）与'
+            f'计及 1010 量测比例偏离的最严包络口径（{strictest_i:.2f} A）结论相反（前者通过、后者超限）。'
+        ),
+        "resolution": decision["content"],
+        "decision_message_id": decision["id"],
+    }]
 
 
 def n1_arbitration_evidence(archive, trace, decision):

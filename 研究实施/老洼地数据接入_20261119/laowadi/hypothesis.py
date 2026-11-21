@@ -24,6 +24,7 @@ ZERO_END = f"{ZERO_DAY} 19:00:00"
 ZERO_BOUNDARIES = (f"{ZERO_DAY} 06:00:00", f"{ZERO_DAY} 20:00:00")
 INCOMERS = ("303", "306")
 TRANSFORMERS = ("311", "312")
+SECONDARY_BUS = ("1006", "1010")
 
 SYSTEM_PROMPT = """你负责逐轮规划老洼地反向有功查证。每轮基于已取得的整点和检验结果，决定下一项最有区分力的查询。
 提交一个 JSON 对象，按候选的 action 原样给出 hypothesis、test、tool 和 arguments。
@@ -64,6 +65,8 @@ ZERO_INCOMER = Scenario("zero_incomer_review", INCOMERS, ("P", "Ia", "Uab"),
                         "该整点进线量测不齐，暂不能检验 306 归零的原因。",
                         "该整点 306 有功与 A 相电流未同时归零，结束本项假设检验。")
 
+SCENARIOS = {scenario.kind: scenario for scenario in (REVERSE_POWER, FEEDER_POLARITY, ZERO_INCOMER)}
+
 
 def _window(start, end, cabinets, metrics):
     return {"start_time": start, "end_time": end, "cabinets": list(cabinets), "metrics": metrics}
@@ -96,10 +99,16 @@ def reverse_power_scope(toolbox, question, anchors):
 
 
 def hypothesis_scope(toolbox, question, anchors):
+    if (toolbox.profile.mine_id != "laowadi" or anchors["events"] or len(anchors["days"]) > 1
+            or "C1535" in anchors["stations"]):
+        return None
+    if followup := anchors.get("hypothesis_followup"):
+        if (len(followup["cabinets"]) <= 12
+                and all(("S35", cabinet) in toolbox.archive.devices for cabinet in followup["cabinets"])):
+            return SCENARIOS[followup["scenario"]], followup["times"][0]
+        return None
     if reverse_at := reverse_power_scope(toolbox, question, anchors):
         return REVERSE_POWER, reverse_at
-    if toolbox.profile.mine_id != "laowadi" or anchors["events"] or len(anchors["days"]) > 1:
-        return None
     text = normalized(question)
     if (re.search(r"\d{1,2}[时点]半|c1535|1535中央变电所", text)
             or not re.search(r"为何|为什么|原因|怎么(?:回事|会|变成|判断)|区分|解释|查证|证伪|诊断|核查|分析|假设|排除|是否|是不是|吗", text)):
@@ -117,7 +126,7 @@ def hypothesis_scope(toolbox, question, anchors):
                 return FEEDER_POLARITY, f"{day} 21:00:00"
             if len(hours) == 1 and next(iter(hours)).endswith(":00:00"):
                 return FEEDER_POLARITY, next(iter(hours))
-        if ("306" in cabinets and cabinets <= {*INCOMERS, *TRANSFORMERS, "300"}
+        if ("306" in cabinets and cabinets <= {*INCOMERS, *TRANSFORMERS, *SECONDARY_BUS, "300"}
                 and (days or clocks) and (not days or days == [ZERO_DAY])
                 and re.search(r"(?:有功|电流|功率|(?<![a-z])(?:p|ia)(?![a-z])).{0,20}(?:0(?!\d)|零)"
                               r"|(?:零|0)(?:有功|电流|功率)|归零|失压|死数|断联|漏报|停电|停运|退出|倒闸|转供|跳闸", text)):
@@ -126,7 +135,7 @@ def hypothesis_scope(toolbox, question, anchors):
                 return ZERO_INCOMER, f"{ZERO_DAY} 15:00:00"
             if len(hours) == 1:
                 at = next(iter(hours))
-                if ZERO_START <= at <= ZERO_END and at.endswith(":00:00"):
+                if at.endswith(":00:00"):
                     return ZERO_INCOMER, at
     except ValueError:
         return None
@@ -246,8 +255,9 @@ def _zero_checks(at):
         ),
         "single_incomer_window": Test(
             "H3", "306 退出后 303 单进线带双主变，可能经 300 母联转供",
-            "核对 07:00–19:00 每个整点的单进线带载模式。母联位置和退出原因须用同期运行记录核实。",
-            SNAPSHOT, _window(ZERO_START, ZERO_END, (*INCOMERS, *TRANSFORMERS), ["P", "Ia"]),
+            "逐点核对 07:00–19:00 的单进线带载，并与 10 kV II 段 1006、1010 同日线电压对照。",
+            SNAPSHOT, _window(f"{ZERO_DAY} 00:00:00", f"{ZERO_DAY} 23:00:00",
+                              (*INCOMERS, *TRANSFORMERS, *SECONDARY_BUS), ["P", "Ia", "Uab"]),
         ),
     }
 
@@ -396,9 +406,50 @@ def _evaluate_zero(archive, toolbox, step, name, at, observation, completed):
     matched = sum(_single_incomer(values, hour, threshold) for hour in hours)
     statement = f'07:00–19:00 有 {matched}/13 个整点符合 306 归零、303 单进线带双主变的量测判据。'
     fact = bind_tool_fact({"statement": statement, "evidence": [f["source"]["cell"] for f in facts]}, step, "frames")
-    return [fact], "insufficient_evidence", (
-        statement + "300 母联实际合位须查同期遥信或 SOE。区分计划检修倒闸与保护跳闸须查操作票和保护动作记录。"
+    evidence = [fact]
+    peaks = []
+    for metric, samples in (("P", [f for f in facts if f["source"]["cabinet"] == "303"]),
+                            ("Ia", _readings(archive, result, hours, ("303",), ["Ia"]))):
+        if len(samples) == len(hours):
+            peak = max(samples, key=lambda f: f["source"]["value"])
+            evidence.append(peak)
+            row = peak["source"]
+            peaks.append(f'{metric} 峰值 {row["value"]:.2f} {row["unit"]}（{row["time"][11:16]}，{row["cell"]}）')
+    if peaks:
+        statement += "归零窗口内 303 " + "、".join(peaks) + "。"
+    voltage_evidence, voltage_statement = _secondary_voltage_overlap(archive, toolbox, step, hours, facts, threshold)
+    evidence.extend(voltage_evidence)
+    return evidence, "insufficient_evidence", (
+        statement + voltage_statement
+        + "实际转供路径须查 300 母联同期遥信或 SOE。区分计划检修倒闸与保护跳闸须查操作票和保护动作记录。"
+        "共同原因须结合两台主变分接头档位及变更记录核实。"
     )
+
+
+def _secondary_voltage_overlap(archive, toolbox, step, window, upstream_facts, threshold):
+    hours = tuple(f"{ZERO_DAY} {hour:02d}:00:00" for hour in range(24))
+    facts = _readings(archive, step["result"], hours, SECONDARY_BUS, ["Uab"])
+    if len(facts) != len(hours) * len(SECONDARY_BUS):
+        return facts, "10 kV II 段同日线电压记录不齐，暂无法完整比较窗内外。"
+    voltage = _values(facts)
+    upstream = _values(upstream_facts)
+    limit = toolbox.profile.voltage_limit_for_kv(10.0).hi_kv
+    overlap = [at for at in window if _single_incomer(upstream, at, threshold)
+               and all(voltage[at, cab, "Uab"] > limit for cab in SECONDARY_BUS)]
+    outside = [f["source"] for f in facts if f["source"]["time"] not in window and f["source"]["value"] > limit]
+    peaks = [max((f["source"] for f in facts if f["source"]["cabinet"] == cab and f["source"]["time"] in window),
+                 key=lambda row: row["value"]) for cab in SECONDARY_BUS]
+    peak_text = "、".join(f'{row["cabinet"]} {row["value"]:.2f} kV（{row["time"][11:16]}，{row["cell"]}）'
+                          for row in peaks)
+    statement = (f'同期 10 kV II 段 1006、1010 均高于 {limit:.2f} kV 且符合单进线带双主变量测判据的整点'
+                 f'有 {len(overlap)}/{len(window)} 个。窗内 Uab 峰值为 {peak_text}。')
+    if outside:
+        outside_text = "、".join(f'{row["time"][11:16]} {row["cabinet"]} {row["value"]:.2f} kV（{row["cell"]}）'
+                                 for row in outside)
+        statement += f'同日窗外仍有超线读数：{outside_text}。'
+    cells = [f["source"]["cell"] for f in facts + upstream_facts]
+    fact = bind_tool_fact({"statement": statement, "evidence": cells}, step, "frames")
+    return [fact], statement + "日报支持上下游在同一窗口重叠，共因仍待复核。"
 
 
 STOP_LABELS = {
@@ -406,7 +457,48 @@ STOP_LABELS = {
     "budget_exhausted": "达到轮次或查询上限，仍有检验待执行。",
     "model_error": "模型服务中断，保留已核对的证据。",
     "invalid_plan": "模型提交的检验超出本轮候选范围，仍有检验待执行。",
+    "comparison_complete": "已完成所问整点的签名对照。",
 }
+
+
+def _has_signature(scenario, at, cabinets, values):
+    if scenario is REVERSE_POWER:
+        return all(values[at, cab, "P"] < 0 for cab in cabinets)
+    if scenario is FEEDER_POLARITY:
+        return any(values[at, cab, metric] < 0 for cab in cabinets for metric in ("P", "cos"))
+    targets = ("306",) if tuple(cabinets) == INCOMERS else cabinets
+    return all(values[at, cab, "P"] == values[at, cab, "Ia"] == 0 for cab in targets)
+
+
+_SIGNATURE_LABELS = {
+    REVERSE_POWER.kind: "所检测点有功均为负值",
+    FEEDER_POLARITY.kind: "存在负有功或负功率因数",
+    ZERO_INCOMER.kind: "目标进线有功与 A 相电流同时归零",
+}
+
+
+def _comparison(scenario, cabinets, samples, prior_turn):
+    prior = (prior_turn or {}).get("hypothesis_anchor") or {}
+    if not samples or prior.get("scenario") != scenario.kind:
+        return None
+    prior_present = prior["signature_present"]
+    reference = f'{prior["time"]}（{"、".join(prior["cabinets"])} 柜）'
+    target = "、".join(cabinets)
+    same_cabinets = set(cabinets) == set(prior["cabinets"])
+    label = _SIGNATURE_LABELS[scenario.kind]
+    prior_label = "观察到" if prior_present else "未观察到"
+    notes = [f'上一轮 {reference}{prior_label}异常签名（{label}）。']
+    for sample in samples:
+        present = sample["signature_present"]
+        if present is None:
+            outcome = "原表量测不齐，无法判断"
+        elif present:
+            outcome = "仍观察到异常签名" if prior_present and same_cabinets else "观察到异常签名"
+        else:
+            outcome = "未再观察到异常签名" if prior_present and same_cabinets else "未观察到异常签名"
+        notes.append(f'{sample["time"]}（{target} 柜）{outcome}。')
+    return {"prior_time": prior["time"], "prior_cabinets": prior["cabinets"],
+            "prior_signature_present": prior_present, "samples": samples, "message": "".join(notes)}
 
 
 def execute_reverse_power(archive, toolbox, question, at, *, client, max_rounds, max_tool_calls,
@@ -418,9 +510,13 @@ def execute_reverse_power(archive, toolbox, question, at, *, client, max_rounds,
 
 
 def execute_hypotheses(archive, toolbox, question, scenario, at, *, client, max_rounds, max_tool_calls,
-                       emit, fallback_to_local, summarize):
+                       emit, fallback_to_local, summarize, prior_turn=None, followup=None):
     trace, facts, records, checks = [], [], [], []
     completed = {}
+    times = followup["times"] if followup else [at]
+    cabinets = tuple(followup["cabinets"]) if followup else scenario.cabinets
+    comparison_only = (len(times) > 1 or cabinets != scenario.cabinets
+                       or scenario is ZERO_INCOMER and not ZERO_START <= at <= ZERO_END)
     if scenario is REVERSE_POWER:
         specs = _checks(at)
         pending = list(specs)[:3]
@@ -432,7 +528,9 @@ def execute_hypotheses(archive, toolbox, question, scenario, at, *, client, max_
     else:
         specs = _zero_checks(at)
         pending = list(specs)
-        missing = ["300 母联及 306 同期遥信、倒闸操作票、SOE 和保护动作记录。", "306 采集质量码、表计通信日志与 PT 回路状态。"]
+        missing = ["300 母联及 306 同期遥信、倒闸操作票、SOE 和保护动作记录。",
+                   "主变分接头档位及变更记录，用于复核 10 kV II 段电压与进线方式是否存在共因。",
+                   "306 采集质量码、表计通信日志与 PT 回路状态。"]
     stop_labels = {**STOP_LABELS, "signature_absent": scenario.signature_absent,
                    "missing_observation": scenario.missing_observation}
     model_failed = False
@@ -450,22 +548,24 @@ def execute_hypotheses(archive, toolbox, question, scenario, at, *, client, max_
 
     round_no = 0
     first = None
+    samples = []
     if max_rounds > 0 and max_tool_calls > 0:
         round_no = 1
-        first = run(SNAPSHOT, _window(at, at, scenario.cabinets, list(scenario.metrics)), round_no)
-        facts.extend(_readings(archive, first["result"], (at,), scenario.cabinets, scenario.metrics))
-        if len(facts) != len(scenario.cabinets) * len(scenario.metrics):
+        first = run(SNAPSHOT, _window(min(times), max(times), cabinets, list(scenario.metrics)), round_no)
+        for sample_at in times:
+            readings = _readings(archive, first["result"], (sample_at,), cabinets, scenario.metrics)
+            present = None
+            if len(readings) == len(cabinets) * len(scenario.metrics):
+                present = _has_signature(scenario, sample_at, cabinets, _values(readings))
+            samples.append({"time": sample_at, "signature_present": present,
+                            "fact_indices": list(range(len(facts), len(facts) + len(readings)))})
+            facts.extend(readings)
+        if any(sample["signature_present"] is None for sample in samples):
             stop = "missing_observation"
-        else:
-            values = _values(facts)
-            if scenario is REVERSE_POWER:
-                signature = all(value < 0 for value in values.values())
-            elif scenario is FEEDER_POLARITY:
-                signature = values[at, FEEDER, "P"] < 0 or values[at, FEEDER, "cos"] < 0
-            else:
-                signature = values[at, "306", "P"] == values[at, "306", "Ia"] == 0
-            if not signature:
-                stop = "signature_absent"
+        elif not any(sample["signature_present"] for sample in samples):
+            stop = "signature_absent"
+        elif comparison_only:
+            stop = "comparison_complete"
     observation_refs = list(range(len(facts)))
     signature_observed = first is not None and stop == "budget_exhausted"
     reflections = 0
@@ -543,18 +643,30 @@ def execute_hypotheses(archive, toolbox, question, scenario, at, *, client, max_
 
     if signature_observed and not pending:
         stop = "checks_complete"
+    stop_message = stop_labels[stop]
+    comparison = _comparison(scenario, cabinets, samples, prior_turn)
+    if comparison:
+        stop_message = comparison["message"]
+        if stop not in {"signature_absent", "comparison_complete", "missing_observation"}:
+            stop_message += stop_labels[stop]
     hypothesis_trace = {
-        "time": at, "cabinets": list(scenario.cabinets), "observation_step": 1 if trace else None,
+        "scenario": scenario.kind, "time": at, "cabinets": list(cabinets), "observation_times": times,
+        "signature_present": samples[0]["signature_present"] if len(samples) == 1 else None,
+        "observation_step": 1 if trace else None,
         "observation_fact_indices": observation_refs, "checks": checks,
         "pending": [
             {"hypothesis": specs[name].hypothesis, "title": specs[name].title, "criterion": specs[name].criterion}
             for name in pending if signature_observed
         ],
-        "stop_reason": stop, "stop_message": stop_labels[stop],
+        "stop_reason": stop, "stop_message": stop_message,
     }
-    if scenario is not REVERSE_POWER:
-        hypothesis_trace["scenario"] = scenario.kind
-    report = {"confirmed_facts": facts, "cited_standards": [], "missing_evidence": missing if signature_observed else [],
+    if comparison:
+        hypothesis_trace["comparison"] = comparison
+    if stop == "missing_observation":
+        missing = [scenario.missing_observation]
+    elif not signature_observed:
+        missing = []
+    report = {"confirmed_facts": facts, "cited_standards": [], "missing_evidence": missing,
               "hypothesis_trace": hypothesis_trace}
     status = "partial" if hypothesis_trace["pending"] or stop == "missing_observation" else "ok"
     output = {"status": status, "stop_reason": stop, "report": report, "tool_trace": trace,
@@ -565,6 +677,6 @@ def execute_hypotheses(archive, toolbox, question, scenario, at, *, client, max_
         report.update(summary=gaps[0], missing_evidence=gaps)
         output.update(status="insufficient_data", task_alignment={
             "kind": scenario.kind, "status": "insufficient_data", "gaps": gaps,
-            "scope": {"days": [at[:10]], "hours": [at[11:16]], "cabinets": list(scenario.cabinets)},
+            "scope": {"days": [at[:10]], "hours": [time[11:16] for time in times], "cabinets": list(cabinets)},
         })
     return output

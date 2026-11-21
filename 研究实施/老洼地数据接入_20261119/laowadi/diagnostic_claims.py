@@ -105,12 +105,18 @@ def prepare_claims(archive, draft, trace, catalog, *, full_diagnosis, prior_repo
             errors.append(_issue(index, "claim_schema", "检查段落类型、文字长度和引用数组。"))
             continue
         stage, body, citations = claim["stage"], claim["text"].strip(), claim["citations"]
-        if re.search(r"[。！？!?；;]", body.rstrip("。！？!?")):
-            errors.append(_issue(index, "multiple_sentences", "每项只写一句，将额外判断拆成独立断言。"))
+        inner_punct = re.findall(r"[。！？!?；;]", body.rstrip("。！？!?"))
+        if inner_punct:
+            punct_list = "、".join(dict.fromkeys(inner_punct))
+            errors.append(_issue(
+                index, "multiple_sentences",
+                f"句中检测到分句标点「{punct_list}」，每项仅限单句，请拆分为独立断言项或改用逗号连接。",
+            ))
             continue
         if len(set(citations)) != len(citations):
             errors.append(_issue(index, "duplicate_citation", "同一句内每条出处只列一次。"))
             continue
+        available_result_ids = sorted(catalog)[:4]
         for position, ref in enumerate(citations, 1):
             if ref in facts or ref in references:
                 continue
@@ -121,17 +127,38 @@ def prepare_claims(archive, draft, trace, catalog, *, full_diagnosis, prior_repo
             elif ref in standards:
                 references[ref] = standard_reference(standards[ref], ref)
             else:
-                errors.append(_issue(index, "unknown_citation", f"引用数组中的第 {position} 项没有本轮有效回执。"))
+                hint = f"（本轮可用工具结果编号示例：{', '.join(available_result_ids)}）" if available_result_ids else ""
+                errors.append(_issue(
+                    index, "unknown_citation",
+                    f"引用数组第 {position} 项「{ref[:60]}」没有本轮有效回执{hint}。",
+                ))
         if errors and errors[-1]["claim_index"] == index:
             continue
         raw_text = _SLOT.sub("", body)
-        if (re.search(r"[\[\]<>\x00-\x1f\x7f]", raw_text)
-                or any(unicodedata.category(ch) == "Cf" for ch in raw_text)
-                or not inspect_prompt_security(raw_text)["allowed"]):
+        sec_chk = inspect_prompt_security(raw_text)
+        if not sec_chk["allowed"] or any(unicodedata.category(ch) == "Cf" for ch in raw_text) or re.search(r"[\x00-\x1f\x7f]", raw_text):
             errors.append(_issue(index, "unsafe_text", "正文仅允许普通诊断句、证据槽位与只读取证建议。"))
             continue
-        if _NUMBER.search(unicodedata.normalize("NFKC", raw_text)):
-            errors.append(_issue(index, "unbound_number", "柜号、时间、条号和读数用相应证据槽位；跨时差值须填 difference。"))
+        bad_brackets = re.findall(r"\[[^\[\]]{0,24}\]|<[^<>]{0,24}>|[\[\]<>]", raw_text)
+        if bad_brackets:
+            shown = "、".join(dict.fromkeys(bad_brackets[:3]))
+            errors.append(_issue(
+                index, "unsafe_text",
+                f"正文含非法括号片段（{shown}），证据槽位仅允许 [[1]]..[[6]] 或 [[delta]]，坐标与 T 编号须放入 citations 数组。",
+            ))
+            continue
+        nfkc_text = unicodedata.normalize("NFKC", raw_text)
+        if _NUMBER.search(nfkc_text):
+            num_tokens = re.findall(
+                r"\d+(?:\.\d+)?|[零〇一二两三四五六七八九十百千万亿]+(?:点[零〇一二三四五六七八九]+)?\s*(?:[%％]|kW|kV|A\b|安培|千瓦|千伏)|百分之",
+                nfkc_text,
+                re.I,
+            )
+            shown_nums = "、".join(dict.fromkeys(t.strip() for t in num_tokens[:4] if t.strip()))
+            errors.append(_issue(
+                index, "unbound_number",
+                f"正文中出现未绑定数字片段（{shown_nums}），柜号、时间、条号和读数须移除手填数字并改用 [[1]] 等证据槽位；跨时差值须填 difference。",
+            ))
             continue
 
         slots = _SLOT.findall(body)

@@ -113,6 +113,31 @@ def verify_workstream3_multi_agent(archive: Archive) -> dict:
     assert n1_msgs["n1-challenge"]["payload"]["challenged"] is True
     assert "n1-challenge" in n1_msgs["n1-revision"]["in_reply_to"]
     assert n1_msgs["n1-decision"]["in_reply_to"] == ["n1-challenge", "n1-revision"]
+    assert len(n1_arb.get("multi_hour_envelope") or []) >= 2
+    assert n1_arb["selected"]["binding_envelope"]["current_a"] >= 159.69
+
+    # 1c. Reactive multi-hour robustness envelope (peak / valley / switching hours on 2026-11-13)
+    reactive_env = res["reactive_arbitration"].get("multi_hour_envelope") or []
+    env_verdict = res["reactive_arbitration"].get("envelope_verdict") or {}
+    assert len(reactive_env) >= 3
+    assert all(row.get("cells") and row.get("hour") and row.get("label") for row in reactive_env)
+    assert env_verdict.get("switching_mode") in ("fixed_daily_safe", "time_of_use_switching_required")
+    assert env_verdict.get("checked_hours") == len(reactive_env)
+
+    # 1d. Counterfactual N-1 safe-limit override (160 A -> flips strictest envelope to exceeded)
+    n1_cf = run_multi_agent_consultation(
+        archive,
+        "如果现场确认 1010 柜电缆长期允许安全载流量只有 160 A，1009 柜退出转供至 1010 柜的 N-1 三个口径结论会怎么变？",
+    )
+    assert n1_cf["status"] == "ok" and n1_cf["verification"]["status"] == "verified"
+    cf_arb = n1_cf["n1_arbitration"]
+    assert cf_arb["counterfactual_limit_applied"] is True
+    assert abs(cf_arb["effective_limit_a"] - 160.0) < 0.01
+    assert cf_arb["status"] == "limit_exceeded_under_constraint"
+    assert cf_arb["constraint_verdict"] == "exceeded_require_load_shedding"
+    assert cf_arb["envelopes"][0]["safe_pass"] is True   # pandapower balanced 110.78 A <= 160 A
+    assert cf_arb["envelopes"][2]["safe_pass"] is False  # scale-corrected > 160 A
+    assert any(c["id"] == "CONFLICT-N1-COUNTERFACTUAL-LIMIT" for c in n1_cf["conflicts_resolved"])
 
     # 2. Single-Agent vs Multi-Agent 4-case comparative benchmark
     bench = evaluate_multi_agent_comparison(archive)
