@@ -17,18 +17,24 @@ Enterprise Capabilities:
 from __future__ import annotations
 
 import asyncio
-from contextlib import suppress
+from contextlib import contextmanager, suppress
+import csv
+from email import policy
+from email.parser import BytesParser
+import fcntl
 from importlib import import_module
 from importlib.metadata import PackageNotFoundError, version
+from io import StringIO
 import json
 import logging
+import math
 from mimetypes import guess_type
 import os
 from pathlib import Path
 import sqlite3
 import time
 from typing import Annotated, Literal
-from urllib.parse import quote, unquote
+from urllib.parse import quote, unquote, urlsplit
 import uuid
 
 import anyio
@@ -41,6 +47,7 @@ from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
 from psycopg import Error as PostgresError
+from pydantic import ValidationError
 
 from laowadi.db.postgres import probe_runtime
 from laowadi.source_files import document_manifest, verified_original
@@ -48,6 +55,12 @@ from laowadi.logging_config import bind_log_context, configure_logging, get_logg
 from laowadi.llm import ChatClient, LLMError
 from laowadi.mine_schema import load_mine_profile
 from laowadi.schemas import (
+    ActionApproveRequest,
+    ActionChecklistRequest,
+    ActionDispatchRequest,
+    ActionDraftRequest,
+    ActionRejectRequest,
+    ActionTicketKind,
     AgentStreamRequest,
     AskRequest,
     CircuitBreakerResetRequest,
@@ -59,6 +72,9 @@ from laowadi.schemas import (
     GraphDemoRequest,
     HealthzResponse,
     JobSubmitRequest,
+    LIVE_CSV_MAX_BYTES,
+    LiveStreamRequest,
+    LiveUploadRequest,
     MemoryCategory,
     MemoryCreateRequest,
     MemoryPatchRequest,
@@ -91,6 +107,7 @@ from laowadi.security import (
     role_allows,
     verify_token,
 )
+from laowadi.storage import METRICS, REPORT_STATION
 from laowadi.task_queue import TERMINAL_STATUSES
 from laowadi.workbench import BUILD, RequestError, Workbench
 
@@ -104,6 +121,9 @@ COMPUTE_RATE_LIMITED_PATHS = {
     "/api/diagnose/stream",
     "/api/agent/stream",
     "/api/deep-research/stream",
+    "/api/live/stream",
+    "/api/live/upload-report",
+    "/api/actions/tickets/draft",
     "/api/sandbox/run",
     "/api/powerflow",
     *READ_ONLY_COMPUTE_PATHS,
@@ -119,6 +139,9 @@ AUDITED_PATHS = {
     "/api/diagnose/stream",
     "/api/agent/stream",
     "/api/deep-research/stream",
+    "/api/live/stream",
+    "/api/live/upload-report",
+    "/api/actions/tickets/draft",
     "/api/memory",
     "/api/sandbox/run",
     "/api/diagnose/reset",
@@ -142,16 +165,104 @@ AUTONOMOUS_EVENT_TYPES = {
 RESEARCH_EVENT_TYPES = {
     "plan_update", "stage_update", "finding", "reasoning_delta", "section_ready", "done", "error",
 }
+LIVE_EVENT_TYPES = {"telemetry_tick", "live_alert", "done", "error"}
 
 
-def _load_optional_runner(module: str, name: str, unavailable: str):
+async def _read_live_csv_upload(request: Request) -> LiveUploadRequest:
+    content_type = request.headers.get("content-type", "")
+    media_type = content_type.partition(";")[0].strip().lower()
+    if media_type not in {"application/json", "text/csv", "text/plain", "multipart/form-data"}:
+        raise RequestError(415, "请提交 CSV 文件或 CSV 文本。")
+    raw = bytearray()
+    async for chunk in request.stream():
+        if len(raw) + len(chunk) > LIVE_CSV_MAX_BYTES + 65536:
+            raise RequestError(413, "CSV 文件最多 2 MiB。")
+        raw.extend(chunk)
+
     try:
-        runner = getattr(import_module(f"laowadi.{module}"), name, None)
+        if media_type == "application/json":
+            upload = LiveUploadRequest.model_validate_json(raw)
+        else:
+            filename = "report.csv"
+            csv_bytes = bytes(raw)
+            if media_type == "multipart/form-data":
+                header = ("Content-Type: " + content_type + "\r\n\r\n").encode("ascii")
+                form = BytesParser(policy=policy.default).parsebytes(header + csv_bytes)
+                parts = [part for part in form.iter_parts()
+                         if part.get_content_disposition() == "form-data"
+                         and part.get_param("name", header="content-disposition") == "file"]
+                if form.defects or len(parts) != 1 or parts[0].is_multipart():
+                    raise RequestError(400, "请在 file 字段上传一份 CSV 文件。")
+                csv_bytes = parts[0].get_payload(decode=True) or b""
+                filename = parts[0].get_filename() or filename
+            if len(csv_bytes) > LIVE_CSV_MAX_BYTES:
+                raise RequestError(413, "CSV 文件最多 2 MiB。")
+            try:
+                csv_text = csv_bytes.decode("utf-8-sig")
+            except UnicodeDecodeError:
+                csv_text = csv_bytes.decode("gb18030")
+            upload = LiveUploadRequest(csv_text=csv_text, filename=filename)
+    except (UnicodeError, ValidationError) as exc:
+        raise RequestError(400, "CSV 文本为空、编码无效或文件元数据超限。") from exc
+    if len(upload.csv_text.encode("utf-8")) > LIVE_CSV_MAX_BYTES:
+        raise RequestError(413, "CSV 文本最多 2 MiB。")
+    filename = upload.filename.replace("\\", "/").rsplit("/", 1)[-1] or "report.csv"
+    csv_text = upload.csv_text.removeprefix("\ufeff")
+    if not csv_text.strip():
+        raise RequestError(400, "CSV 文本不能为空。")
+    return upload.model_copy(update={"csv_text": csv_text, "filename": filename})
+
+
+def _validate_csv_measurements(text: str):
+    """Reject nonfinite readings and impossible timestamps before the sandbox insert."""
+    reader = csv.DictReader(StringIO(text.strip()))
+    measurement_fields = {metric.lower() for metric in METRICS} | {"value"}
+    for line, row in enumerate(reader, start=2):
+        for key, value in row.items():
+            if not key or not value:
+                continue
+            field = key.strip().lower()
+            if field in measurement_fields:
+                try:
+                    finite = math.isfinite(float(value))
+                except ValueError:
+                    continue  # The parser reports its field-specific validation error.
+                if not finite:
+                    raise RequestError(400, f"CSV 第 {line} 行的 {key} 必须是有限数值。")
+            elif field in {"time", "timestamp", "时刻"}:
+                try:
+                    datetime.fromisoformat(value.strip().replace("/", "-"))
+                except ValueError as exc:
+                    raise RequestError(400, f"CSV 第 {line} 行的时间须为有效的完整日期和时刻。") from exc
+            elif field == "station" and value.strip() not in {"", REPORT_STATION}:
+                raise RequestError(400, f"CSV 第 {line} 行站点不属于当前 {REPORT_STATION} 回放范围。")
+
+
+@contextmanager
+def _action_write_lock(db_path: Path):
+    # Serialize the runner's checklist validation and terminal writes across API workers.
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    with db_path.with_suffix(db_path.suffix + ".lock").open("ab") as handle:
+        fcntl.flock(handle, fcntl.LOCK_EX)
+        yield
+
+
+def _load_optional_module(module: str, unavailable: str):
+    try:
+        return import_module(f"laowadi.{module}")
     except ImportError as exc:
         raise RequestError(503, unavailable) from exc
+
+
+def _module_runner(module, name: str, unavailable: str):
+    runner = getattr(module, name, None)
     if not callable(runner):
         raise RequestError(503, unavailable)
     return runner
+
+
+def _load_optional_runner(module: str, name: str, unavailable: str):
+    return _module_runner(_load_optional_module(module, unavailable), name, unavailable)
 
 
 def _security_headers(headers: dict[str, str] | None = None) -> dict[str, str]:
@@ -277,8 +388,12 @@ def create_app(
     local_ports = {str(allowed_port)} if allowed_port else set()
     local_ports.update(port.strip() for port in os.environ.get("LAOWADI_ALLOWED_LOCAL_PORTS", "").split(",") if port.strip())
     max_age_hours = float(os.environ.get("LAOWADI_MAX_DATA_AGE_HOURS", "0"))
-    memory_db_path = workbench.sessions_db.parent / "laowadi_memory.sqlite3"
-    reports_dir = workbench.sessions_db.parent / "deep_reports"
+    runtime_dir = workbench.sessions_db.parent
+    memory_db_path = runtime_dir / "laowadi_memory.sqlite3"
+    reports_dir = runtime_dir / "deep_reports"
+    live_db_path = runtime_dir / "laowadi_live.sqlite3"
+    actions_db_path = runtime_dir / "laowadi_actions.sqlite3"
+    action_webhook_url = os.environ.get("LAOWADI_ACTION_WEBHOOK_URL", "").strip()
 
     app = FastAPI(
         title="老洼地煤矿配电网健康监测与诊断智能体企业级 API",
@@ -338,7 +453,7 @@ def create_app(
                         client=client_host,
                         action=action or "",
                     )
-            if (action or path in AUDITED_PATHS or path.startswith("/api/memory/")
+            if (action or path in AUDITED_PATHS or path.startswith(("/api/memory/", "/api/actions/tickets/"))
                     or path.startswith("/api/deep-research/reports/") or resp.status_code in (401, 403, 429)):
                 workbench.audit_ledger.record(
                     trace_id=trace_id,
@@ -393,9 +508,13 @@ def create_app(
             req_role = {
                 "/api/agent/stream": "dispatcher",
                 "/api/deep-research/stream": "dispatcher",
+                "/api/live/stream": "dispatcher",
+                "/api/live/upload-report": "dispatcher",
                 "/api/memory": "dispatcher",
                 "/api/sandbox/run": "engineer",
             }.get(path, req_role)
+            if path.startswith("/api/actions/tickets/"):
+                req_role = "dispatcher"
         elif method in {"PATCH", "DELETE"} and path.startswith("/api/memory/"):
             req_role = "dispatcher"
         actor = "local-workbench"
@@ -1089,6 +1208,153 @@ def create_app(
         if report_format == "html":
             headers["Content-Security-Policy"] = "default-src 'none'; style-src 'unsafe-inline'; sandbox"
         return Response(content, media_type=mime, headers=headers)
+
+    def live_runner(name: str):
+        return _load_optional_runner("ingest_live", name, "实时监测与增量上传模块暂未就绪。")
+
+    @app.post(
+        "/api/live/upload-report", tags=["Live Monitoring"], status_code=201,
+        openapi_extra={"requestBody": {"required": True, "content": {
+            "application/json": {"schema": LiveUploadRequest.model_json_schema()},
+            "text/csv": {"schema": {"type": "string"}},
+            "multipart/form-data": {"schema": {"type": "object", "required": ["file"], "properties": {
+                "file": {"type": "string", "format": "binary"},
+            }}},
+        }}},
+    )
+    async def api_live_upload(request: Request):
+        ingest = live_runner("ingest_csv_report")
+        upload = await _read_live_csv_upload(request)
+
+        def run():
+            try:
+                _validate_csv_measurements(upload.csv_text)
+                return ingest(upload.csv_text, filename=upload.filename, live_db_path=live_db_path)
+            except csv.Error as exc:
+                raise RequestError(400, "CSV 格式错误或单个字段过长。") from exc
+
+        return await anyio.to_thread.run_sync(run)
+
+    @app.get("/api/live/uploads", tags=["Live Monitoring"])
+    def api_live_uploads():
+        return {"uploads": live_runner("list_live_uploads")(live_db_path=live_db_path)}
+
+    @app.post(
+        "/api/live/stream", tags=["Live Monitoring"], response_class=StreamingResponse,
+        responses={200: {"content": {"text/event-stream": {}}}, 503: {"description": "演练模块暂未就绪"}},
+    )
+    async def api_live_stream(req: LiveStreamRequest):
+        stream = live_runner("stream_live_telemetry")
+
+        def run(emit):
+            with workbench.archive() as archive:
+                try:
+                    stream(
+                        archive, day=req.day.isoformat(), speed_ms=req.speed_ms,
+                        custom_threshold_kv=req.custom_threshold_kv, memory_db_path=memory_db_path,
+                        live_db_path=live_db_path, on_event=emit,
+                    )
+                except ValueError as exc:
+                    emit({"type": "error", "error": str(exc)})
+
+        return _callback_sse_response(run, LIVE_EVENT_TYPES, api_logger, "实时监测演练中断。")
+
+    actions_unavailable = "两票审批模块暂未就绪。"
+
+    def action_runner(name: str):
+        return _load_optional_runner("action_tickets", name, actions_unavailable)
+
+    def display_dispatch(log: dict):
+        target = log.get("target") or ""
+        if target.startswith("https://"):
+            log = {**log, "target": "https://" + (urlsplit(target).hostname or "")}
+        return log
+
+    def display_ticket(ticket: dict):
+        dispatch = ticket.get("dispatch_log") or []
+        if not dispatch:
+            return ticket
+        public_dispatch = [display_dispatch(log) for log in dispatch]
+        replacements = [(raw["target"], public["target"]) for raw, public in zip(dispatch, public_dispatch)
+                        if raw.get("target") != public.get("target")]
+        audit = []
+        for entry in ticket.get("audit_log") or []:
+            detail = entry.get("detail", "")
+            for raw, public in replacements:
+                detail = detail.replace(raw, public)
+            audit.append({**entry, "detail": detail})
+        return {**ticket, "audit_log": audit, "dispatch_log": public_dispatch}
+
+    @app.get("/api/actions/tickets", tags=["Action Tickets"])
+    def api_action_tickets(
+        status: Literal["draft", "approved", "rejected", "dispatched"] | None = None,
+        kind: ActionTicketKind | None = None,
+    ):
+        tickets = action_runner("list_action_tickets")(status=status, kind=kind, db_path=actions_db_path)
+        return {"tickets": [display_ticket(ticket) for ticket in tickets], "webhook_configured": bool(action_webhook_url)}
+
+    @app.post("/api/actions/tickets/draft", tags=["Action Tickets"], status_code=201)
+    def api_action_draft(req: ActionDraftRequest, request: Request):
+        draft = action_runner("draft_action_ticket")
+        with workbench.archive() as archive:
+            ticket = draft(archive, **req.model_dump(), actor=request.state.actor, db_path=actions_db_path)
+        return {"ticket": display_ticket(ticket)}
+
+    def transition_action(name: str, ticket_id: str, actor: str, **fields):
+        module = _load_optional_module("action_tickets", actions_unavailable)
+        transition = _module_runner(module, name, actions_unavailable)
+        conflict = _module_runner(module, "ChecklistIncompleteError", actions_unavailable)
+        with _action_write_lock(actions_db_path):
+            try:
+                if name in {"approve_action_ticket", "dispatch_action_webhook"}:
+                    get_ticket = _module_runner(module, "get_action_ticket", actions_unavailable)
+                    current = get_ticket(ticket_id, db_path=actions_db_path)
+                    if current is None:
+                        raise RequestError(404, "未找到两票记录。")
+                    if name == "approve_action_ticket":
+                        required = [item for item in current["checklist"] if item.get("required")]
+                        if not required or any(not (item.get("checked") and item.get("checked_by") and item.get("checked_at"))
+                                               for item in required):
+                            raise RequestError(409, "请先逐项人工核对并勾选全部必选安全项。")
+                    elif not fields["dry_run"]:
+                        delivered = next((log for log in current["dispatch_log"] if log.get("status") == "delivered"), None)
+                        if delivered:
+                            return {"ticket": current, "dispatch": delivered}
+                        if not action_webhook_url:
+                            raise RequestError(409, "尚未配置正式 Webhook，可先进行通知演练。")
+                        try:
+                            destination = urlsplit(action_webhook_url)
+                            if destination.scheme != "https" or not destination.hostname or destination.username or destination.password:
+                                raise ValueError
+                        except ValueError as exc:
+                            raise RequestError(409, "正式 Webhook 配置须使用有效的 HTTPS 地址。") from exc
+                        fields["webhook_url"] = action_webhook_url
+                updated = transition(ticket_id, actor=actor, db_path=actions_db_path, **fields)
+            except conflict as exc:
+                raise RequestError(409, str(exc)) from exc
+        if updated is None:
+            raise RequestError(404, "未找到两票记录。")
+        return updated
+
+    @app.post("/api/actions/tickets/{ticket_id}/checklist", tags=["Action Tickets"])
+    def api_action_checklist(ticket_id: str, req: ActionChecklistRequest, request: Request):
+        ticket = transition_action("toggle_checklist_item", ticket_id, request.state.actor, **req.model_dump())
+        return {"ticket": display_ticket(ticket)}
+
+    @app.post("/api/actions/tickets/{ticket_id}/approve", tags=["Action Tickets"])
+    def api_action_approve(ticket_id: str, request: Request, req: ActionApproveRequest | None = None):
+        ticket = transition_action("approve_action_ticket", ticket_id, request.state.actor, comment=req.note if req else "")
+        return {"ticket": display_ticket(ticket)}
+
+    @app.post("/api/actions/tickets/{ticket_id}/reject", tags=["Action Tickets"])
+    def api_action_reject(ticket_id: str, req: ActionRejectRequest, request: Request):
+        ticket = transition_action("reject_action_ticket", ticket_id, request.state.actor, reason=req.reason)
+        return {"ticket": display_ticket(ticket)}
+
+    @app.post("/api/actions/tickets/{ticket_id}/dispatch", tags=["Action Tickets"])
+    def api_action_dispatch(ticket_id: str, request: Request, req: ActionDispatchRequest | None = None):
+        result = transition_action("dispatch_action_webhook", ticket_id, request.state.actor, dry_run=req.dry_run if req else True)
+        return {"ticket": display_ticket(result["ticket"]), "dispatch": display_dispatch(result["dispatch"])}
 
     # ── State Graph, Supplement Recalculation & Evaluation ─────────────────────
     @app.get("/api/supplement", tags=["State Graph & Evaluation"])

@@ -30,8 +30,8 @@ MAX_TABLES = 6
 MAX_TABLE_ROWS = 120
 MAX_CHARTS = 4
 MAX_CHART_POINTS = 250
-DEFAULT_TIMEOUT_S = 6.0
-MAX_TIMEOUT_S = 15.0
+DEFAULT_TIMEOUT_S = 8.0
+MAX_TIMEOUT_S = 25.0
 
 ALLOWED_IMPORTS = frozenset({
     "math",
@@ -246,7 +246,7 @@ import traceback
 try:
     import resource
     # Cap CPU time strictly (leave virtual address space unconstrained for numpy/pandapower BLAS)
-    resource.setrlimit(resource.RLIMIT_CPU, (12, 12))
+    resource.setrlimit(resource.RLIMIT_CPU, (25, 25))
 except Exception:
     pass
 

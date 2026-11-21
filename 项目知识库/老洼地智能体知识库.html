@@ -517,10 +517,12 @@ footer {margin-top:24px;color:var(--sub);font-size:.86rem}
       "deps": [
         "data"
       ],
-      "now": "已有四柜历史回放、25 柜整周体检、周期巡检、工单和 Outbox 重试。P1 指定的回调失败恢复场景已复验。复审 23–25 已修复。SQLite 与 PostgreSQL 隔离复验 7 项高优先级发现按 4、3、0 补齐，并发只认领一次。订正确认后待发通知取消，已经发送的保留撤销状态和回执。现场连续采集与实际签收待验。 当前已按高、中优先级分批建单，回放共 14 项。反向有功、1018 持续负值与 306 归零自动挂接本地预证伪；其他发现记录筛查边界及需补的现场资料。 独立巡检脚本已同步到 14 项高、中优先级发现。",
-      "implementation": "monitor.py 负责四柜小时级回放与模拟缺测归档；daily 命令汇总四柜日况；新增 health.py 对全站 25 柜 × 4 指标执行量测物理自洽（P/√3UabIacos）、电能质量（GB/T 12325 电压偏差与 10 kV I/II 段聚类、带载功率因数）、系统运行方式与功率平衡（单进线带双主变、反向有功、SCADA 整点轮询偏移分离）及分时段基线异常聚合，并保留原表单元格证据。 巡检按新建数量限批。通知在数据库内先认领，发送前复验有效状态，重试沿用同一通知编号。 proactive.py 按发现类别调用只读假设检验并核验原表，建单时保存初诊。显式刷新须在当前归档命中同一发现并通过工单版本校验，刷新写入审计日志。 verify_proactive_delivery.py 验证每批最多 4 单，保留通知认领、失败重试、撤销回执、工单版本冲突和旧运行库升级断言。",
-      "output": "四柜七天报告、全站 25 柜四维电气体检报告（Markdown / JSON）、运行编号、事件编号、触发规则、前后读数及源单元格。 巡检补建、通知认领与订正撤销实现及专项回归。 结构化初诊包含采样点证伪、待核假设、原表坐标、待补证据和追问问题。 独立巡检回归与 14 项建单范围一致。",
+      "now": "已有四柜历史回放、25 柜整周体检、周期巡检、工单和 Outbox 重试。P1 指定的回调失败恢复场景已复验。复审 23–25 已修复。SQLite 与 PostgreSQL 隔离复验 7 项高优先级发现按 4、3、0 补齐，并发只认领一次。订正确认后待发通知取消，已经发送的保留撤销状态和回执。现场连续采集与实际签收待验。 当前已按高、中优先级分批建单，回放共 14 项。反向有功、1018 持续负值与 306 归零自动挂接本地预证伪；其他发现记录筛查边界及需补的现场资料。 独立巡检脚本已同步到 14 项高、中优先级发现。 35 kV 站可从只读日报和增量沙盒开展带节奏的回放演练。真实 SCADA 连续接入、时延和现场响应仍待验证。",
+      "implementation": "monitor.py 负责四柜小时级回放与模拟缺测归档；daily 命令汇总四柜日况；新增 health.py 对全站 25 柜 × 4 指标执行量测物理自洽（P/√3UabIacos）、电能质量（GB/T 12325 电压偏差与 10 kV I/II 段聚类、带载功率因数）、系统运行方式与功率平衡（单进线带双主变、反向有功、SCADA 整点轮询偏移分离）及分时段基线异常聚合，并保留原表单元格证据。 巡检按新建数量限批。通知在数据库内先认领，发送前复验有效状态，重试沿用同一通知编号。 proactive.py 按发现类别调用只读假设检验并核验原表，建单时保存初诊。显式刷新须在当前归档命中同一发现并通过工单版本校验，刷新写入审计日志。 verify_proactive_delivery.py 验证每批最多 4 单，保留通知认领、失败重试、撤销回执、工单版本冲突和旧运行库升级断言。 /api/live/upload-report 接收 CSV 文件或文本，检查时刻、站点和有限数值后写入隔离的 laowadi_live.sqlite3。/api/live/stream 逐条发送量测、预诊断告警与完成事件。控制台标明只读归档或增量沙盒来源。",
+      "output": "四柜七天报告、全站 25 柜四维电气体检报告（Markdown / JSON）、运行编号、事件编号、触发规则、前后读数及源单元格。 巡检补建、通知认领与订正撤销实现及专项回归。 结构化初诊包含采样点证伪、待核假设、原表坐标、待补证据和追问问题。 独立巡检回归与 14 项建单范围一致。 两路 SVG 量测趋势、即时越限和负有功提示、上传统计及增量日报历史。",
       "checks": [
+        "回放 11 月 13 日 24 个整点，核对 1006 柜线电压和 303 柜相电流，按 10.65 kV 演练阈值核验告警和原表坐标。",
+        "用标明为验收样例的增量 CSV 验证文件与文本导入、体检提示和增量回放。确认无效时刻、非有限数值和跨站点记录被拦截。",
         "重跑同配置时新增提示为零",
         "模拟缺测与历史事件按运行编号可区分",
         "事件回查能定位源时间和单元格",
@@ -534,6 +536,14 @@ footer {margin-top:24px;color:var(--sub);font-size:.86rem}
         "独立巡检脚本按 4、4、4、2、0 分批验收，核对高、中优先级顺序、14 个去重键和 14 张送达回执。"
       ],
       "files": [
+        [
+          "实时演练与日报导入控制台",
+          "研究实施/老洼地数据接入_20261119/workbench/src/LiveStreamConsole.jsx"
+        ],
+        [
+          "增量接入和演练核心回归",
+          "研究实施/老洼地数据接入_20261119/verify_live_and_actions.py"
+        ],
         [
           "企业级 Agent 复审（66 项）",
           "研究实施/老洼地数据接入_20261119/企业级Agent复审_20261120.md"
@@ -1335,10 +1345,12 @@ footer {margin-top:24px;color:var(--sub);font-size:.86rem}
         "monitor",
         "tools"
       ],
-      "now": "已有事件工单台、通知回执、问答首页和值班工具和 60 条 OpenAPI 路径。复审 26 已修复。工单仅展示合法操作，销项和复开均要求依据，旧版本提交返回 409。代码中业务署名与令牌主体的绑定仍待专项处理。真实班表、交接签认、对象权限、并发状态与目标环境工作台待验。 本轮工作台区分已核验读数、条件计算、待核原因、人工复核备注及待核参考条款。历史会话仍保留原记录，主对话提示重新核验。条件复算单独进入会话记录。 生产 API 和外部 Worker 共用 PostgreSQL 队列、SSE、熔断及工单状态。双节点 kind 在运行中强制删除一只 Worker Pod，另一节点接管，SSE 从原事件号跨 API 续读。 8765 首页改为以问答为主。历史对话、主接线、工单、柜级档案和人工复核从侧栏进入，研究工具默认收起。回复先呈现结论，原表证据可展开，回答完成后保持在对话中。 首页可用三类异常查证入口打开检验。1440 和 390 像素浏览器均已复验检验记录、逐轮查询展开和日报下载。 研究工作台支持两类五步证据交换与质疑仲裁（reactive_collaboration.py）：① 1010 无功补偿与 II 段过压的同点复算（单投、仅调压、先调压再补偿）；② 下井双回 1009→1010 N-1 转供双口径包络仲裁（pandapower 平衡潮流 110.78 A vs 表计代数峰值 159.69 A vs 比例修正包络 167.70 A），并在 GovernanceMultiAgentPanel.jsx 展示三口径包络对比表与角色消息。 最近一轮已核验且完成的假设检验可一键对照相邻整点。调压补偿和 N-1 卡片可显示跨时段校核与原表链接。 工单可查看自动初诊、下载原表、刷新初诊并直接转问答。调压补偿会诊可展示 24 小时离散投切方案。 交流潮流页可按需计算全周分时优化与典型日 6 种动作预算。分时会诊与交流潮流复用电压、投容及馈线无功 SVG 图。 交流潮流页支持按需加载参数灵敏度和信息价值排序。当前 N-1 工况为 1009 退运、1010 受电。 值班问答可以切换自主深度 Agent 和严格审计单，默认进入严格审计单。自主模式已用老洼地全周归档复验，外部 DeepSeek 的同题质量和延迟待测。 值班问答顶部可打开长期记忆，回复可预填排障案例。侧栏提供深度排查，已用老洼地全周归档复验专项报告。",
-      "implementation": "后端已升级为FastAPI + Uvicorn ASGI 单机多进程运行时、统一动态 DAG 编排内核（laowadi/dag_engine.py）、PostgreSQL 16 + TimescaleDB + pgvector 存储与运维保障体系，提供 60 条 OpenAPI 3.1 路径（/docs，含 /api/dag/run|resume|threads、/api/storage/* 与 /api/ops/*）、默认 2×API Worker + 2×独立外部 Job Worker OS 进程水平扩展、持久化外部任务队列与 Last-Event-ID 断点续传 SSE、跨进程共享三态熔断器、标准 NDJSON 结构化日志及在线热备与沙箱 DR 演练；React 19 + Meta Astryx 前端 SingleLineDiagram.jsx 实现 100% 图模自动排版，GovernanceMultiAgentPanel.jsx 集成统一动态 DAG 任意节点挂起/恢复控制台、多 Worker 进程池、熔断器、TimescaleDB/pgvector 与热备/DR/JSON 日志面板。 Astryx 页面的值班外壳由 main.jsx 与 duty-layout.css 提供。AgentCopilotPane.jsx 维护历史会话、简洁输入和结果证据，非首页工具按需加载。 工单使用数据库版本校验流转，工作台可直接下载源表、查看站内通知和撤销回执。 AgentCopilotPane.jsx 从 SSE 展示查证计划，终审后显示各轮判定和可下载的原表出处。 工单刷新使用 revision，冲突返回 409。问答沿用当前会话。GovernanceMultiAgentPanel.jsx 显示越限校核、调档及投切次数、网损节省、动作清单和默认折叠的逐时表。 GET /api/powerflow/weekly-schedule 使用现有只读归档与 viewer 权限。PowerFlowPanel.jsx 在操作员点击后才加载周度数据；DailyScheduleChart.jsx 标出 10.70/9.30 kV、0 kvar 和整点动作，并适配深浅主题。 GET /api/powerflow/sensitivity-voi 经 viewer 权限从只读归档计算。工作台用纯 SVG 展示低值与高值扰动，支持切换 ΔU、ΔI 与 VoI。当前模型仅在目标柜和 N-1 基线均为 1010 时计算可比较的电流偏移。 /api/agent/stream 将同步回调逐条送入异步 SSE，模块未就绪时返回 503。/api/sandbox/run 复用工作台只读归档、共享限流和工程师权限。AgentCopilotPane.jsx 负责两种问答入口，AgentStreamArtifacts.jsx 在回复中呈现计划、思考过程、沙盒结果及核验回执。严格审计单沿用 /api/diagnose/stream 和断点续传。 MemoryPlaybookDrawer.jsx 管理语义红线、排障案例和操作规程。DeepInvestigationView.jsx 显示调查进度、隐患及报告预览，并读取历史报告。/api/memory 和 /api/deep-research/* 沿用工作台身份校验。",
-      "output": "FastAPI 单机多进程服务、统一 DAG、SQLite 任务队列及 SSE 续接、存储与运维控制台、Astryx 工作台及本轮企业级 Agent 复审。 PostgreSQL 跨 Pod 共享运行态与演练记录。 8765 对话首页、侧栏和按需加载的值班工具入口。 工单合法流转、并发版本保护、原表证据和撤销记录。 反向有功假设检验面板及诊断单。 假设检验快捷追问及调压补偿、N-1 跨时段稳健性校核表。 班次工单初诊卡和 24 小时分时投切方案卡。 7 日结果与典型日帕累托表，24 小时电压、投容和无功对比图。 参数灵敏度龙卷风图、待索要现场资料和 VoI 排名表。 自主模式支持逐字回答、折叠代码和日志、查看紧凑表格及散点图、折线图和柱状图。正文显示完整后呈现证据核验徽章。 长期记忆抽屉、六阶段排查驾驶舱、Markdown 和可打印 HTML 报告导出。",
+      "now": "已有事件工单台、通知回执、问答首页和值班工具和 60 条 OpenAPI 路径。复审 26 已修复。工单仅展示合法操作，销项和复开均要求依据，旧版本提交返回 409。代码中业务署名与令牌主体的绑定仍待专项处理。真实班表、交接签认、对象权限、并发状态与目标环境工作台待验。 本轮工作台区分已核验读数、条件计算、待核原因、人工复核备注及待核参考条款。历史会话仍保留原记录，主对话提示重新核验。条件复算单独进入会话记录。 生产 API 和外部 Worker 共用 PostgreSQL 队列、SSE、熔断及工单状态。双节点 kind 在运行中强制删除一只 Worker Pod，另一节点接管，SSE 从原事件号跨 API 续读。 8765 首页改为以问答为主。历史对话、主接线、工单、柜级档案和人工复核从侧栏进入，研究工具默认收起。回复先呈现结论，原表证据可展开，回答完成后保持在对话中。 首页可用三类异常查证入口打开检验。1440 和 390 像素浏览器均已复验检验记录、逐轮查询展开和日报下载。 研究工作台支持两类五步证据交换与质疑仲裁（reactive_collaboration.py）：① 1010 无功补偿与 II 段过压的同点复算（单投、仅调压、先调压再补偿）；② 下井双回 1009→1010 N-1 转供双口径包络仲裁（pandapower 平衡潮流 110.78 A vs 表计代数峰值 159.69 A vs 比例修正包络 167.70 A），并在 GovernanceMultiAgentPanel.jsx 展示三口径包络对比表与角色消息。 最近一轮已核验且完成的假设检验可一键对照相邻整点。调压补偿和 N-1 卡片可显示跨时段校核与原表链接。 工单可查看自动初诊、下载原表、刷新初诊并直接转问答。调压补偿会诊可展示 24 小时离散投切方案。 交流潮流页可按需计算全周分时优化与典型日 6 种动作预算。分时会诊与交流潮流复用电压、投容及馈线无功 SVG 图。 交流潮流页支持按需加载参数灵敏度和信息价值排序。当前 N-1 工况为 1009 退运、1010 受电。 值班问答可以切换自主深度 Agent 和严格审计单，默认进入严格审计单。自主模式已用老洼地全周归档复验，外部 DeepSeek 的同题质量和延迟待测。 值班问答顶部可打开长期记忆，回复可预填排障案例。侧栏提供深度排查，已用老洼地全周归档复验专项报告。 工作台侧栏可打开实时态势与两票审批。预诊断告警和异常工单可起草演练票据，留痕可回查。现场操作依据仍待人工确认。",
+      "implementation": "后端已升级为FastAPI + Uvicorn ASGI 单机多进程运行时、统一动态 DAG 编排内核（laowadi/dag_engine.py）、PostgreSQL 16 + TimescaleDB + pgvector 存储与运维保障体系，提供 60 条 OpenAPI 3.1 路径（/docs，含 /api/dag/run|resume|threads、/api/storage/* 与 /api/ops/*）、默认 2×API Worker + 2×独立外部 Job Worker OS 进程水平扩展、持久化外部任务队列与 Last-Event-ID 断点续传 SSE、跨进程共享三态熔断器、标准 NDJSON 结构化日志及在线热备与沙箱 DR 演练；React 19 + Meta Astryx 前端 SingleLineDiagram.jsx 实现 100% 图模自动排版，GovernanceMultiAgentPanel.jsx 集成统一动态 DAG 任意节点挂起/恢复控制台、多 Worker 进程池、熔断器、TimescaleDB/pgvector 与热备/DR/JSON 日志面板。 Astryx 页面的值班外壳由 main.jsx 与 duty-layout.css 提供。AgentCopilotPane.jsx 维护历史会话、简洁输入和结果证据，非首页工具按需加载。 工单使用数据库版本校验流转，工作台可直接下载源表、查看站内通知和撤销回执。 AgentCopilotPane.jsx 从 SSE 展示查证计划，终审后显示各轮判定和可下载的原表出处。 工单刷新使用 revision，冲突返回 409。问答沿用当前会话。GovernanceMultiAgentPanel.jsx 显示越限校核、调档及投切次数、网损节省、动作清单和默认折叠的逐时表。 GET /api/powerflow/weekly-schedule 使用现有只读归档与 viewer 权限。PowerFlowPanel.jsx 在操作员点击后才加载周度数据；DailyScheduleChart.jsx 标出 10.70/9.30 kV、0 kvar 和整点动作，并适配深浅主题。 GET /api/powerflow/sensitivity-voi 经 viewer 权限从只读归档计算。工作台用纯 SVG 展示低值与高值扰动，支持切换 ΔU、ΔI 与 VoI。当前模型仅在目标柜和 N-1 基线均为 1010 时计算可比较的电流偏移。 /api/agent/stream 将同步回调逐条送入异步 SSE，模块未就绪时返回 503。/api/sandbox/run 复用工作台只读归档、共享限流和工程师权限。AgentCopilotPane.jsx 负责两种问答入口，AgentStreamArtifacts.jsx 在回复中呈现计划、思考过程、沙盒结果及核验回执。严格审计单沿用 /api/diagnose/stream 和断点续传。 MemoryPlaybookDrawer.jsx 管理语义红线、排障案例和操作规程。DeepInvestigationView.jsx 显示调查进度、隐患及报告预览，并读取历史报告。/api/memory 和 /api/deep-research/* 沿用工作台身份校验。 /api/actions/tickets/* 管理操作票、消缺通知单与现场核查单。API 串行处理同一运行库的人工勾选和签发请求，缺必选项返回 409。Webhook 默认本地演练，正式通知地址由服务端配置 LAOWADI_ACTION_WEBHOOK_URL。",
+      "output": "FastAPI 单机多进程服务、统一 DAG、SQLite 任务队列及 SSE 续接、存储与运维控制台、Astryx 工作台及本轮企业级 Agent 复审。 PostgreSQL 跨 Pod 共享运行态与演练记录。 8765 对话首页、侧栏和按需加载的值班工具入口。 工单合法流转、并发版本保护、原表证据和撤销记录。 反向有功假设检验面板及诊断单。 假设检验快捷追问及调压补偿、N-1 跨时段稳健性校核表。 班次工单初诊卡和 24 小时分时投切方案卡。 7 日结果与典型日帕累托表，24 小时电压、投容和无功对比图。 参数灵敏度龙卷风图、待索要现场资料和 VoI 排名表。 自主模式支持逐字回答、折叠代码和日志、查看紧凑表格及散点图、折线图和柱状图。正文显示完整后呈现证据核验徽章。 长期记忆抽屉、六阶段排查驾驶舱、Markdown 和可打印 HTML 报告导出。 两票编号、风险等级、逐项人工复核记录、签发和驳回状态、通知演练及推送回执。",
       "checks": [
+        "从告警和异常工单起草票据，复验必选项未勾全及取消后返回 409、并发签发与取消的状态一致性、批准后的勾选锁定、驳回及通知演练留痕。",
+        "对照告警当时的复算值与操作票核对项，缺少原表、现场铭牌或真实潮流结果时保持待复核。确认模拟签发和通知回执仅用于演练。",
         "从对话打开案例草稿，复验分类、新增、编辑、启停和删除。确认 1006 柜定制电压红线进入专项排查的发现和报告。",
         "复验深度排查模块未就绪的 503、六类 SSE、历史报告、原表索引及 Markdown 和可打印 HTML 下载。",
         "确认自主流首帧在任务完成前抵达，逐条核对八类事件。用全周 1006 柜有功与电压做相关性分析，核对沙盒表格、散点图和核验回执。校验模块缺失、角色权限和沙盒限流。",
@@ -1373,6 +1385,22 @@ footer {margin-top:24px;color:var(--sub);font-size:.86rem}
         "复验三种指标、深浅主题、桌面及窄屏，以及页面打开时不提前请求。"
       ],
       "files": [
+        [
+          "实时回放和两票审批 API",
+          "研究实施/老洼地数据接入_20261119/laowadi/api.py"
+        ],
+        [
+          "两票审批及留痕组件",
+          "研究实施/老洼地数据接入_20261119/workbench/src/ActionApprovalCard.jsx"
+        ],
+        [
+          "异常工单起草入口",
+          "研究实施/老洼地数据接入_20261119/workbench/src/IncidentTicketPanel.jsx"
+        ],
+        [
+          "工作台上传、演练流和两票验收",
+          "研究实施/老洼地数据接入_20261119/verify_workbench.py"
+        ],
         [
           "长期记忆管理抽屉",
           "研究实施/老洼地数据接入_20261119/workbench/src/MemoryPlaybookDrawer.jsx"
@@ -2226,6 +2254,21 @@ footer {margin-top:24px;color:var(--sub);font-size:.86rem}
       ],
       "verified": "全量 18 套自动化验证套件（含 verify_memory_and_deep_research、verify_autonomous_sandbox、verify_workbench 及 thesis_eval.probe）100% 通过；Vite 生产构建（250 ms）、Chromium 1440/390 视口复验与 127.0.0.1:8765 实机联调通过；两份黄金归档库与 9 份原件 SHA-256 严格一致。",
       "next": "推进 Sprint 3（增量日报导入与实时演练流 ingest_live.py + 标准化两票起草与人工逐项审批 action_tickets.py + 实时控制台与两票审批 UI）。"
+    },
+    {
+      "date": "2026-11-22",
+      "title": "Sprint 3 实时态势演练、增量日报导入与标准化两票审批闭环（7 大 Agent 能力全线收官）",
+      "stages": [
+        "monitor",
+        "review"
+      ],
+      "done": [
+        "新增增量 CSV 日报沙盒导入与实时遥测演练流引擎（laowadi/ingest_live.py，隔离库 local/laowadi_live.sqlite3），兼容长/宽表自动体检并支持归档/增量日逐时推流、定制红线预警与即时 pandapower 预诊断告警。",
+        "新增标准化工业两票起草与人工逐项审批状态机（laowadi/action_tickets.py，隔离库 local/laowadi_actions.sqlite3），支持电气倒闸操作票草案、二次缺陷消缺单与现场台账补录单，动态嵌入同刻潮流复算电压并强制校验必填安全前置项未勾全禁止签发（HTTP 409）。",
+        "新增 /api/live/* 与 /api/actions/tickets/* 系列端点（OpenAPI 79 路径）、前端 LiveStreamConsole.jsx / ActionApprovalCard.jsx 实时态势与两票审批工作台及 IncidentTicketPanel 一键起草两票联动，同步更新 README.md 与 CI 19 套门禁。"
+      ],
+      "verified": "全量 19 套自动化验证套件（含 verify_live_and_actions、verify_memory_and_deep_research、verify_autonomous_sandbox、verify_workbench 及 thesis_eval.probe）100% 通过；Vite 生产构建（260 ms）、Chromium 1440/390 视口复验与 127.0.0.1:8765 实机联调通过；两份黄金归档库与 9 份原件 SHA-256 严格一致。",
+      "next": "MineGrid-Agent 7 大专业 Agent 能力体系（自主大脑、Python 分析沙盒、流式 Generative UI、三层长期记忆、6 阶段深度专项排查、实时演练/增量导入、两票人工审批闭环）已全线验收上线；后续可按需接入真实连续 SCADA 生产流与开展现场操作票联调。"
     }
   ]
 }

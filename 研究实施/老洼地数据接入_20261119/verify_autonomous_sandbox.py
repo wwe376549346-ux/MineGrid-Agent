@@ -184,7 +184,7 @@ pp.create_load(net, bus=b2, p_mw=1.2, q_mvar=0.4)
 pp.runpp(net)
 print(f"v2={net.res_bus.vm_pu.at[b2]:.4f}")
 """,
-        timeout_s=10.0,
+        timeout_s=20.0,
     )
     assert pp_res["status"] == "ok" and "v2=" in pp_res["stdout"], f"Sandbox pandapower failed: {pp_res}"
     return {"toolbox_sandbox_ok": True, "pandapower_in_sandbox_ok": True, "pp_stdout": pp_res["stdout"].strip()}

@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
 import hashlib
 from http.server import ThreadingHTTPServer
 from importlib import import_module
 import json
 import math
+import os
 from pathlib import Path
 import sys
 import time
@@ -330,6 +332,151 @@ def verify_memory_and_research_endpoints(workbench: Workbench) -> dict:
     return coverage
 
 
+def verify_live_and_action_endpoints(workbench: Workbench) -> dict:
+    upload_path = "/api/live/upload-report"
+    uploads_path = "/api/live/uploads"
+    stream_path = "/api/live/stream"
+    tickets_path = "/api/actions/tickets"
+    draft_path = tickets_path + "/draft"
+    missing_ticket = tickets_path + "/ACT-MISSING"
+    dispatcher = {"Authorization": f"Bearer {issue_token('workbench-approver', 'dispatcher')['access_token']}"}
+    viewer = {"Authorization": f"Bearer {issue_token('workbench-viewer', 'viewer')['access_token']}"}
+    csv_text = (
+        "time,cabinet,Uab,Ia,P,cos\n"
+        "2026-11-17 10:00:00,1006,10.86,55,220,0.94\n"
+        "2026-11-17 10:00:00,303,35.6,100,4431,0.97\n"
+        "2026-11-17 11:00:00,1006,10.74,56,-30,0.96\n"
+    )
+    upload = {"csv_text": csv_text, "filename": "增量日报.csv"}
+    draft = {"kind": "switching_order", "target_cabinet": "1006", "at_time": "2026-11-13T17:00"}
+    replay = {"day": "2026-11-17", "speed_ms": 0, "custom_threshold_kv": 10.65}
+    config_url = "https://notifications.example.invalid/private-path-token"
+    # The formal dispatch test captures the request at the runner boundary, with no network access.
+    with patch.dict(os.environ, {"LAOWADI_ACTION_WEBHOOK_URL": config_url}):
+        app = create_app(workbench, require_auth=True)
+
+    coverage = {}
+    with TestClient(app) as client:
+        with patch.dict(sys.modules, {"laowadi.ingest_live": None, "laowadi.action_tickets": None}):
+            assert client.post(upload_path, headers=dispatcher, json=upload).status_code == 503
+            assert client.get(uploads_path, headers=viewer).status_code == 503
+            assert client.post(stream_path, headers=dispatcher, json=replay).status_code == 503
+            assert client.get(tickets_path, headers=viewer).status_code == 503
+            assert client.post(draft_path, headers=dispatcher, json=draft).status_code == 503
+            for action, body in (("checklist", {"item_id": "chk_1", "checked": True}), ("approve", {}),
+                                 ("reject", {"reason": "验收"}), ("dispatch", {"dry_run": True})):
+                assert client.post(f"{missing_ticket}/{action}", headers=dispatcher, json=body).status_code == 503
+
+        assert client.post(upload_path, headers=viewer, json=upload).status_code == 403
+        assert client.post(draft_path, headers=viewer, json=draft).status_code == 403
+        assert client.post(stream_path, headers=dispatcher, json={**replay, "day": "2026-11-31"}).status_code == 400
+
+        history = client.get(uploads_path, headers=viewer)
+        if history.status_code == 503:
+            coverage["live"] = "503 (runner unavailable)"
+        else:
+            assert history.status_code == 200 and history.json()["uploads"] == []
+            wrong_station = "\n".join(f"{line},{'station' if idx == 0 else 'U1535'}"
+                                      for idx, line in enumerate(csv_text.splitlines()))
+            for invalid in (csv_text.replace("10.86", "inf"), csv_text.replace("2026-11-17", "2026-11-31"), wrong_station):
+                assert client.post(upload_path, headers=dispatcher, json={**upload, "csv_text": invalid}).status_code == 400
+            assert client.get(uploads_path, headers=viewer).json()["uploads"] == []
+            text_response = client.post(upload_path, headers=dispatcher, json=upload)
+            assert text_response.status_code == 201, text_response.text
+            uploaded = text_response.json()
+            assert uploaded["row_count"] == 12 and uploaded["cabinet_count"] == 2
+            assert {"overvoltage", "reverse_power"} <= {finding["kind"] for finding in uploaded["findings"]}
+            file_response = client.post(upload_path, headers=dispatcher, files={
+                "file": ("下一日.csv", csv_text.replace("2026-11-17", "2026-11-18").encode("utf-8-sig"), "text/csv")
+            })
+            assert file_response.status_code == 201, file_response.text
+            assert file_response.json()["filename"] == "下一日.csv" and file_response.json()["day"] == "2026-11-18"
+            recorded = client.get(uploads_path, headers=viewer).json()["uploads"]
+            assert {row["upload_id"] for row in recorded} == {uploaded["upload_id"], file_response.json()["upload_id"]}
+            for day, source, count in (("2026-11-17", "live_upload", 2), ("2026-11-13", "archive", 24)):
+                streamed = client.post(stream_path, headers=dispatcher, json={**replay, "day": day})
+                assert streamed.status_code == 200 and streamed.headers["content-type"].startswith("text/event-stream")
+                assert streamed.headers["x-accel-buffering"] == "no"
+                events = decode_named_events(streamed.text)
+                ticks = [event for event in events if event["type"] == "telemetry_tick"]
+                assert len(ticks) == count and all(tick["source"] == source for tick in ticks)
+                assert ticks[0]["threshold_kv"] == 10.65 and ticks[0]["metrics"]["u_1006_kv"] is not None
+                assert any(event["type"] == "live_alert" and event["alert"]["kind"] == "overvoltage" for event in events)
+                assert events[-1]["type"] == "done" and events[-1]["result"]["ticks_emitted"] == count
+                if source == "archive":
+                    assert any(event.get("alert", {}).get("evidence_cell") for event in events)
+            coverage["live"] = {"upload_formats": ["text", "multipart"], "replay_ticks": [2, 24]}
+
+        listed = client.get(tickets_path, headers=viewer)
+        if listed.status_code == 503:
+            coverage["actions"] = "503 (runner unavailable)"
+            return coverage
+        assert listed.status_code == 200 and listed.json()["tickets"] == []
+        created = client.post(draft_path, headers=dispatcher, json=draft)
+        assert created.status_code == 201, created.text
+        ticket = created.json()["ticket"]
+        assert ticket["risk_level"] == "high" and ticket["evidence_cells"]
+        path = f"{tickets_path}/{ticket['ticket_id']}"
+        required = [item["id"] for item in ticket["checklist"] if item["required"]]
+        assert len(required) >= 2 and not ticket["checklist_progress"]["ready_to_approve"]
+        assert client.post(path + "/approve", headers=dispatcher).status_code == 409
+        assert client.post(path + "/dispatch", headers=dispatcher).status_code == 409
+        assert client.post(path + "/checklist", headers=viewer, json={"item_id": required[0], "checked": True}).status_code == 403
+
+        def check_item(ticket_path, item_id, checked=True):
+            return client.post(ticket_path + "/checklist", headers=dispatcher, json={"item_id": item_id, "checked": checked})
+
+        for item_id in required:
+            changed = check_item(path, item_id)
+            assert changed.status_code == 200, changed.text
+        unchecked = check_item(path, required[0], False).json()["ticket"]
+        assert not unchecked["checklist_progress"]["ready_to_approve"]
+        assert client.post(path + "/approve", headers=dispatcher, json={}).status_code == 409
+        assert check_item(path, required[0]).status_code == 200
+        approved = client.post(path + "/approve", headers=dispatcher, json={"note": "只读演练逐项核验"}).json()["ticket"]
+        assert approved["status"] == "approved" and approved["approved_by"] == "workbench-approver"
+        assert check_item(path, required[0], False).status_code == 409
+        exercise = client.post(path + "/dispatch", headers=dispatcher, json={"dry_run": True})
+        assert exercise.status_code == 200 and exercise.json()["dispatch"]["status"] == "dry_run_recorded"
+
+        with patch("laowadi.action_tickets.urllib.request.urlopen") as sender:
+            sender.return_value.__enter__.return_value.status = 202
+            for _ in range(2):
+                pushed = client.post(path + "/dispatch", headers=dispatcher, json={"dry_run": False})
+                assert pushed.status_code == 200 and pushed.json()["dispatch"]["status"] == "delivered"
+                assert "private-path-token" not in pushed.text
+            sender.assert_called_once()
+            sent_request = sender.call_args.args[0]
+            assert sent_request.full_url == config_url and json.loads(sent_request.data)["advisory_only"] is True
+        assert "private-path-token" not in client.get(tickets_path, headers=viewer).text
+
+        defect = client.post(draft_path, headers=dispatcher, json={**draft, "kind": "defect_notice"})
+        defect_path = tickets_path + "/" + defect.json()["ticket"]["ticket_id"]
+        rejected = client.post(defect_path + "/reject", headers=dispatcher, json={"reason": "现场记录待补"})
+        assert rejected.status_code == 200 and rejected.json()["ticket"]["audit_log"][-1]["detail"] == "现场记录待补"
+        assert client.post(defect_path + "/approve", headers=dispatcher).status_code == 409
+        assert client.post(missing_ticket + "/approve", headers=dispatcher).status_code == 404
+
+        field = client.post(draft_path, headers=dispatcher, json={**draft, "kind": "field_verification"}).json()["ticket"]
+        field_path = tickets_path + "/" + field["ticket_id"]
+        for item in field["checklist"]:
+            assert check_item(field_path, item["id"]).status_code == 200
+        barrier = threading.Barrier(2)
+
+        def race(request):
+            barrier.wait(timeout=5)
+            return request().status_code
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            sign = pool.submit(race, lambda: client.post(field_path + "/approve", headers=dispatcher))
+            uncheck = pool.submit(race, lambda: check_item(field_path, field["checklist"][0]["id"], False))
+            assert sorted([sign.result(timeout=10), uncheck.result(timeout=10)]) == [200, 409]
+        persisted = client.get(tickets_path, headers=viewer, params={"kind": "field_verification"}).json()["tickets"][0]
+        assert (persisted["status"] == "approved") == persisted["checklist_progress"]["ready_to_approve"]
+        coverage["actions"] = {"kinds": 3, "checklist_gate": 409, "dispatch": ["dry_run", "mocked_https"]}
+    return coverage
+
+
 def main():
     db_before = sha256(DB)
     ev_before = sha256(EVENT_DB)
@@ -368,6 +515,7 @@ def main():
             sensitivity = verify_sensitivity_voi(server.app)
             autonomous_endpoints = verify_autonomous_endpoints(server.app)
             research_endpoints = verify_memory_and_research_endpoints(server.app)
+            live_action_endpoints = verify_live_and_action_endpoints(server.app)
 
             # 2. /api/dates
             dates = fetch_json(base, "/api/dates")
@@ -652,6 +800,7 @@ def main():
                 "sensitivity_voi_items_verified": len(sensitivity["voi_ranking"]),
                 "autonomous_endpoints": autonomous_endpoints,
                 "research_endpoints": research_endpoints,
+                "live_action_endpoints": live_action_endpoints,
                 "cabinets_cards": len(health["cabinets_cards"]),
                 "diagrams_verified": len(diagrams),
                 "review_feedback_loop_verified": True,

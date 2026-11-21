@@ -14,6 +14,7 @@ import {
   Moon,
   PanelLeftClose,
   PanelLeftOpen,
+  Radio,
   Search,
   ShieldCheck,
   Sun,
@@ -39,6 +40,7 @@ const MemoryPlaybookDrawer = lazy(() => import("./MemoryPlaybookDrawer.jsx").the
 const GovernanceMultiAgentPanel = lazy(() => import("./GovernanceMultiAgentPanel.jsx").then(module => ({default: module.GovernanceMultiAgentPanel})));
 const HealthView = lazy(() => import("./HealthView.jsx").then(module => ({default: module.HealthView})));
 const IncidentTicketPanel = lazy(() => import("./IncidentTicketPanel.jsx").then(module => ({default: module.IncidentTicketPanel})));
+const LiveStreamConsole = lazy(() => import("./LiveStreamConsole.jsx").then(module => ({default: module.LiveStreamConsole})));
 const PowerFlowPanel = lazy(() => import("./PowerFlowPanel.jsx").then(module => ({default: module.PowerFlowPanel})));
 const ReplayView = lazy(() => import("./ReplayView.jsx").then(module => ({default: module.ReplayView})));
 const SupplementEvalView = lazy(() => import("./SupplementEvalView.jsx").then(module => ({default: module.SupplementEvalView})));
@@ -48,6 +50,7 @@ const DUTY_TABS = [
   {id: "tickets", Icon: ClipboardCheck, label: "事件工单"},
   {id: "cabinet", Icon: Activity, label: "柜级档案"},
   {id: "deep-research", Icon: Search, label: "深度排查"},
+  {id: "live-ops", Icon: Radio, label: "实时态势与两票审批"},
 ];
 
 const RESEARCH_TABS = [
@@ -78,6 +81,7 @@ function App() {
   const [pendingQuestion, setPendingQuestion] = useState("");
   const [memoryPlaybook, setMemoryPlaybook] = useState(null);
   const [researchVisited, setResearchVisited] = useState(false);
+  const [openedActionTicket, setOpenedActionTicket] = useState(null);
 
   useEffect(() => {
     document.documentElement.dataset.theme = darkMode ? "dark" : "light";
@@ -166,6 +170,17 @@ function App() {
 
   function handleReviewsUpdate(nextReviews) {
     setHealth(curr => (curr ? {...curr, reviews: nextReviews} : curr));
+  }
+
+  async function openActionDraft(fields) {
+    const {ticket} = await apiRequest("/api/actions/tickets/draft", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(fields),
+    });
+    setOpenedActionTicket(ticket);
+    setCanvasTab("live-ops");
+    finishNavigation();
   }
 
   const activeTab = ALL_TABS.find(tab => tab.id === canvasTab);
@@ -262,7 +277,7 @@ function App() {
         </>}
       />
 
-      {activeTab && canvasTab !== "deep-research" && <main className="agent-artifact-canvas duty-workspace" aria-label={activeTab.label}>
+      {activeTab && !["deep-research", "live-ops"].includes(canvasTab) && <main className="agent-artifact-canvas duty-workspace" aria-label={activeTab.label}>
         {error ? (
           <Card padding={24} className="center-state">
             <p role="alert">{error}</p>
@@ -326,6 +341,7 @@ function App() {
               onBadgeUpdate={setUnreadBadge}
               onAskDiagnose={askAgent}
               onContinueInChat={askAgent}
+              onDraftAction={openActionDraft}
             />
           )}
 
@@ -334,6 +350,12 @@ function App() {
           {canvasTab === "graph" && <SupplementEvalView section="graph" />}
           {canvasTab === "eval" && <SupplementEvalView section="eval" />}
         </Suspense>}
+      </main>}
+
+      {canvasTab === "live-ops" && <main className="agent-artifact-canvas duty-workspace" aria-label="实时态势与两票审批">
+        <Suspense fallback={<div className="duty-loading" role="status"><Spinner size="sm" />正在打开实时态势</div>}>
+          <LiveStreamConsole days={dates} openedTicket={openedActionTicket} onDraft={openActionDraft} />
+        </Suspense>
       </main>}
 
       {researchVisited && <main className="agent-artifact-canvas duty-workspace" aria-label="深度排查"

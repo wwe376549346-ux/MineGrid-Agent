@@ -164,7 +164,55 @@ function PreDiagnosis({ticket, onContinueInChat}) {
   );
 }
 
-export function IncidentTicketPanel({onBadgeUpdate, onAskDiagnose, onContinueInChat}) {
+function IncidentActionDraft({ticket, onDraftAction}) {
+  const originalCabinet = String(ticket.cabinet ?? "").trim();
+  const singleCabinet = /^\d{1,16}$/.test(originalCabinet);
+  const [target, setTarget] = useState(singleCabinet ? originalCabinet : "");
+  const [kind, setKind] = useState("defect_notice");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+
+  async function submit(event) {
+    event.preventDefault();
+    const cleanCabinet = target.trim();
+    if (submitting || !/^\d{1,16}$/.test(cleanCabinet)) return;
+    setSubmitting(true);
+    setError("");
+    try {
+      await onDraftAction({
+        kind,
+        target_cabinet: cleanCabinet,
+        at_time: ticket.at_time || null,
+        rationale: `来自异常工单 ${ticket.ticket_id} · ${ticket.title}\n${ticket.summary ?? ""}`.slice(0, 1600),
+      });
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return <form className="detail-block" onSubmit={submit}>
+    <div className="detail-actions" style={{flexWrap: "wrap", alignItems: "center"}}>
+      {!singleCabinet && <label>
+        目标柜号 <input aria-label="两票目标柜号" inputMode="numeric" maxLength={16} value={target}
+          onChange={e => setTarget(e.target.value)} disabled={submitting} required />
+      </label>}
+      <label>
+        草案类型 <select aria-label="草案类型" value={kind} onChange={e => setKind(e.target.value)} disabled={submitting}>
+          <option value="defect_notice">消缺通知单</option>
+          <option value="switching_order">电气操作票</option>
+          <option value="field_verification">现场核查单</option>
+        </select>
+      </label>
+      <Button type="submit" size="sm" label={submitting ? "正在起草…" : "一键起草两票草案"}
+        icon={<ClipboardCheck size={15} />} disabled={submitting || !/^\d{1,16}$/.test(target.trim())} />
+    </div>
+    {error && <p role="alert">{error}</p>}
+  </form>;
+}
+
+export function IncidentTicketPanel({onBadgeUpdate, onAskDiagnose, onContinueInChat, onDraftAction}) {
   const [statusFilter, setStatusFilter] = useState("active");
   const [tickets, setTickets] = useState([]);
   const [sla, setSla] = useState(null);
@@ -507,6 +555,7 @@ export function IncidentTicketPanel({onBadgeUpdate, onAskDiagnose, onContinueInC
 
             <h2 className="detail-title">{detail.title}</h2>
             <p className="detail-summary">{detail.summary}</p>
+            {onDraftAction && <IncidentActionDraft key={detail.ticket_id} ticket={detail} onDraftAction={onDraftAction} />}
             {detail.evidence_cells?.length > 0 && (
               <div className="detail-block">
                 <h4>原表证据</h4>

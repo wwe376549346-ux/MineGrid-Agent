@@ -7,7 +7,7 @@ import json
 import math
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
 
 
 class HealthzResponse(BaseModel):
@@ -112,6 +112,64 @@ class DeepResearchRequest(BaseModel):
 
     goal: str = Field(min_length=1, max_length=1200, pattern=r"\S")
     mode: Literal["auto", "local", "deepseek"] = "auto"
+
+
+LIVE_CSV_MAX_BYTES = 2 * 1024 * 1024
+ActionTicketKind = Literal["switching_order", "defect_notice", "field_verification"]
+
+
+class LiveUploadRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    csv_text: str = Field(min_length=1, max_length=LIVE_CSV_MAX_BYTES, pattern=r"\S")
+    filename: str = Field(default="report.csv", min_length=1, max_length=160)
+
+
+class LiveStreamRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    day: date
+    speed_ms: int = Field(default=500, ge=0, le=1000)
+    custom_threshold_kv: float | None = Field(default=None, gt=0, le=60)
+
+
+class ActionDraftRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    kind: ActionTicketKind
+    target_cabinet: str = Field(pattern=r"^[0-9]{1,16}$")
+    at_time: str | None = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(?::\d{2})?$")
+    rationale: str = Field(default="", max_length=1600)
+
+    @field_validator("at_time")
+    @classmethod
+    def normalize_action_time(cls, value: str | None) -> str | None:
+        return datetime.fromisoformat(value).isoformat(sep=" ") if value else None
+
+
+class ActionChecklistRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    item_id: str = Field(min_length=1, max_length=64)
+    checked: bool = Field(strict=True)
+
+
+class ActionApproveRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    note: str = Field(default="", max_length=240, validation_alias=AliasChoices("note", "comment"))
+
+
+class ActionRejectRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    reason: str = Field(min_length=1, max_length=240, pattern=r"\S")
+
+
+class ActionDispatchRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    dry_run: bool = Field(default=True, strict=True, validation_alias=AliasChoices("dry_run", "simulate"))
 
 
 class SessionIdRequest(BaseModel):
