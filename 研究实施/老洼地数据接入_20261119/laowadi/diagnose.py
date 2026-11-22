@@ -40,6 +40,7 @@ from laowadi.graph import maybe_build_hitl_interrupt as _maybe_build_hitl_interr
 from laowadi.outcomes import classify_outcome
 from laowadi.report_evidence import result_catalog
 from laowadi.security import inspect_prompt_security
+from laowadi.storage import REPORT_STATION
 from laowadi.task_alignment import execute_scoped_question
 from laowadi.verifier import (
     EVIDENCE_POLICY,
@@ -243,7 +244,18 @@ def diagnose_question(
     if hypothesis:
         scenario, at = hypothesis
         tier_info = {"tier": "slow", "reason": scenario.kind.replace("_review", "_hypothesis_review")}
-    use_fast_tier = bool(client is not None and auto_tier and tier_info["tier"] == "fast")
+    c1535_cabs = {num for st, num in archive.devices if st != REPORT_STATION}
+    s35_cabs = {num for st, num in archive.devices if st == REPORT_STATION}
+    req_cabs = anchors.get("cabinets") or []
+    only_unarchived_station = (
+        bool(req_cabs)
+        and all(c in c1535_cabs for c in req_cabs)
+        and not any(c in s35_cabs for c in req_cabs)
+    )
+    use_fast_tier = bool(
+        client is not None
+        and ((auto_tier and tier_info["tier"] == "fast") or only_unarchived_station)
+    )
     eff_client = None if use_fast_tier else client
 
     def _execute_node(_ctx: DAGRunContext) -> dict:

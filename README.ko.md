@@ -40,7 +40,12 @@
 
 ---
 
-## 워크벤치 실기 스크린샷
+## 워크벤치 실기 데모 및 스크린샷
+
+<p align="center">
+  <img src="docs/screenshots/minegrid_demo.gif" alt="MineGrid-Agent 워크벤치 애니메이션 데모" width="100%" /><br/>
+  <sub><b>v1.0.0 엔드투엔드 워크스루:</b> 이중 모드 코파일럿 홈 → Python 샌드박스 산점도 → <code>pandapower</code> VoI 토네이도 차트 → 3병렬 서브에이전트 토론 및 작업표.</sub>
+</p>
 
 <p align="center">
   <img src="docs/screenshots/autonomous_sandbox_chat.png" alt="자율 샌드박스 분석 및 SVG 차트" width="100%" /><br/>
@@ -57,10 +62,10 @@
 
 ## 결정론적 CI 검증 vs. 실제 LLM 라이브 평가
 
-- **결정론적 오프라인 CI 게이트(20개 스위트)**: 원본 Excel 셀 매칭, 적대적 환각 차단(32건), 등가회로 가정 하의 168시간 탭·커패시터 최적화(모델 과전압 `35h → 0h`)를 오프라인에서 재현 검증합니다.
-- **실제 `deepseek-v4-pro` 엔드투엔드 평가(`N = 6`, 상세 보고서: [docs/LIVE_EVAL_REPORT.md](docs/LIVE_EVAL_REPORT.md))**:
-  - 엄격 통과 **`5 / 6` (83.3%)** · 부분 통과 **`1 / 6`** (Q6) · 실패 **`0 / 6`**
-  - Patch-Only Reflection **`3`회** 발동 · 응답 지연 **P50 `85.5 s` / P95 `157.07 s`**
+- **결정론적 오프라인 CI 게이트(20개 스위트)**: 원본 Excel 셀 매칭, 적대적 환각 차단(32건), 등가회로 가정 하의 168시간 탭·커패시터 최적화(모델 과전압 `35h → 0h`)를 오프라인에서 재현 검증합니다([v1.0.0 릴리스 노트](docs/RELEASE_v1.0.0.md)).
+- **실제 `deepseek-v4-pro` 슬라이스 평가(`N = 6`, [docs/LIVE_EVAL_REPORT.md](docs/LIVE_EVAL_REPORT.md))**: 교차 변전소 고속 가드 및 임계값 정규식 개선 후 **`6 / 6` 통과**, Q3 응답 **`160.64 s → 0.07 s`**, 평균 지연 **`103.33 s → 57.76 s` (P50 `63.53 s`)** 단축.
+- **실제 `deepseek-v4-pro` 4군 어블레이션(`18문항 × 4군 = 72회 실행`, [docs/LIVE_ABLATION_BENCHMARK.md](docs/LIVE_ABLATION_BENCHMARK.md))**:
+  - **Ours**: 엄격 일치율 **`55.6%`** · 수치 환각률 **`5.6%`** · Citation F1 **`67.7%`** · 조류 계층 **`66.7%`** (vs. `w/o pandapower 38.9%`, `Vanilla 27.8% / 환각 31.6%`, `w/o Verifier 22.2%`; 클러스터 부트스트랩 기준 환각률 **`-26.0%`** 유의 감소).
 
 ---
 

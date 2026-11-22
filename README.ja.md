@@ -40,7 +40,12 @@
 
 ---
 
-## ワークベンチ画面
+## ワークベンチ画面・デモ
+
+<p align="center">
+  <img src="docs/screenshots/minegrid_demo.gif" alt="MineGrid-Agent ワークベンチ動作デモ" width="100%" /><br/>
+  <sub><b>v1.0.0 エンドツーエンド動作デモ：</b>対話ホーム → Python サンドボックス散布図 → <code>pandapower</code> VoI 感度解析 → 3 並列サブエージェント調停。</sub>
+</p>
 
 <p align="center">
   <img src="docs/screenshots/autonomous_sandbox_chat.png" alt="自律型サンドボックス分析 &amp; SVG チャート" width="100%" /><br/>
@@ -57,10 +62,10 @@
 
 ## CI 決定論テストと実機 LLM 評価の分離
 
-- **決定論的オフライン CI ゲート（20 スイート）**：元表セル整合、数値ハルシネーション遮断（32 件の対抗ケース）、および等価回路前提下の 168 時間離散最適化（モデル過電圧 `35h → 0h`）を再現可能に検証します。
-- **実機 `deepseek-v4-pro` エンドツーエンド評価（`N = 6`、詳細：[docs/LIVE_EVAL_REPORT.md](docs/LIVE_EVAL_REPORT.md)）**：
-  - 厳格合格 **`5 / 6`（83.3%）**・部分合格 **`1 / 6`**（Q6）・失敗 **`0 / 6`**
-  - Patch-Only Reflection **`3` 回**発動・応答遅延 **P50 `85.5 s` / P95 `157.07 s`**
+- **決定論的オフライン CI ゲート（20 スイート）**：元表セル整合、数値ハルシネーション遮断（32 件の対抗ケース）、および等価回路前提下の 168 時間離散最適化（モデル過電圧 `35h → 0h`）を再現可能に検証します（[v1.0.0 リリースノート](docs/RELEASE_v1.0.0.md)）。
+- **実機 `deepseek-v4-pro` スライス評価（`N = 6`、[docs/LIVE_EVAL_REPORT.md](docs/LIVE_EVAL_REPORT.md)）**：高速ルーティングと閾値抽出改善により **`6 / 6` 合格**、Q3 坑内境界応答 **`160.64 s → 0.07 s`**、平均遅延 **`103.33 s → 57.76 s`（P50 `63.53 s`）** へ短縮。
+- **実機 `deepseek-v4-pro` 4 群アブレーション（`18 問 × 4 群 = 72 試行`、[docs/LIVE_ABLATION_BENCHMARK.md](docs/LIVE_ABLATION_BENCHMARK.md)）**：
+  - **Ours**：完全一致率 **`55.6%`**・数値ハルシネーション **`5.6%`**・Citation F1 **`67.7%`**・潮流設問 **`66.7%`**（vs. `w/o pandapower 38.9%`、`Vanilla 27.8% / 幻覚 31.6%`、`w/o Verifier 22.2%`；ペア・ブートストラップで幻覚率 **`-26.0%`** 有意低減）。
 
 ---
 

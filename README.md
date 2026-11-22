@@ -100,10 +100,15 @@ flowchart LR
 
 ---
 
-## Workbench Screenshots
+## Workbench Screenshots & Live Demo
 
 <p align="center">
-  <img src="docs/screenshots/autonomous_sandbox_chat.png" alt="Autonomous Sandbox & Inline SVG Charts" width="100%" /><br/>
+  <img src="docs/screenshots/minegrid_demo.gif" alt="MineGrid-Agent Animated Workbench Walkthrough" width="100%" /><br/>
+  <sub><b>Animated End-to-End Walkthrough (`v1.0.0`):</b> Dual-mode copilot landing → AST-audited Python sandbox &amp; SVG scatter charts → <code>pandapower</code> VoI tornado chart → 3-way parallel subagent debate &amp; action tickets.</sub>
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/autonomous_sandbox_chat.png" alt="Autonomous Sandbox &amp; Inline SVG Charts" width="100%" /><br/>
   <sub><b>Autonomous Sandbox &amp; Generative UI:</b> Live plan tree, read-only Python/SQL scatter &amp; trend plots, and post-hoc provenance verification badge.</sub>
 </p>
 
@@ -133,17 +138,28 @@ All 20 regression suites run offline against the immutable operational archive (
 | **HITL State-Graph Supplement (`H01–H08`)** | 8 cases | **8/8** cross-process suspend/resume transitions reusing `50%–75%` unaffected nodes |
 | **168-Hour Discrete Tap-Cap DP Optimization** | 7 days (168 h) | Modelled overvoltage hours **`35 → 0`** and active loss **`-109.02 kWh (+1.85%)`** under equivalent circuit assumptions |
 
-### B. Live `deepseek-v4-pro` End-to-End Evaluation Slice (`N = 6`)
+### B. Live `deepseek-v4-pro` Evaluation Slice (`N = 6` End-to-End Smoke Benchmark)
 
-Real, unedited API runs against `deepseek-v4-pro` (`fallback_to_local=False`, full details in [docs/LIVE_EVAL_REPORT.md](docs/LIVE_EVAL_REPORT.md)):
+Real, unedited API runs against `deepseek-v4-pro` (`fallback_to_local=False`, full trace in [docs/LIVE_EVAL_REPORT.md](docs/LIVE_EVAL_REPORT.md)):
 
-| Metric | Live API Observation (`deepseek-v4-pro`, 2026-11-22) |
-| :--- | :---: |
-| **Strict Programmatic Pass** | **`5 / 6` (83.3%)** *(Q1 Strict Incomer, Q2 Reverse Power, Q3 C1535 Guard, Q4 Python Sandbox Pearson `-0.801`, Q5 `pandapower` Tap `+2`)* |
-| **Partial Pass** | **`1 / 6`** *(Q6 extracted 10.9 kV peak & 1 rule candidate, but regex missed structured `10.65 kV` threshold field)* |
-| **Fail / Timeout / Error** | **`0 / 6`** |
-| **Patch-Only Reflections Triggered** | **`3`** *(verifier caught & repaired grounded/warning narratives on Q1 [×2] and Q3 [×1])* |
-| **Latency (Mean / P50 / P95)** | **`103.33 s` / `85.5 s` / `157.07 s`** *(multi-step ReAct tool + `pandapower` / sandbox round-trips)* |
+| Metric | Initial Baseline | **After Fast-Path &amp; Regex Refinements** | Notes |
+| :--- | :---: | :---: | :--- |
+| **Strict Programmatic Pass** | `5 / 6` (83.3%) | **`6 / 6` (100.0% on slice)** | Fixed colloquial threshold extraction on Q6 (`10.65 kV` redline) |
+| **C1535 Cross-Station Latency (`Q3`)** | `160.64 s` (`warning`) | **`0.07 s` (`verified`)** | Pre-LLM deterministic unarchived-station routing (`local_router.py`) |
+| **Overall Mean / P50 / P95 Latency** | `103.33 s / 85.50 s / 157.07 s` | **`57.76 s / 63.53 s / 93.23 s`** | `-44.1%` mean latency via parallel tool prompting &amp; fast-path guard |
+
+### C. Live `deepseek-v4-pro` Stratified 4-Arm Ablation (`N = 18` Cases / `21` Turns / `72` Episodes)
+
+Controlled live API ablation across all 6 operational layers (3 cases per layer; full paired bootstrap CIs &amp; error analysis in [docs/LIVE_ABLATION_BENCHMARK.md](docs/LIVE_ABLATION_BENCHMARK.md)):
+
+| Method / Arm (`deepseek-v4-pro`) | Decoded Turns | Task Exact Acc. | Numeric Hallucination Rate ↓ | Citation F1 | AC Power Flow Exact (`P01/P03/P04`) | Abstention Exact (`N01/N04/N07`) | P50 / P95 Latency |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **Vanilla LLM (Prompt-only)** | `15/21` | `27.8%` | `31.6%` | `49.3%` | `0.0%` | `66.7%` | `51.4 s / 181.6 s` |
+| **w/o Verifier &amp; Reflection** | `4/21` | `22.2%` | `0.0%`* | `21.7%` | `0.0%` | `0.0%` | `63.0 s / 124.7 s` |
+| **w/o `pandapower`** | `11/21` | `38.9%` | `0.0%` | `58.6%` | `0.0%` | `66.7%` | `109.6 s / 309.3 s` |
+| **Full Domain Agent (`Ours`)** | **`16/21`** | **`55.6%`** | **`5.6%`** | **`67.7%`** | **`66.7%`** | **`100.0%`** | `123.5 s / 247.7 s` |
+
+> **Paired Cluster-Bootstrap (`Ours − Vanilla`, `N = 2,000` draws):** **`-26.0%` numeric hallucination rate (`95% CI: [-50.0%, -0.4%]`, statistically significant)** and **`+27.8%` task exact accuracy**. Remaining gaps (`D01/D03/D07` conservative tri-state labeling &amp; `H01/H05` 2-turn JSON schema fragility) are documented candidly in [docs/LIVE_ABLATION_BENCHMARK.md](docs/LIVE_ABLATION_BENCHMARK.md).
 
 ---
 
@@ -165,7 +181,7 @@ curl -s http://127.0.0.1:8765/api/profiles
 
 1. **7-Day Single-Mine Real Archive**: All live empirical metrics are derived from 7 consecutive days (`2026-11-10` to `2026-11-16`, 168 hourly snapshots) from one coal mine (`laowadi`); multi-month seasonality and unseen substation topologies require additional field data.
 2. **Parameterized Equivalent-Circuit Assumptions**: Where field transformer tap positions, `uk%`, rated capacity (`Sn`), or underground cable ampacity nameplates are absent from daily logs, `pandapower` uses explicitly disclosed equivalents (`model_assumptions`) and surfaces priority field requests via Value-of-Information (`VoI`) ranking.
-3. **Interactive Engineering Decision Support Only**: End-to-end LLM + AC power-flow turns take tens of seconds (`P50 = 85.5 s`); this system is **not** a sub-second protection relay or drop-in unattended SCADA control product. Every ticket/switching recommendation requires explicit human operator verification and sign-off.
+3. **Interactive Engineering Decision Support Only**: End-to-end LLM + AC power-flow turns take tens of seconds (`P50 = 63.53 s` on live queries, `123.48 s` under strict multi-round JSON contracts); this system is **not** a sub-second protection relay or drop-in unattended SCADA control product. Every ticket/switching recommendation requires explicit human operator verification and sign-off.
 
 ---
 
@@ -279,7 +295,7 @@ cd 研究实施/老洼地数据接入_20261119
 | [研究实施/老洼地数据接入_20261119/workbench/](研究实施/老洼地数据接入_20261119/workbench/) | React 19 + Vite frontend workbench (topology canvas, SSE chat stream, AC power-flow charts, sensitivity tornado chart, incident ticket panel, HITL supplement UI) |
 | [研究实施/老洼地数据接入_20261119/profiles/](研究实施/老洼地数据接入_20261119/profiles/) | Declarative JSON/YAML `MineProfile` schemas (`dongpo_demo.json` 35/6 kV onboarding example) |
 | [研究实施/老洼地数据接入_20261119/local/](研究实施/老洼地数据接入_20261119/local/) | Read-only SQLite telemetry & event golden archives (`laowadi.sqlite3`, `laowadi_events.sqlite3`) |
-| [docs/](docs/) | Live `deepseek-v4-pro` evaluation slice report ([LIVE_EVAL_REPORT.md](docs/LIVE_EVAL_REPORT.md)) & workbench UI screenshots |
+| [docs/](docs/) | Live `deepseek-v4-pro` reports ([LIVE_EVAL_REPORT.md](docs/LIVE_EVAL_REPORT.md), [LIVE_ABLATION_BENCHMARK.md](docs/LIVE_ABLATION_BENCHMARK.md)), release notes ([RELEASE_v1.0.0.md](docs/RELEASE_v1.0.0.md)), &amp; demo media |
 | [Makefile](Makefile) | Unified top-level commands (`make setup`, `make up`, `make test`, `make lint`, `make docker`, `make mcp`) |
 | [研究实施/老洼地数据接入_20261119/scripts/setup_collab.sh](研究实施/老洼地数据接入_20261119/scripts/setup_collab.sh) | One-command environment setup, SHA-256 verification & pre-merge test gate script |
 | [研究实施/老洼地数据接入_20261119/run_live_eval_slice.py](研究实施/老洼地数据接入_20261119/run_live_eval_slice.py) | Reproducible 6-question live LLM end-to-end evaluation harness |

@@ -4,7 +4,7 @@
 
 ## 1. Run Configuration
 
-- **Evaluated Timestamp:** `2026-11-22 04:35 UTC`
+- **Evaluated Timestamp:** `2026-11-22 05:04 UTC`
 - **Model:** `deepseek-v4-pro` (real external API, `fallback_to_local=False`)
 - **Dataset Scope:** Read-only 7-day SCADA archive (`laowadi.sqlite3`, 168 hourly snapshots, 2026-11-10 to 2026-11-16)
 - **Sample Size:** `6` representative engineering tasks (3 Strict Verifier Pipeline + 3 Autonomous Sandbox Agent)
@@ -14,24 +14,24 @@
 
 | Metric | Observed Value |
 | :--- | :---: |
-| **Strict Pass** | `5 / 6` (83.3%) |
-| **Partial Pass** | `1 / 6` |
+| **Strict Pass** | `6 / 6` (100.0%) |
+| **Partial Pass** | `0 / 6` |
 | **Fail / Timeout / Error** | `0 / 6` |
-| **Total Patch-Only Reflections Triggered** | `3` |
-| **Mean Latency** | `103.33 s` |
-| **P50 Latency** | `85.5 s` |
-| **P95 Latency** | `157.07 s` |
+| **Total Patch-Only Reflections Triggered** | `0` |
+| **Mean Latency** | `57.76 s` |
+| **P50 Latency** | `63.53 s` |
+| **P95 Latency** | `93.23 s` |
 
 ## 3. Per-Question Breakdown
 
 | ID | Mode | Task Category | Verdict | Latency | Verifier | Reflections | Verified Cells | Tools Invoked | Notes |
 | :---: | :---: | :--- | :---: | :---: | :---: | :---: | :---: | :--- | :--- |
-| **Q1** | `strict` | Single-Incomer Zero-Load Root-Cause Diagnosis | **PASS** | `64.61 s` | `verified` | `2` | `6` | `get_window_snapshot` | All programmatic checks passed |
-| **Q2** | `strict` | Competing-Hypothesis Falsification (Reverse Power) | **PASS** | `92.02 s` | `verified` | `0` | `11` | `get_window_snapshot`, `get_window_snapshot`, `get_window_snapshot` | All programmatic checks passed |
-| **Q3** | `strict` | Cross-Station Boundary Refusal (C1535 Guard) | **PASS** | `160.64 s` | `warning` | `1` | `0` | `get_cabinet_health_profile`, `get_window_snapshot`, `retrieve_conditional_evidence`, `get_station_health_overview` | All programmatic checks passed |
-| **Q4** | `autonomous` | Read-Only Python Sandbox Statistical Analysis | **PASS** | `146.37 s` | `partial` | `0` | `0` | `run_python_analysis` | All programmatic checks passed |
-| **Q5** | `autonomous` | pandapower AC Power-Flow Tap Optimization | **PASS** | `78.97 s` | `verified` | `0` | `0` | `check_power_balance`, `get_window_snapshot`, `run_ac_power_flow`, `run_python_analysis` | All programmatic checks passed |
-| **Q6** | `autonomous` | Auto-Memory Redline Extraction + Threshold Query | **PARTIAL** | `77.39 s` | `partial` | `0` | `9` | `get_cabinet_health_profile`, `query_electrical_analytics`, `search_coal_standards`, `run_python_analysis` | Missed checks: ['detected_memory_suggestion']; sugs=1 |
+| **Q1** | `strict` | Single-Incomer Zero-Load Root-Cause Diagnosis | **PASS** | `35.28 s` | `verified` | `0` | `125` | `get_window_snapshot`, `get_window_snapshot`, `get_window_snapshot` | All programmatic checks passed |
+| **Q2** | `strict` | Competing-Hypothesis Falsification (Reverse Power) | **PASS** | `37.94 s` | `verified` | `0` | `11` | `get_window_snapshot`, `get_window_snapshot`, `get_window_snapshot` | All programmatic checks passed |
+| **Q3** | `strict` | Cross-Station Boundary Refusal (C1535 Guard) | **PASS** | `0.07 s` | `verified` | `0` | `2` | `retrieve_conditional_evidence`, `get_cabinet_health_profile`, `get_cabinet_health_profile` | All programmatic checks passed |
+| **Q4** | `autonomous` | Read-Only Python Sandbox Statistical Analysis | **PASS** | `94.4 s` | `partial` | `0` | `0` | `run_python_analysis` | All programmatic checks passed |
+| **Q5** | `autonomous` | pandapower AC Power-Flow Tap Optimization | **PASS** | `89.73 s` | `verified` | `0` | `1` | `run_ac_power_flow`, `check_power_balance`, `search_coal_standards` | All programmatic checks passed |
+| **Q6** | `autonomous` | Auto-Memory Redline Extraction + Threshold Query | **PASS** | `89.12 s` | `verified` | `0` | `1` | `get_cabinet_health_profile`, `get_station_health_overview`, `query_electrical_analytics`, `search_coal_standards`, `run_python_analysis` | All programmatic checks passed |
 
 ## 4. Candid Engineering Observations & Limitations
 
@@ -39,7 +39,7 @@
 2. **Latency Profile:** Multi-step ReAct loops with `pandapower` AC power-flow or sandbox Python execution require multi-second round-trips (see P50/P95 above); real-time sub-second SCADA protection remains strictly outside LLM scope.
 3. **Deterministic Guardrail Dependency:** Exact numerical integrity relies heavily on the deterministic `verifier.py` and read-only SQLite/pandapower tools rather than raw LLM parametric memory.
 4. **Observed Edge Cases:**
-   - **Q6 (PARTIAL)**: Missed checks: ['detected_memory_suggestion']; sugs=1
+   - All 6 tasks in this slice met programmatic checks; however, phrasing variations, network jitter, and unseen mine topologies can still cause partial passes or timeouts in open-ended usage.
 
 ## 5. Reproducibility
 

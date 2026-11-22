@@ -34,7 +34,7 @@ CONFIG = ROOT.parent / "大模型接入_20261115" / ".env.local"
 MODEL = "deepseek-v4-pro"
 ROUNDS = 5
 TOOL_LIMIT = 10
-COMPLETION_LIMIT = 1024
+COMPLETION_LIMIT = 4096
 ORDER_SEED = 20261121
 
 
@@ -154,7 +154,11 @@ def result_at_path(results, pointer):
 
 
 def parse_answer(text):
-    answer = json.loads(text)
+    raw = str(text or "").strip()
+    m_fence = re.fullmatch(r"```(?:json)?\s*(.*?)\s*```", raw, re.S | re.I)
+    if m_fence:
+        raw = m_fence.group(1).strip()
+    answer = json.loads(raw)
     if not isinstance(answer, dict) or answer.get("decision") not in DECISIONS:
         raise ValueError("decision")
     claims = answer.get("claims")
@@ -192,21 +196,31 @@ def check_claims(answer, fields, receipts, env, question):
         else:
             observed = False
             point = re.search(r"(\d+)柜 (\d\d:\d\d) (Uab|Ia|P|cos)$", spec["label"])
-            if point and len(refs) == 1:
+            if len(refs) == 1:
                 cell = env.corpus.cells.get(next(iter(refs)))
-                cabinet, stamp, metric = point.groups()
                 days = set(re.findall(r"2026-11-\d{2}", question))
-                if cell:
+                if point and cell:
+                    cabinet, stamp, metric = point.groups()
                     observed = (close_number(value, cell[0]) and (cell[1], cell[2], cell[3][11:16]) ==
                                 (metric, cabinet, stamp) and unit == METRICS[cell[1]][1] and
                                 (not days or cell[3][:10] in days))
-                if observed:
-                    fact = {"statement": f"{cell[3]} {cabinet}柜 {metric}={value} {unit}",
-                            "evidence": list(refs)}
-                    live_trace = [{"result": r} for r in receipts.values()]
-                    observed = verify_diagnosis_groundedness(
-                        env.archive, {"confirmed_facts": [fact]}, live_trace,
-                    )["status"] == "verified"
+                    if observed:
+                        fact = {"statement": f"{cell[3]} {cabinet}柜 {metric}={value} {unit}",
+                                "evidence": list(refs)}
+                        live_trace = [{"result": r} for r in receipts.values()]
+                        observed = verify_diagnosis_groundedness(
+                            env.archive, {"confirmed_facts": [fact]}, live_trace,
+                        )["status"] == "verified"
+                elif not point and cell:
+                    spec_cab = re.search(r"(?<!\d)(3\d{2}|1[012]\d{2})(?!\d)", f"{spec.get('key', '')} {spec.get('label', '')}")
+                    cab_ok = (not spec_cab) or (cell[2] == spec_cab.group(1))
+                    if cab_ok and close_number(value, cell[0]) and unit == METRICS[cell[1]][1] and (not days or cell[3][:10] in days):
+                        fact = {"statement": f"{cell[3]} {cell[2]}柜 {cell[1]}={value} {unit}",
+                                "evidence": list(refs)}
+                        live_trace = [{"result": r} for r in receipts.values()]
+                        observed = verify_diagnosis_groundedness(
+                            env.archive, {"confirmed_facts": [fact]}, live_trace,
+                        )["status"] == "verified"
             bound = result_at_path(receipts, claim.get("pointer"))
             aligned = bool(bound and close_number(value, bound[0]) and unit.lower() == bound[1].lower()
                            and refs <= cell_refs(bound[2]))
@@ -274,7 +288,7 @@ def run_turn(env, client, arm, case, turn_no, previous=None):
     context = context_for(env, arm, first["question"])
     prompt = SHARED
     if config:
-        prompt += "\n按需多轮调用工具。工具响应有 receipt；计算值可附 pointer，格式 T1#/results/0/score，以精确定位 JSON 数值。"
+        prompt += '\n按需多轮调用工具。工具响应有 receipt（如 T1）；派生统计/潮流数值的 JSON 路径请写在字段 "pointer"（如 "pointer":"T1#/results/0/score"），切勿把 T1# 路径写进 "citations"（"citations" 只填原表单元格、原图或规程出处）。'
     if arm.hybrid:
         prompt += "\n涉及跨站、缺证或规程适用性时，优先使用条件证据检索核对适用范围。"
     if arm.kind == "domain":
@@ -296,9 +310,17 @@ def run_turn(env, client, arm, case, turn_no, previous=None):
     for step in range(rounds):
         allow_tool = bool(config) and step < rounds - 1 and len(receipts) < TOOL_LIMIT
         try:
-            msg, record = client.chat(messages, tools=list(config.values()) if allow_tool else None,
-                                      tool_choice="auto" if allow_tool else None, max_tokens=COMPLETION_LIMIT,
-                                      thinking="disabled", json_mode=not allow_tool, stream=False)
+            call_tools = list(config.values()) if config else None
+            call_tool_choice = ("auto" if allow_tool else "none") if config else None
+            msg, record = client.chat(
+                messages,
+                tools=call_tools,
+                tool_choice=call_tool_choice,
+                max_tokens=COMPLETION_LIMIT,
+                thinking="disabled",
+                json_mode=not config,
+                stream=False,
+            )
         except LLMError as exc:
             status, errors = "api_error", {"error": str(exc)}
             break
@@ -372,8 +394,15 @@ def write(path, data):
     temp.replace(path)
 
 
-def execute_matrix(output, cases, arms, repeat, jobs, config_file, limit=None):
+def execute_matrix(output, cases, arms, repeat, jobs, config_file, limit=None, case_ids=None):
     output.mkdir(parents=True, exist_ok=True)
+    if case_ids:
+        wanted = set(case_ids)
+        selected_cases = [c for c in cases["cases"] if c["id"] in wanted]
+        if not selected_cases:
+            raise ValueError(f"未匹配到指定 case_ids: {sorted(wanted)}")
+    else:
+        selected_cases = cases["cases"][:limit]
     with closing(connect(DB)) as db:
         manifest = [{"file": f, "sha256": h} for f, h in document_manifest(db)]
     if manifest != cases["sources"]:
@@ -392,12 +421,12 @@ def execute_matrix(output, cases, arms, repeat, jobs, config_file, limit=None):
                 "model": MODEL, "thinking": "disabled", "mode": "non-streamed",
                 "order_seed": ORDER_SEED, "max_rounds": ROUNDS, "max_tools": TOOL_LIMIT,
                 "completion_tokens_per_call": COMPLETION_LIMIT, "retries": 1, "concurrency": jobs,
-                "repetitions": repeat, "arms": arms, "intended_cases": [c["id"] for c in cases["cases"][:limit]]}
+                "repetitions": repeat, "arms": arms, "intended_cases": [c["id"] for c in selected_cases]}
     metadata_path = output / "run_manifest.json"
     if metadata_path.exists() and json.loads(metadata_path.read_text()) != metadata:
         raise ValueError("输出目录已有不同的冻结配置，需指定新的输出目录")
     write(metadata_path, metadata)
-    tasks = [(r, arm, c) for r in range(1, repeat + 1) for c in cases["cases"][:limit] for arm in arms]
+    tasks = [(r, arm, c) for r in range(1, repeat + 1) for c in selected_cases for arm in arms]
     random.Random(ORDER_SEED).shuffle(tasks)
     state = local()
 
@@ -434,11 +463,12 @@ def main():
     parser.add_argument("--jobs", type=int, default=8)
     parser.add_argument("--arms", nargs="+", choices=list(ARMS), default=list(ARMS))
     parser.add_argument("--limit", type=int)
+    parser.add_argument("--case-ids", nargs="+", default=None)
     args = parser.parse_args()
     if args.repeat < 1 or args.jobs < 1 or (args.limit is not None and args.limit < 1):
         parser.error("repeat/jobs/limit must be positive")
     execute_matrix(args.output, json.loads((HERE / "cases.json").read_text()), args.arms,
-                   args.repeat, args.jobs, args.config, args.limit)
+                   args.repeat, args.jobs, args.config, args.limit, args.case_ids)
 
 
 if __name__ == "__main__":

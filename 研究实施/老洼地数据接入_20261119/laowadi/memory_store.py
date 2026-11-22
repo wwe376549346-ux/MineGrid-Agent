@@ -24,9 +24,24 @@ MEMORY_DB = ROOT / "local" / "laowadi_memory.sqlite3"
 MEMORY_CATEGORIES = ("semantic", "episodic", "procedural")
 
 _VOLTAGE_THRESHOLD_RE = re.compile(
-    r"(?:10\s*kV|II\s*段|I\s*段|母线|过压|上限|红线|考核|Uab)[^\d]{0,16}(\d{1,2}\.\d{1,3})\s*kV",
+    r"(?:10\s*kV|II\s*段|I\s*段|母线|电压|过压|上限|红线|考核|阈值|预警|越限|Uab)[^\d\n]{0,16}(\d{1,2}\.\d{1,3})\s*kV"
+    r"|(\d{1,2}\.\d{1,3})\s*kV[^\n]{0,20}(?:红线|考核|预警|上限|阈值)",
     re.I,
 )
+
+
+def _extract_voltage_kv(text: str) -> float | None:
+    """Parse a plausible distribution-bus/feeder kV threshold (8.5–40.0 kV) from prefix or suffix phrasing."""
+    m = _VOLTAGE_THRESHOLD_RE.search(text or "")
+    if not m:
+        return None
+    raw = m.group(1) or m.group(2)
+    if not raw:
+        return None
+    val = float(raw)
+    if 8.5 <= val <= 40.0:
+        return val
+    return None
 
 
 def _utc_now() -> str:
@@ -364,17 +379,15 @@ def extract_custom_voltage_thresholds(memories: list[dict[str, Any]]) -> list[di
             except (KeyError, TypeError, ValueError):
                 pass
         blob = f"{mem.get('title', '')} {mem.get('content', '')} {thr or ''}"
-        m = _VOLTAGE_THRESHOLD_RE.search(blob)
-        if m:
-            val = float(m.group(1))
-            if 8.5 <= val <= 40.0:
-                found.append({
-                    "memory_id": mem["id"],
-                    "title": mem["title"],
-                    "scope_cabinet": mem.get("scope_cabinet"),
-                    "operator": ">",
-                    "value_kv": val,
-                })
+        val = _extract_voltage_kv(blob)
+        if val is not None:
+            found.append({
+                "memory_id": mem["id"],
+                "title": mem["title"],
+                "scope_cabinet": mem.get("scope_cabinet"),
+                "operator": ">",
+                "value_kv": val,
+            })
     return found
 
 
@@ -404,21 +417,19 @@ def detect_memory_candidates(
     suggestions: list[dict[str, Any]] = []
 
     # 1. Custom voltage / metric threshold rule -> semantic
-    vm = _VOLTAGE_THRESHOLD_RE.search(q)
-    if vm:
-        val = float(vm.group(1))
-        if 8.5 <= val <= 40.0:
-            title = f"{scope_cab + ' 柜' if scope_cab else '10 kV 母线'}内部考核电压红线 {val:.2f} kV"
-            if title.lower() not in existing_titles:
-                suggestions.append({
-                    "category": "semantic",
-                    "title": title,
-                    "content": q[:500],
-                    "scope_cabinet": scope_cab,
-                    "metric_threshold": {"metric": "Uab", "operator": ">", "value": val, "unit": "kV"},
-                    "tags": list(dict.fromkeys(["定制红线", "电压考核", *([scope_cab] if scope_cab else [])])),
-                    "reason": f"检测到新的内部电压考核红线（{val:.2f} kV），入库后将在后续对话、深度排查与实时演练流中自动生效。",
-                })
+    val = _extract_voltage_kv(q)
+    if val is not None:
+        title = f"{scope_cab + ' 柜' if scope_cab else '10 kV 母线'}内部考核电压红线 {val:.2f} kV"
+        if title.lower() not in existing_titles:
+            suggestions.append({
+                "category": "semantic",
+                "title": title,
+                "content": q[:500],
+                "scope_cabinet": scope_cab,
+                "metric_threshold": {"metric": "Uab", "operator": ">", "value": val, "unit": "kV"},
+                "tags": list(dict.fromkeys(["定制红线", "电压考核", *([scope_cab] if scope_cab else [])])),
+                "reason": f"检测到新的内部电压考核红线（{val:.2f} kV），入库后将在后续对话、深度排查与实时演练流中自动生效。",
+            })
 
     # 2. Procedural SOP / check rule -> procedural
     if not suggestions and any(k in q for k in ("SOP", "每次", "操作前", "倒闸前", "规范", "流程", "必须先")):

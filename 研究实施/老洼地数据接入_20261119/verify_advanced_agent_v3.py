@@ -54,7 +54,13 @@ def verify_auto_memory(archive: Archive, tmp: Path) -> dict:
     # Procedural SOP detection
     sop_cands = detect_memory_candidates("记住这条 SOP：每次倒闸操作前必须先核对 2# 主变现场实际挡位铭牌")
     assert len(sop_cands) >= 1 and sop_cands[0]["category"] == "procedural"
-    return {"threshold_candidate_kv": cands[0]["metric_threshold"]["value"], "sse_emitted": True}
+
+    # Colloquial Q6 suffix redline phrasing regression
+    colloq = detect_memory_candidates("今后如果 1006 柜电压超过 10.65 kV，请提前按内部红线预警，顺便核查过去 7 天超过 10.65 kV 的最高值。")
+    assert len(colloq) >= 1 and colloq[0]["category"] == "semantic"
+    assert colloq[0]["scope_cabinet"] == "1006"
+    assert (colloq[0].get("metric_threshold") or {}).get("value") == 10.65
+    return {"threshold_candidate_kv": cands[0]["metric_threshold"]["value"], "colloquial_1065_kv": True, "sse_emitted": True}
 
 
 def verify_parallel_debate(archive: Archive, tmp: Path) -> dict:
