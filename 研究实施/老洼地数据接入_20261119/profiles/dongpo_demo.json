@@ -1,0 +1,150 @@
+{
+  "schema_version": "2.0.0",
+  "mine_id": "dongpo_demo",
+  "mine_name": "东坡示范矿 35/6 kV 配电网（多矿声明式适配样例）",
+  "primary_station": "DP35",
+  "polling_ramp_kw": 900.0,
+  "balance_threshold_kw": 180.0,
+  "model_assumption_disclaimer": "Declarative second-mine demonstration profile proving zero-code-change topology, balance equation, and pandapower AC power-flow generalization.",
+  "stations": [
+    {
+      "code": "DP35",
+      "name": "东坡地面 35 kV 变电所",
+      "role": "surface_substation",
+      "has_hourly_archive": true,
+      "diagram_filename": "35KV变电所.png"
+    },
+    {
+      "code": "DP_UG",
+      "name": "东坡井下 6 kV 中央变电所",
+      "role": "underground_substation",
+      "has_hourly_archive": false,
+      "diagram_filename": "中央变电所.png"
+    }
+  ],
+  "voltage_limits": [
+    {
+      "nominal_kv": 35.0,
+      "lo_kv": 32.55,
+      "hi_kv": 38.5,
+      "operational_watch_hi_kv": 37.45,
+      "standard_ref": "GB/T 12325"
+    },
+    {
+      "nominal_kv": 6.0,
+      "lo_kv": 5.58,
+      "hi_kv": 6.42,
+      "operational_watch_hi_kv": 6.42,
+      "standard_ref": "GB/T 12325"
+    }
+  ],
+  "buses": [
+    {
+      "id": "DP_35_I",
+      "station": "DP35",
+      "name": "东坡 35 kV 母线",
+      "nominal_kv": 35.0,
+      "segment": "35kV",
+      "reference_cabinet": "501"
+    },
+    {
+      "id": "DP_6_I",
+      "station": "DP35",
+      "name": "东坡 6 kV I 段母线",
+      "nominal_kv": 6.3,
+      "segment": "I段",
+      "reference_cabinet": "601"
+    },
+    {
+      "id": "DP_UG_6",
+      "station": "DP_UG",
+      "name": "东坡井下 6 kV 中央母线",
+      "nominal_kv": 6.3,
+      "segment": "UG",
+      "reference_cabinet": "901"
+    }
+  ],
+  "transformers": [
+    {
+      "id": "DP_T1",
+      "name": "东坡 1# 主变 (8.0 MVA)",
+      "station": "DP35",
+      "hv_cabinet": "502",
+      "lv_cabinet": "601",
+      "hv_bus": "DP_35_I",
+      "lv_bus": "DP_6_I",
+      "default_sn_mva": 8.0,
+      "default_vn_hv_kv": 35.0,
+      "default_vn_lv_kv": 6.3,
+      "default_vk_percent": 7.5,
+      "default_vkr_percent": 0.58,
+      "calibrated_tap_pos": 1
+    }
+  ],
+  "feeders": [
+    {
+      "cabinet": "501",
+      "station": "DP35",
+      "label": "35 kV 主进线",
+      "bus_id": "DP_35_I",
+      "role": "incomer",
+      "nominal_kv": 35.0
+    },
+    {
+      "cabinet": "502",
+      "station": "DP35",
+      "label": "1# 主变高压侧",
+      "bus_id": "DP_35_I",
+      "role": "transformer_hv",
+      "nominal_kv": 35.0
+    },
+    {
+      "cabinet": "601",
+      "station": "DP35",
+      "label": "1# 主变低压侧",
+      "bus_id": "DP_6_I",
+      "role": "transformer_lv",
+      "nominal_kv": 6.0
+    },
+    {
+      "cabinet": "602",
+      "station": "DP35",
+      "label": "井下中央变主馈线 I 回",
+      "bus_id": "DP_6_I",
+      "role": "feeder",
+      "nominal_kv": 6.0,
+      "downstream_bus_id": "DP_UG_6",
+      "default_cable_length_km": 2.2,
+      "default_r_ohm_per_km": 0.17,
+      "default_x_ohm_per_km": 0.08,
+      "default_max_i_ka": 0.36
+    },
+    {
+      "cabinet": "603",
+      "station": "DP35",
+      "label": "井下主通风机专线",
+      "bus_id": "DP_6_I",
+      "role": "feeder",
+      "nominal_kv": 6.0,
+      "default_cable_length_km": 1.1,
+      "default_r_ohm_per_km": 0.19,
+      "default_x_ohm_per_km": 0.08,
+      "default_max_i_ka": 0.30
+    }
+  ],
+  "inter_station_links": [
+    {
+      "from_station": "DP35",
+      "from_cabinet": "602",
+      "to_station": "DP_UG",
+      "to_cabinet": "901",
+      "description": "井下 6 kV 主干进线（示例映射，非实测矿井）",
+      "default_cable_length_km": 2.2,
+      "default_r_ohm_per_km": 0.17,
+      "default_x_ohm_per_km": 0.08,
+      "default_max_i_ka": 0.36
+    }
+  ],
+  "bus_ties": [],
+  "balance_equations": []
+}

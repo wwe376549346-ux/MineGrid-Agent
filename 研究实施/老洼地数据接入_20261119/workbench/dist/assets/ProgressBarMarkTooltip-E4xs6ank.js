@@ -1,0 +1,1 @@
+import{n as e}from"./rolldown-runtime-CNOWq4Kh.js";import{t}from"./vendor-react-BN8qLIAi.js";import{r as n,t as r}from"./Tooltip-D0TkaM4p.js";function i({content:e,children:t}){return(0,a.jsx)(r,{content:e,placement:`above`,focusTrigger:`always`,children:t})}var a;function o(){return(o=e((()=>{n(),a=t()})))()}o();export{i as default};

@@ -28,6 +28,7 @@ from laowadi.memory_store import (
     format_memories_for_prompt,
     retrieve_relevant_memories,
 )
+from laowadi.mine_schema import MineProfile, load_mine_profile
 from laowadi.powerflow import (
     analyze_parameter_sensitivity_voi,
     analyze_weekly_schedule_pareto,
@@ -51,7 +52,7 @@ def _reports_root(reports_dir: Path | None = None) -> Path:
     return root
 
 
-def _cell_ref_sql(archive: Any, cabinet: str, metric: str, at_time: str) -> dict[str, Any] | None:
+def _cell_ref_sql(archive: Any, cabinet: str, metric: str, at_time: str, station: str = REPORT_STATION) -> dict[str, Any] | None:
     row = archive.db.execute(
         """
         SELECT r.value, r.time, r.marker,
@@ -61,7 +62,7 @@ def _cell_ref_sql(archive: Any, cabinet: str, metric: str, at_time: str) -> dict
         WHERE r.station = ? AND r.cabinet = ? AND r.metric = ? AND r.time = ?
         LIMIT 1
         """,
-        (REPORT_STATION, cabinet, metric, at_time),
+        (station, cabinet, metric, at_time),
     ).fetchone()
     if not row:
         return None
@@ -73,7 +74,9 @@ def _cell_ref_sql(archive: Any, cabinet: str, metric: str, at_time: str) -> dict
     }
 
 
-def _count_custom_voltage_violations(archive: Any, threshold_kv: float, scope_cabinet: str | None = None) -> dict[str, Any]:
+def _count_custom_voltage_violations(
+    archive: Any, threshold_kv: float, scope_cabinet: str | None = None, station: str = REPORT_STATION
+) -> dict[str, Any]:
     if scope_cabinet:
         row = archive.db.execute(
             """
@@ -81,7 +84,7 @@ def _count_custom_voltage_violations(archive: Any, threshold_kv: float, scope_ca
             FROM reading
             WHERE station = ? AND cabinet = ? AND metric = 'Uab' AND value > ?
             """,
-            (REPORT_STATION, scope_cabinet, threshold_kv),
+            (station, scope_cabinet, threshold_kv),
         ).fetchone()
         sample = archive.db.execute(
             """
@@ -90,7 +93,7 @@ def _count_custom_voltage_violations(archive: Any, threshold_kv: float, scope_ca
             WHERE r.station = ? AND r.cabinet = ? AND r.metric = 'Uab' AND r.value > ?
             ORDER BY r.value DESC LIMIT 1
             """,
-            (REPORT_STATION, scope_cabinet, threshold_kv),
+            (station, scope_cabinet, threshold_kv),
         ).fetchone()
     else:
         row = archive.db.execute(
@@ -99,7 +102,7 @@ def _count_custom_voltage_violations(archive: Any, threshold_kv: float, scope_ca
             FROM reading
             WHERE station = ? AND CAST(cabinet AS INTEGER) >= 1005 AND metric = 'Uab' AND value > ?
             """,
-            (REPORT_STATION, threshold_kv),
+            (station, threshold_kv),
         ).fetchone()
         sample = archive.db.execute(
             """
@@ -108,7 +111,7 @@ def _count_custom_voltage_violations(archive: Any, threshold_kv: float, scope_ca
             WHERE r.station = ? AND CAST(r.cabinet AS INTEGER) >= 1005 AND r.metric = 'Uab' AND r.value > ?
             ORDER BY r.value DESC LIMIT 1
             """,
-            (REPORT_STATION, threshold_kv),
+            (station, threshold_kv),
         ).fetchone()
     return {
         "threshold_kv": threshold_kv,
@@ -302,11 +305,21 @@ def run_deep_investigation(
     memory_store: MemoryStore | None = None,
     memory_db_path: Path | None = None,
     reports_dir: Path | None = None,
+    profile: MineProfile | None = None,
     on_event=None,
 ) -> dict[str, Any]:
     """Execute a 6-stage long-horizon autonomous investigation and persist the structured report."""
     t0 = time.monotonic()
-    clean_goal = str(goal or "").strip() or "全面排查老洼地 35/10 kV 配电网 7 日运行隐患、潮流调压优化与现场补证优先级"
+    prof = profile or load_mine_profile()
+    station_code = prof.primary_station
+    tr_primary = next((t for t in prof.transformers if t.id == "T2"), prof.transformers[-1])
+    feeder_primary = next(
+        (f for f in prof.feeders if f.downstream_bus_id and f.bus_id == tr_primary.lv_bus),
+        next((f for f in prof.feeders if f.downstream_bus_id), prof.feeders[0]),
+    )
+    primary_feeder_cab = feeder_primary.cabinet
+    tr_name = tr_primary.name
+    clean_goal = str(goal or "").strip() or f"全面排查{prof.mine_name}配电网运行隐患、潮流调压优化与现场补证优先级"
 
     def emit(ev_type: str, **payload):
         if on_event is not None:
@@ -398,7 +411,7 @@ def run_deep_investigation(
 
     custom_thr_notes = []
     for t_idx, thr in enumerate(custom_v_thresholds, start=1):
-        chk = _count_custom_voltage_violations(archive, thr["value_kv"], thr.get("scope_cabinet"))
+        chk = _count_custom_voltage_violations(archive, thr["value_kv"], thr.get("scope_cabinet"), station=station_code)
         custom_thr_notes.append(
             f"- **定制红线 [{thr['title']}]（`> {chk['threshold_kv']} kV`）**：适用范围 `{chk['scope_cabinet']}`，"
             f"7 日共检出 **{chk['exceed_hours']} 个越限整点**，峰值 `{chk['peak_kv']} kV`（原表 `{chk['peak_cell'] or '无'}`）。"
@@ -461,8 +474,8 @@ def run_deep_investigation(
     set_stage(1, "done", "3 类核心异常交叉取证完成")
 
     # ── Stage 3: 168-hour discrete DP + Pareto frontier ──
-    set_stage(2, "running", "求解 7 日 168 小时离散分接头/电容最优调度与 6 组帕累托前沿")
-    weekly = analyze_weekly_schedule_pareto(archive, target_cabinet="1010", pareto_day="2026-11-13")
+    set_stage(2, "running", f"求解 7 日 168 小时 {primary_feeder_cab} 柜离散分接头/电容最优调度与帕累托前沿")
+    weekly = analyze_weekly_schedule_pareto(archive, target_cabinet=primary_feeder_cab, pareto_day="2026-11-13", profile=prof)
     ws = weekly["weekly_summary"]
     pareto = weekly["pareto_frontier"]
     add_finding(
@@ -489,9 +502,9 @@ def run_deep_investigation(
     set_stage(2, "done", f"越限 {ws['baseline_violations_total']}→{ws['optimized_violations_total']}h，节电 +{ws['total_loss_saving_kwh']} kWh")
 
     # ── Stage 4: N-1 contingency & Reactive arbitration ──
-    set_stage(3, "running", "复算 1009→1010 N-1 断线转供与 1010 无功补偿交流潮流")
-    r_n1 = run_ac_power_flow(archive, scenario="n1_contingency", outage_mode="feeder_1009")
-    r_ro = run_ac_power_flow(archive, scenario="reactive_opt", target_cabinet="1010")
+    set_stage(3, "running", f"复算 N-1 断线转供与 {primary_feeder_cab} 柜无功补偿交流潮流")
+    r_n1 = run_ac_power_flow(archive, scenario="n1_contingency", outage_mode="feeder_1009", profile=prof)
+    r_ro = run_ac_power_flow(archive, scenario="reactive_opt", target_cabinet=primary_feeder_cab, profile=prof)
     n1 = r_n1["n1_contingency"]["receiving_1010_comparison"]
     ro_d = r_ro["reactive_opt"]["delta"]
     add_finding(
@@ -513,9 +526,9 @@ def run_deep_investigation(
 
     # ── Stage 5: Parameter Uncertainty & VoI Ranking ──
     set_stage(4, "running", "量化 5 项未知等效参数灵敏度与现场补证信息价值 (VoI)")
-    voi = analyze_parameter_sensitivity_voi(archive)
+    voi = analyze_parameter_sensitivity_voi(archive, target_cabinet=primary_feeder_cab, profile=prof)
     ranking = voi.get("voi_ranking") or []
-    top_voi = ranking[0] if ranking else {"label": "2#主变分接头", "voi_score": 50.6, "required_field_document": "分接头台账"}
+    top_voi = ranking[0] if ranking else {"label": f"{tr_name}分接头", "voi_score": 50.6, "required_field_document": "分接头台账"}
     add_finding(
         "F-S5-1",
         "info",

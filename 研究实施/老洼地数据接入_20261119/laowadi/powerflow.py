@@ -10,7 +10,10 @@ Strict academic integrity boundary:
 
 from __future__ import annotations
 
+from collections import OrderedDict
 import math
+import threading
+import time
 from typing import Any, Literal
 
 import pandapower as pp
@@ -22,14 +25,105 @@ from laowadi.storage import REPORT_STATION
 ScenarioType = Literal["base_case", "tap_sensitivity", "n1_contingency", "reactive_opt"]
 OutageMode = Literal["feeder_1009", "incomer_306", "transformer_t2"]
 
+_DEFAULT_POWER_FACTOR = 0.85
+_MIN_POWER_FACTOR = 0.20
+_MAX_POWER_FACTOR = 0.9999
+_EPS_DIVISOR = 1e-6
+
+
+class _BoundedLRUCache:
+    """Thread-safe bounded LRU cache with optional TTL eviction for power-flow memoization."""
+
+    def __init__(self, maxsize: int = 32, ttl_seconds: float | None = 3600.0) -> None:
+        self.maxsize = max(1, int(maxsize))
+        self.ttl_seconds = ttl_seconds
+        self._data: OrderedDict[Any, tuple[float, Any]] = OrderedDict()
+        self._lock = threading.Lock()
+        self.hits = 0
+        self.misses = 0
+
+    def _evict_expired_locked(self, now: float) -> None:
+        if self.ttl_seconds is None:
+            return
+        expired = [k for k, (ts, _) in self._data.items() if now - ts > self.ttl_seconds]
+        for k in expired:
+            self._data.pop(k, None)
+
+    def get(self, key: Any, default: Any = None) -> Any:
+        now = time.monotonic()
+        with self._lock:
+            item = self._data.get(key)
+            if item is None:
+                self.misses += 1
+                return default
+            ts, val = item
+            if self.ttl_seconds is not None and (now - ts) > self.ttl_seconds:
+                self._data.pop(key, None)
+                self.misses += 1
+                return default
+            self._data.move_to_end(key)
+            self.hits += 1
+            return val
+
+    def set(self, key: Any, value: Any) -> None:
+        now = time.monotonic()
+        with self._lock:
+            self._evict_expired_locked(now)
+            self._data[key] = (now, value)
+            self._data.move_to_end(key)
+            while len(self._data) > self.maxsize:
+                self._data.popitem(last=False)
+
+    def __contains__(self, key: Any) -> bool:
+        now = time.monotonic()
+        with self._lock:
+            item = self._data.get(key)
+            if item is None:
+                return False
+            if self.ttl_seconds is not None and (now - item[0]) > self.ttl_seconds:
+                self._data.pop(key, None)
+                return False
+            return True
+
+    def __getitem__(self, key: Any) -> Any:
+        val = self.get(key, default=_MISSING)
+        if val is _MISSING:
+            raise KeyError(key)
+        return val
+
+    def __setitem__(self, key: Any, value: Any) -> None:
+        self.set(key, value)
+
+    def __len__(self) -> int:
+        with self._lock:
+            return len(self._data)
+
+    def clear(self) -> None:
+        with self._lock:
+            self._data.clear()
+            self.hits = 0
+            self.misses = 0
+
+    def stats(self) -> dict[str, int]:
+        with self._lock:
+            return {
+                "size": len(self._data),
+                "maxsize": self.maxsize,
+                "hits": self.hits,
+                "misses": self.misses,
+            }
+
+
+_MISSING = object()
+
 
 def _safe_q_mvar(p_kw: float | None, cos_val: float | None) -> float:
     if p_kw is None or p_kw <= 0.0:
         return 0.0
     if cos_val is None or cos_val <= 0.0:
-        c = 0.85
+        c = _DEFAULT_POWER_FACTOR
     else:
-        c = max(0.20, min(abs(float(cos_val)), 0.9999))
+        c = max(_MIN_POWER_FACTOR, min(abs(float(cos_val)), _MAX_POWER_FACTOR))
     return (p_kw / 1000.0) * math.tan(math.acos(c))
 
 
@@ -954,9 +1048,9 @@ def _solve_hour_grid_inplace(
     return baseline, grid
 
 
-_DAILY_SCHEDULE_CACHE: dict[tuple, dict[str, Any]] = {}
-_DAY_GRID_CACHE: dict[tuple, tuple] = {}
-_WEEKLY_PARETO_CACHE: dict[tuple, dict[str, Any]] = {}
+_DAILY_SCHEDULE_CACHE = _BoundedLRUCache(maxsize=64, ttl_seconds=3600.0)
+_DAY_GRID_CACHE = _BoundedLRUCache(maxsize=16, ttl_seconds=3600.0)
+_WEEKLY_PARETO_CACHE = _BoundedLRUCache(maxsize=16, ttl_seconds=3600.0)
 
 
 def _get_day_hourly_grids(
@@ -976,8 +1070,10 @@ def _get_day_hourly_grids(
     base_tap: int,
 ):
     grid_key = (prof.mine_id, day, day_sha, target_cabinet, tuple(tap_grid), tuple(cap_grid))
-    if day_sha and grid_key in _DAY_GRID_CACHE:
-        return _DAY_GRID_CACHE[grid_key]
+    if day_sha:
+        cached_bundle = _DAY_GRID_CACHE.get(grid_key)
+        if cached_bundle is not None:
+            return cached_bundle
 
     hour_rows = archive.db.execute(
         """
@@ -1006,8 +1102,8 @@ def _get_day_hourly_grids(
         hourly_snaps.append(snap)
 
     bundle = (hours, hourly_baselines, hourly_grids, hourly_snaps)
-    if day_sha and len(_DAY_GRID_CACHE) < 16:
-        _DAY_GRID_CACHE[grid_key] = bundle
+    if day_sha:
+        _DAY_GRID_CACHE.set(grid_key, bundle)
     return bundle
 
 
@@ -1034,8 +1130,10 @@ def optimize_daily_tap_cap_schedule(
         round(float(cap_step_kvar), 3), round(float(max_cap_kvar), 3),
         int(max_tap_changes), int(max_cap_changes), round(float(pf_target), 4),
     )
-    if day_sha and cache_key in _DAILY_SCHEDULE_CACHE:
-        return deepcopy(_DAILY_SCHEDULE_CACHE[cache_key])
+    if day_sha:
+        cached_daily = _DAILY_SCHEDULE_CACHE.get(cache_key)
+        if cached_daily is not None:
+            return deepcopy(cached_daily)
     feeder = prof.feeder_map().get(target_cabinet)
     if not feeder or not feeder.downstream_bus_id:
         raise ValueError(f"目标柜 {target_cabinet} 缺少下游等值潮流支路模型。")
@@ -1237,8 +1335,8 @@ def optimize_daily_tap_cap_schedule(
         "summary": summary,
         "model_assumptions": prof.model_assumption_disclaimer,
     }
-    if day_sha and len(_DAILY_SCHEDULE_CACHE) < 64:
-        _DAILY_SCHEDULE_CACHE[cache_key] = deepcopy(out)
+    if day_sha:
+        _DAILY_SCHEDULE_CACHE.set(cache_key, deepcopy(out))
     return out
 
 
@@ -1262,8 +1360,9 @@ def analyze_weekly_schedule_pareto(
         pareto_day = days[0]
 
     wkey = (prof.mine_id, archive_sig, target_cabinet, pareto_day, round(float(cap_step_kvar), 3), round(float(max_cap_kvar), 3))
-    if wkey in _WEEKLY_PARETO_CACHE:
-        return deepcopy(_WEEKLY_PARETO_CACHE[wkey])
+    cached_weekly = _WEEKLY_PARETO_CACHE.get(wkey)
+    if cached_weekly is not None:
+        return deepcopy(cached_weekly)
 
     weekly_days: list[dict[str, Any]] = []
     featured_schedule: dict[str, Any] | None = None
@@ -1366,12 +1465,11 @@ def analyze_weekly_schedule_pareto(
         "featured_day_schedule": featured_schedule,
         "model_assumptions": prof.model_assumption_disclaimer,
     }
-    if len(_WEEKLY_PARETO_CACHE) < 16:
-        _WEEKLY_PARETO_CACHE[wkey] = deepcopy(out)
+    _WEEKLY_PARETO_CACHE.set(wkey, deepcopy(out))
     return out
 
 
-_SENSITIVITY_VOI_CACHE: dict[tuple, dict[str, Any]] = {}
+_SENSITIVITY_VOI_CACHE = _BoundedLRUCache(maxsize=16, ttl_seconds=3600.0)
 
 
 def analyze_parameter_sensitivity_voi(
@@ -1389,8 +1487,9 @@ def analyze_parameter_sensitivity_voi(
     rep_rows = archive.db.execute("SELECT day, sha256 FROM report ORDER BY day ASC").fetchall()
     archive_sig = tuple((row["day"], row["sha256"]) for row in rep_rows)
     skey = (prof.mine_id, archive_sig, at_time, target_cabinet, n1_time)
-    if skey in _SENSITIVITY_VOI_CACHE:
-        return deepcopy(_SENSITIVITY_VOI_CACHE[skey])
+    cached_voi = _SENSITIVITY_VOI_CACHE.get(skey)
+    if cached_voi is not None:
+        return deepcopy(cached_voi)
 
     tr2 = next((t for t in prof.transformers if t.id == "T2"), prof.transformers[-1])
     fd_target = prof.feeder_map().get(target_cabinet) or next(f for f in prof.feeders if f.downstream_bus_id)
@@ -1615,6 +1714,5 @@ def analyze_parameter_sensitivity_voi(
         "summary": summary,
         "model_assumptions": prof.model_assumption_disclaimer,
     }
-    if len(_SENSITIVITY_VOI_CACHE) < 16:
-        _SENSITIVITY_VOI_CACHE[skey] = deepcopy(out)
+    _SENSITIVITY_VOI_CACHE.set(skey, deepcopy(out))
     return out

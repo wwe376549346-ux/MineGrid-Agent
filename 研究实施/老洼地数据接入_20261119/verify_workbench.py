@@ -26,6 +26,7 @@ from urllib.request import Request, urlopen
 from fastapi.testclient import TestClient
 
 from laowadi.api import create_app
+from laowadi.mine_schema import MineProfile, load_mine_profile
 from laowadi.monitor import EVENT_DB
 from laowadi.security import issue_token
 from laowadi.sessions import load_session, save_chat_turn
@@ -56,6 +57,66 @@ def decode_named_events(body: str) -> list[dict]:
             assert f"event: {event['type']}" in lines, lines
             events.append(event)
     return events
+
+
+def verify_mine_profiles(workbench: Workbench) -> list[str]:
+    default = load_mine_profile().model_dump()
+
+    def expected_summary(profile):
+        return {
+            "mine_id": profile["mine_id"],
+            "mine_name": profile["mine_name"],
+            "stations_count": len(profile["stations"]),
+            "buses_count": len(profile["buses"]),
+            "transformers_count": len(profile["transformers"]),
+            "feeders_count": len(profile["feeders"]),
+        }
+
+    path = "/api/profiles"
+    profiles_dir = ROOT / "profiles"
+    demo = MineProfile.model_validate_json((profiles_dir / "dongpo_demo.json").read_bytes()).model_dump()
+    assert demo["mine_id"] == "dongpo_demo"
+    with TestClient(create_app(workbench, require_auth=True)) as client:
+        viewer = {"Authorization": "Bearer " + issue_token("profile-reader", "viewer")["access_token"]}
+        assert client.get(path).status_code == 401
+        response = client.get(path, headers=viewer)
+        assert response.status_code == 200, response.text
+        entries = response.json()["profiles"]
+        records = {profile["mine_id"]: profile for profile in entries}
+        assert len(records) == len(entries)
+        assert entries[0] == expected_summary(default)
+        assert records[demo["mine_id"]] == expected_summary(demo)
+
+        with TemporaryDirectory() as tmp, patch("laowadi.api.ROOT", Path(tmp)):
+            directory = Path(tmp) / "profiles"
+            directory.mkdir()
+            (directory / "00-invalid.json").write_text("{", encoding="utf-8")
+            duplicate = {**default, "mine_name": "重复编号"}
+            (directory / "10-duplicate.json").write_text(json.dumps(duplicate), encoding="utf-8")
+            demo_path = directory / "20-demo.json"
+            demo_path.write_text(json.dumps(demo), encoding="utf-8")
+            first = client.get(path, headers=viewer).json()["profiles"]
+            assert first == [expected_summary(default), expected_summary(demo)]
+            renamed = {**demo, "mine_name": "更新后的示范矿"}
+            demo_path.write_text(json.dumps(renamed), encoding="utf-8")
+            assert client.get(path, headers=viewer).json()["profiles"][-1] == expected_summary(renamed)
+    return list(records)
+
+
+def verify_vendor_chunks(html: str) -> dict:
+    js_assets = {path.name: path.stat().st_size for path in (BUILD / "assets").glob("*.js")}
+    entry_match = re.search(r'<script[^>]+src="/assets/(index-[^"]+\.js)"', html)
+    assert entry_match, "Vite entry script missing from index.html"
+    entry = entry_match[1]
+    preloaded = re.findall(r'rel="modulepreload"[^>]+href="/assets/([^"]+)"', html)
+    for group in ("vendor-react", "vendor-astryx", "vendor-lucide"):
+        assert any(name.startswith(group + "-") and name in js_assets for name in preloaded), group
+    assert max(js_assets.values()) <= 500_000, f"An emitted JS chunk exceeds Vite's size warning: {js_assets}"
+    app_entry_bytes = js_assets[entry] + sum(
+        js_assets[name] for name in preloaded if name.startswith("workbench-")
+    )
+    assert 0 < app_entry_bytes < 200_000, app_entry_bytes
+    return {"entry_bytes": js_assets[entry], "app_entry_bytes": app_entry_bytes, "largest_js_bytes": max(js_assets.values())}
 
 
 def verify_sensitivity_voi(workbench: Workbench) -> dict:
@@ -1022,6 +1083,8 @@ def main():
             with urlopen(base + "/", timeout=10) as resp:
                 html = resp.read().decode("utf-8")
                 assert resp.status == 200 and "老洼地煤矿" in html
+            vendor_chunks = verify_vendor_chunks(html)
+            profiles = verify_mine_profiles(server.app)
             assets = re.findall(r'(?:src|href)="(/assets/[^"]+)"', html)
             assert len(assets) >= 2, f"Expected JS and CSS bundle assets, got {assets}"
             assert any(asset.endswith(".js") for asset in assets) and any(asset.endswith(".css") for asset in assets)
@@ -1321,6 +1384,8 @@ def main():
             {
                 "status": "ok",
                 "static_assets_verified": len(assets),
+                "vendor_chunks": vendor_chunks,
+                "profiles": profiles,
                 "sensitivity_voi_items_verified": len(sensitivity["voi_ranking"]),
                 "autonomous_endpoints": autonomous_endpoints,
                 "autonomous_browser": autonomous_browser,

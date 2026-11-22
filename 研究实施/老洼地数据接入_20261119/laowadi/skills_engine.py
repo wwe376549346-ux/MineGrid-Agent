@@ -13,6 +13,7 @@ from pathlib import Path
 import re
 from typing import Any
 from urllib.parse import urlsplit
+from urllib.request import Request, urlopen
 import yaml
 
 from laowadi.diag_tools import DiagnosticToolbox
@@ -132,8 +133,14 @@ def run_skill(
     target_cabinet: str | None = None,
     at_time: str | None = None,
     skills_dir: Path | None = None,
+    use_autonomous: bool | None = None,
+    client: Any | None = None,
 ) -> dict[str, Any]:
-    """Execute a pluggable domain skill against read-only archive + pandapower checks."""
+    """Execute a pluggable domain skill against read-only archive + pandapower checks.
+
+    Custom (non-builtin) Markdown skills or calls with `use_autonomous=True` also delegate
+    the Markdown SOP body to `run_autonomous_agent` for dynamic reasoning & sandbox execution.
+    """
     sid = str(skill_id or "").strip().lower()
     if not _SKILL_ID_RE.match(sid):
         raise ValueError("无效的技能 ID。")
@@ -196,6 +203,37 @@ def run_skill(
         "detail": f"优先核实「{top_voi['required_field_document']}」（VoI {top_voi['voi_score']}）。",
     })
 
+    autonomous_summary = ""
+    artifacts: list[dict[str, Any]] = []
+    should_run_auto = use_autonomous if use_autonomous is not None else (not skill["builtin"])
+    if should_run_auto:
+        try:
+            from laowadi.autonomous_agent import _INLINE_CELL_RE, run_autonomous_agent
+
+            sop_prompt = (
+                f"请严格按运维技能「{skill['title']}」对 {cab} 柜（参考断面 {ref_time}）开展只读核查：\n"
+                f"{skill['body_markdown'][:1200]}"
+            )
+            auto_res = run_autonomous_agent(archive, sop_prompt, client=client)
+            autonomous_summary = str(auto_res.get("answer_markdown") or auto_res.get("answer") or "").strip()
+            artifacts = list(auto_res.get("artifacts") or [])
+            v_cells = (auto_res.get("verification_badge") or {}).get("verified_cells")
+            cand_cells = v_cells if isinstance(v_cells, list) else _INLINE_CELL_RE.findall(autonomous_summary)
+            for cell in cand_cells:
+                if cell and cell not in evidence_cells:
+                    evidence_cells.append(cell)
+            checks.append({
+                "step": "自主 SOP 动态核查引擎",
+                "status": "ok" if autonomous_summary else "info",
+                "detail": autonomous_summary[:220] if autonomous_summary else "已完成自主工具链核查。",
+            })
+        except Exception as exc:
+            checks.append({
+                "step": "自主 SOP 动态核查引擎",
+                "status": "warning",
+                "detail": f"动态扩展回退至基线核查：{str(exc)[:140]}",
+            })
+
     return {
         "status": "ok",
         "skill_id": skill["id"],
@@ -204,6 +242,8 @@ def run_skill(
         "at_time": ref_time,
         "steps": skill["steps"],
         "checks": checks,
+        "autonomous_summary": autonomous_summary,
+        "artifacts": artifacts,
         "evidence_cells": list(dict.fromkeys(evidence_cells)),
         "recommended_action": {
             "kind": skill["action_kind"],
@@ -257,12 +297,45 @@ def list_mcp_clients(*, archive: Any | None = None, registry_path: Path | None =
     return items
 
 
+def _probe_http_mcp_readonly(endpoint: str, timeout_seconds: float = 2.0) -> tuple[str, list[str]]:
+    """Best-effort read-only JSON-RPC 2.0 `initialize` + `tools/list` probe for HTTP MCP endpoints."""
+    try:
+        init_payload = json.dumps({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {"protocolVersion": "2024-11-05", "capabilities": {}, "clientInfo": {"name": "MineGrid-Agent", "version": "1.0"}},
+        }).encode("utf-8")
+        req_init = Request(endpoint, data=init_payload, headers={"Content-Type": "application/json"}, method="POST")
+        with urlopen(req_init, timeout=timeout_seconds) as resp:
+            if resp.status >= 400:
+                return "unreachable_or_deferred", []
+        list_payload = json.dumps({"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}}).encode("utf-8")
+        req_list = Request(endpoint, data=list_payload, headers={"Content-Type": "application/json"}, method="POST")
+        with urlopen(req_list, timeout=timeout_seconds) as resp:
+            data = json.loads(resp.read().decode("utf-8", errors="ignore"))
+        raw_tools = (data.get("result") or {}).get("tools") or []
+        ro_tools: list[str] = []
+        for t in raw_tools:
+            if not isinstance(t, dict) or not t.get("name"):
+                continue
+            ann = t.get("annotations") or {}
+            # Strictly accept only tools explicitly marked read-only (or without destructive/write hints)
+            if ann.get("destructiveHint") is True or ann.get("readOnlyHint") is False:
+                continue
+            ro_tools.append(str(t["name"]))
+        return "connected", ro_tools[:64]
+    except Exception:
+        return "unreachable_or_deferred", []
+
+
 def register_mcp_client(
     *,
     name: str,
     endpoint: str,
     transport: str = "http",
     description: str = "",
+    probe: bool = True,
     registry_path: Path | None = None,
 ) -> dict[str, Any]:
     clean_name = str(name or "").strip()[:80]
@@ -279,6 +352,11 @@ def register_mcp_client(
         if parsed.scheme == "http" and parsed.hostname not in {"127.0.0.1", "localhost"}:
             raise ValueError("非本机外部 MCP 端点须强制使用 HTTPS。")
 
+    probe_status = "stdio_registered_deferred" if clean_tr == "stdio" else "probe_skipped"
+    discovered_tools: list[str] = []
+    if clean_tr == "http" and probe:
+        probe_status, discovered_tools = _probe_http_mcp_readonly(clean_ep)
+
     entry = {
         "client_id": f"mcp-{re.sub(r'[^a-z0-9]+', '-', clean_name.lower()).strip('-')[:24] or 'ext'}-{int(datetime.now(timezone.utc).timestamp()) % 10000}",
         "name": clean_name,
@@ -286,9 +364,10 @@ def register_mcp_client(
         "endpoint": clean_ep,
         "description": str(description or "").strip()[:240],
         "read_only": True,
-        "status": "registered_readonly",
-        "tools_count": 0,
-        "tools": [],
+        "status": "connected" if probe_status == "connected" else "registered_readonly",
+        "probe_status": probe_status,
+        "tools_count": len(discovered_tools),
+        "tools": discovered_tools,
         "builtin": False,
         "registered_at": _utc_now(),
     }

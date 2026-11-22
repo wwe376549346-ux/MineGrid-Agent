@@ -75,7 +75,8 @@ AUTONOMOUS_SYSTEM_PROMPT = """你是 MineGrid-Agent —— 一位资深的煤矿
    - **只读 Python/SQL/NumPy/SciPy/pandapower 沙盒 (`run_python_analysis`)**：遇到任何固定工具未覆盖的开放式计算——如相关性/回归分析、R²、负荷曲线聚类、多柜统计排行、自定义假设潮流试算——**果断现场编写 Python 脚本跑出真实结果**，并通过 `emit_table(title, columns, rows)` 和 `emit_chart(title, chart_type, x_label, y_label, series)` 输出可供界面直接渲染的交互图表（`chart_type` 支持 `scatter`、`line`、`bar`）。
    - 如果沙盒执行报 `stderr`，请立刻阅读报错、修正脚本并重试。
 3. **只读 SQLite 核心表结构**（供 `query_sql` 使用）：
-   - `reading(day, time, station, cabinet, metric, value, marker, source_row, source_col)` — `station='S35'`, `metric IN ('Uab','Ia','P','cos')`
+   - 严禁 `import sqlite3` 或 `import pandas`（安全沙盒已禁用），直接调用预注入函数 `query_sql(sql, params)`（返回 `list[dict]`）。
+   - `reading(day, time, station, cabinet, metric, value, marker, source_row, source_col)` — `station='S35'`, `metric` 严格区分大小写（`'Uab'`, `'Ia'`, `'P'`, `'cos'`）；对齐多指标时按 `r['time']` 分组（示例：`by_t = {}; [by_t.setdefault(r['time'], {}).__setitem__(r['metric'], r['value']) for r in rows]`）。
    - `report(day, filename, sheet, sha256)` — 与 `reading.day=report.day` 关联可拼出原表单元格 `filename || ' / ' || sheet || '!' || source_col || source_row`
    - `cabinet(station, number, label, aliases)`、`summary(day, station, cabinet, metric, statistic, value, marker, source_row, source_col)`
 4. **工程红线与表达风格**：
@@ -845,9 +846,9 @@ def run_autonomous_agent(
             is_last_turn = step_idx == step_limit - 1
             msg, _rec = client.chat(
                 messages,
-                tools=None if is_last_turn else ALL_AUTONOMOUS_TOOLS,
-                tool_choice=None if is_last_turn else "auto",
-                max_tokens=3072,
+                tools=ALL_AUTONOMOUS_TOOLS,
+                tool_choice="none" if is_last_turn else "auto",
+                max_tokens=4096,
                 stream=True,
                 on_delta=_on_delta,
             )
@@ -959,6 +960,25 @@ def run_autonomous_agent(
                     "tool_call_id": cid,
                     "content": json.dumps(compact_res, ensure_ascii=False, default=str)[:14000],
                 })
+        if not final_answer.strip():
+            parts: list[str] = ["### 自主排查工具与沙盒执行汇总\n"]
+            for cr in code_runs:
+                if cr.get("stdout"):
+                    parts.append(f"**沙盒计算输出 ({cr.get('status', 'ok')})：**\n```text\n{str(cr['stdout']).strip()[:1200]}\n```\n")
+                elif cr.get("stderr"):
+                    parts.append(f"**沙盒执行异常：** `{str(cr['stderr']).strip()[:240]}`\n")
+                for tbl in cr.get("tables") or []:
+                    cols = tbl.get("columns") or []
+                    rows = (tbl.get("rows") or [])[:5]
+                    if cols and rows:
+                        parts.append(f"**{tbl.get('title', '数据表')}**：" + "；".join(str(r) for r in rows) + "\n")
+            for tr in tool_trace:
+                if tr["tool"] != "run_python_analysis":
+                    parts.append(f"- `{tr['tool']}`：{_summarize_tool_result(tr['tool'], tr['result'])}")
+            if len(parts) == 1:
+                parts.append("已完成检索与计算步骤，请结合上方工具执行回执与图表查看详情。")
+            final_answer = "\n".join(parts).strip()
+            emit("content_delta", delta=final_answer, text=final_answer)
     except LLMError as exc:
         # Seamless fallback to local autonomous sandbox so user never sees a dead screen
         local_out = _run_local_autonomous(

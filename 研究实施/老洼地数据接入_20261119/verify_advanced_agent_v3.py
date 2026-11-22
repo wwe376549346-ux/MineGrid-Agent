@@ -15,7 +15,9 @@ from tempfile import TemporaryDirectory
 
 from laowadi.autonomous_agent import run_autonomous_agent
 from laowadi.memory_store import create_memory, detect_memory_candidates
+from laowadi.mine_schema import MineProfile
 from laowadi.monitor import EVENT_DB
+from laowadi.powerflow import _BoundedLRUCache
 from laowadi.protocol_adapter import (
     get_agent_observability_summary,
     ingest_protocol_frame,
@@ -23,7 +25,7 @@ from laowadi.protocol_adapter import (
 )
 from laowadi.queries import Archive
 from laowadi.skills_engine import create_skill, list_mcp_clients, list_skills, register_mcp_client, run_skill
-from laowadi.storage import DB, connect
+from laowadi.storage import DB, ROOT, connect
 from laowadi.subagent_debate import run_parallel_subagent_debate
 
 
@@ -68,13 +70,35 @@ def verify_parallel_debate(archive: Archive, tmp: Path) -> dict:
     for needed in ("subagent_start", "subagent_done", "debate_rebuttal", "arbitration_done", "done"):
         assert needed in ev_types, f"Missing debate SSE event {needed}"
     assert res["status"] == "ok" and len(res["subagents"]) == 3
+    assert res["topic"] == "reactive_overvoltage"
     assert len(res["rebuttals"]) >= 3
     assert len(res["arbitration"]["consensus"]) >= 2
     assert res["parallel_threads_used"] >= 1
+
+    # Topic-dynamic check #1: 1018 feeder polarity must NOT fall back to tap-change template
+    pol = run_parallel_subagent_debate(
+        archive,
+        "1018 柜全周持续负有功，是反送电还是 CT/PT 二次极性倒置？",
+        memory_db_path=mem_db,
+    )
+    assert pol["topic"] == "feeder_polarity", f"Expected feeder_polarity, got {pol.get('topic')}"
+    assert pol["arbitration"]["action_recommendations"][0]["kind"] == "defect_notice"
+    assert "+2 档" not in pol["arbitration"]["verdict"]
+
+    # Topic-dynamic check #2: 306 single-incomer zero-load window
+    z_res = run_parallel_subagent_debate(
+        archive,
+        "2026-11-13 306 柜归零、303 柜单进线带全站属于计划倒闸还是异常跳闸？",
+        memory_db_path=mem_db,
+    )
+    assert z_res["topic"] == "zero_incomer", f"Expected zero_incomer, got {z_res.get('topic')}"
+    assert z_res["arbitration"]["action_recommendations"][0]["kind"] == "field_verification"
+
     return {
         "subagents": len(res["subagents"]),
         "rebuttals": len(res["rebuttals"]),
         "parallel_threads": res["parallel_threads_used"],
+        "topics_verified": [res["topic"], pol["topic"], z_res["topic"]],
     }
 
 
@@ -99,7 +123,7 @@ def verify_skills_and_mcp_clients(archive: Archive, tmp: Path) -> dict:
     )
     assert sk["id"] == "shift_quick_audit" and len(list_skills(skills_dir=custom_dir)) == 1
     custom_run = run_skill(archive, "shift_quick_audit", skills_dir=custom_dir)
-    assert custom_run["status"] == "ok"
+    assert custom_run["status"] == "ok" and bool(custom_run.get("autonomous_summary"))
 
     # MCP Client registry
     reg_file = tmp / "mcp_clients.json"
@@ -110,9 +134,11 @@ def verify_skills_and_mcp_clients(archive: Archive, tmp: Path) -> dict:
         endpoint="https://scada-mcp.example.com/rpc",
         transport="http",
         description="External read-only SCADA MCP bridge",
+        probe=False,
         registry_path=reg_file,
     )
-    assert reg["read_only"] is True and len(list_mcp_clients(archive=archive, registry_path=reg_file)) == 2
+    assert reg["read_only"] is True and reg.get("probe_status") == "probe_skipped"
+    assert len(list_mcp_clients(archive=archive, registry_path=reg_file)) == 2
     # Insecure non-localhost HTTP must be rejected
     try:
         register_mcp_client(name="Bad", endpoint="http://evil.example.com/rpc", transport="http", registry_path=reg_file)
@@ -187,6 +213,27 @@ def verify_protocols_and_observability(archive: Archive, tmp: Path) -> dict:
     return {"protocols_ingested": 3, "write_blocks_verified": True, "observability_ok": True}
 
 
+def verify_profiles_and_lru_cache() -> dict:
+    # 1. Second-mine declarative JSON profile (35/6 kV Dongpo demo)
+    dongpo_path = ROOT / "profiles" / "dongpo_demo.json"
+    assert dongpo_path.is_file(), f"Missing second-mine profile: {dongpo_path}"
+    prof = MineProfile.model_validate_json(dongpo_path.read_text(encoding="utf-8"))
+    assert prof.mine_id == "dongpo_demo" and len(prof.buses) >= 3 and len(prof.transformers) >= 1
+    lim6 = prof.voltage_limit_for_kv(6.0)
+    assert lim6.lo_kv < 6.0 < lim6.hi_kv
+
+    # 2. Thread-safe bounded LRU cache eviction & stats
+    cache = _BoundedLRUCache(maxsize=2, ttl_seconds=60.0)
+    cache.set("k1", 1)
+    cache.set("k2", 2)
+    assert cache.get("k1") == 1  # promote k1
+    cache.set("k3", 3)           # evicts k2 (LRU)
+    assert "k1" in cache and "k3" in cache and "k2" not in cache
+    st = cache.stats()
+    assert st["size"] == 2 and st["maxsize"] == 2 and st["hits"] >= 1
+    return {"dongpo_mine_id": prof.mine_id, "lru_eviction_ok": True}
+
+
 def main():
     before_db = sha256(DB)
     before_ev = sha256(EVENT_DB)
@@ -198,6 +245,7 @@ def main():
             d = verify_parallel_debate(archive, tmp)
             s = verify_skills_and_mcp_clients(archive, tmp)
             p = verify_protocols_and_observability(archive, tmp)
+            c = verify_profiles_and_lru_cache()
     assert sha256(DB) == before_db and sha256(EVENT_DB) == before_ev, "Golden archives mutated!"
     print(
         json.dumps(
@@ -208,6 +256,7 @@ def main():
                 "parallel_debate": d,
                 "skills_and_mcp": s,
                 "protocols_and_observability": p,
+                "profiles_and_cache": c,
             },
             ensure_ascii=False,
             indent=2,

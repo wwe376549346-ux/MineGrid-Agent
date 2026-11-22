@@ -435,16 +435,17 @@ footer {margin-top:24px;color:var(--sub);font-size:.86rem}
       "deps": [
         "scope"
       ],
-      "now": "7 份日报、168 个整点，16,800 条整点记录及 2,100 条页尾记录。两张截图形成 40 个柜及两条已整理连接。原件归档在「现场资料」，含四柜有功整点预览和原表单元格。整点重算和页尾原值分开。企业级存储底座（SQLAlchemy 2.0 QueuePool + Alembic 0001/0002 + PostgreSQL 16.16 + TimescaleDB 2.x 7天分块 Hypertable / 30天压缩 / telemetry_daily_rollup 连续聚合 + pgvector v0.8.0 HNSW 128维余弦索引）已在 Docker 实机（127.0.0.1:5433）与原生 PostgreSQL 19.0（127.0.0.1:5432）全部验证通过并迁入全量 16,800 遥测、2,100 页尾、211 事件与 76 条向量；MineProfile 已新增 derive_balance_equations()（图模自动生成功率守恒方程）与 build_sld_layout()（图模自动生成一次主接线排版）。 生产值班查询及后台巡检使用 PostgreSQL 版本快照。两份 SQLite 继续提供离线回放和发布种子。隔离复验未批准订正与回放哈希不一致均拒绝发布，在途读请求可继续读取原版本。连续点表、现场补传与订正审批流程待矿方联调。",
-      "implementation": "由 xls.py 解析原表，storage.py 按日期、柜号、电气量入库只读原归档；新增 laowadi/db/ 企业级存储包（models.py 定义 11 张 SQLAlchemy 2.0 声明式表，engine.py 提供 QueuePool 连接池与 pre_ping/recycle 探活，migrations/versions/0001–0002 管理可逆 Alembic 迁移并在 PostgreSQL 方言下创建 TimescaleDB 7天分块 Hypertable、30天列式压缩策略、telemetry_daily_rollup 连续聚合与 pgvector 128维 HNSW 余弦索引，vector_store.py 统一支持 PG 原生 <=> 检索与本机池化余弦检索，migrator.py 执行只读源库幂等 ETL 并提供 laowadi db CLI）。保存页名、行列与 SHA-256。新增点表首先确认单位、倍率、符号和值的有效性。 Alembic 0003 和 migrator.py 把日报、原表出处、回放、图示及向量写入同一 PostgreSQL 发布事务。编排与巡检固定到读请求打开时的快照。",
-      "output": "只读日报 SQLite、供电图台账、可重复导入规则、SQLAlchemy 2.0 连接池与 Alembic 迁移链（0001–0002）、pgvector 向量检索器、docker-compose.enterprise.yml 生产栈及 verify_storage_migration.py 验收套件。 生产归档发布及原件挂载说明。",
+      "now": "7 份日报、168 个整点，16,800 条整点记录及 2,100 条页尾记录。两张截图形成 40 个柜及两条已整理连接。原件归档在「现场资料」，含四柜有功整点预览和原表单元格。整点重算和页尾原值分开。企业级存储底座（SQLAlchemy 2.0 QueuePool + Alembic 0001/0002 + PostgreSQL 16.16 + TimescaleDB 2.x 7天分块 Hypertable / 30天压缩 / telemetry_daily_rollup 连续聚合 + pgvector v0.8.0 HNSW 128维余弦索引）已在 Docker 实机（127.0.0.1:5433）与原生 PostgreSQL 19.0（127.0.0.1:5432）全部验证通过并迁入全量 16,800 遥测、2,100 页尾、211 事件与 76 条向量；MineProfile 已新增 derive_balance_equations()（图模自动生成功率守恒方程）与 build_sld_layout()（图模自动生成一次主接线排版）。 生产值班查询及后台巡检使用 PostgreSQL 版本快照。两份 SQLite 继续提供离线回放和发布种子。隔离复验未批准订正与回放哈希不一致均拒绝发布，在途读请求可继续读取原版本。连续点表、现场补传与订正审批流程待矿方联调。 只读 Profile 目录展示默认老洼地及东坡演示图模。目录清点站点、母线、主变和馈线，校验声明文件。",
+      "implementation": "由 xls.py 解析原表，storage.py 按日期、柜号、电气量入库只读原归档；新增 laowadi/db/ 企业级存储包（models.py 定义 11 张 SQLAlchemy 2.0 声明式表，engine.py 提供 QueuePool 连接池与 pre_ping/recycle 探活，migrations/versions/0001–0002 管理可逆 Alembic 迁移并在 PostgreSQL 方言下创建 TimescaleDB 7天分块 Hypertable、30天列式压缩策略、telemetry_daily_rollup 连续聚合与 pgvector 128维 HNSW 余弦索引，vector_store.py 统一支持 PG 原生 <=> 检索与本机池化余弦检索，migrator.py 执行只读源库幂等 ETL 并提供 laowadi db CLI）。保存页名、行列与 SHA-256。新增点表首先确认单位、倍率、符号和值的有效性。 Alembic 0003 和 migrator.py 把日报、原表出处、回放、图示及向量写入同一 PostgreSQL 发布事务。编排与巡检固定到读请求打开时的快照。 laowadi/api.py 的 GET /api/profiles 读取默认图模及 profiles/*.json，通过 MineProfile 校验后仅返回矿井标识、名称、数量。按矿井编号去重，重复时保留先读到的定义，默认老洼地优先。",
+      "output": "只读日报 SQLite、供电图台账、可重复导入规则、SQLAlchemy 2.0 连接池与 Alembic 迁移链（0001–0002）、pgvector 向量检索器、docker-compose.enterprise.yml 生产栈及 verify_storage_migration.py 验收套件。 生产归档发布及原件挂载说明。 老洼地站点／母线／主变／馈线分别为 2／7／2／25，东坡演示图模分别为 2／3／1／5。",
       "checks": [
         "核对 11 月 16 日 303 柜整点最大值与页尾来源",
         "同日报同哈希可重跑，版本冲突拒绝整批提交",
         "用对应时点开关状态核实实际供电方式后才扩展图示关系",
         "验证 Alembic 离线编译 PostgreSQL+TimescaleDB+pgvector DDL、幂等 ETL 迁移（16,800 遥测/2,100 页尾/211 事件/76 向量）、QueuePool 16 线程压测、downgrade/upgrade 可逆及源库只读",
         "用老洼地真实点表验收数据到齐与失联判定、迟到补传、批准的订正版本和主查询可见性。",
-        "由 PostgreSQL 复验值班查询、完整回放和原件哈希，核对拒绝的订正及在途读取的一致性。"
+        "由 PostgreSQL 复验值班查询、完整回放和原件哈希，核对拒绝的订正及在途读取的一致性。",
+        "从 /api/profiles 核对默认老洼地和东坡演示图模的各类数量，验证只读权限、重复编号、无效文件隔离及文档更新可见。东坡样例用于声明式图模验收，真实运行仍需现场资料。"
       ],
       "files": [
         [
@@ -498,6 +499,14 @@ footer {margin-top:24px;color:var(--sub);font-size:.86rem}
         [
           "PG 归档与运行态",
           "研究实施/老洼地数据接入_20261119/laowadi/db/postgres.py"
+        ],
+        [
+          "矿井 Profile 目录接口",
+          "研究实施/老洼地数据接入_20261119/laowadi/api.py"
+        ],
+        [
+          "东坡声明式示例图模",
+          "研究实施/老洼地数据接入_20261119/profiles/dongpo_demo.json"
         ]
       ],
       "adapt": "第 7 章帮助设计明确输入和接口。第 8、9 章用于区分可直接查询的数据与供给模型的证据。"
@@ -1218,7 +1227,7 @@ footer {margin-top:24px;color:var(--sub);font-size:.86rem}
         "model",
         "rag"
       ],
-      "now": "复审第 1–10 项新增对抗与契约回归已全部通过。P0 11/11，复审 #06–#10 5/5（六入口一致性矩阵 5/5），综合基准 36/36，本地诊断 6/6，会诊对照 4/4。另建成面向硕士论文的 48 题六层评测基准（thesis_eval/，含 S01–S08、M01–M08、N01–N08、D01–D08、P01–P08、H01–H08 共 56 个作答轮次）及四项消融离线探针报告与 LaTeX 三线表（thesis_eval/results/本地实验结果.md）。两份归档库逐字节一致。真实 DeepSeek 新协议和现场适用性继续待验。 离线评测下的「技能与协议」子页显示 LLM 首 Token 时延、Token 统计、沙盒成功率、自主核验率和运行计数。",
+      "now": "复审第 1–10 项新增对抗与契约回归已全部通过。P0 11/11，复审 #06–#10 5/5（六入口一致性矩阵 5/5），综合基准 36/36，本地诊断 6/6，会诊对照 4/4。另建成面向硕士论文的 48 题六层评测基准（thesis_eval/，含 S01–S08、M01–M08、N01–N08、D01–D08、P01–P08、H01–H08 共 56 个作答轮次）及四项消融离线探针报告与 LaTeX 三线表（thesis_eval/results/本地实验结果.md）。两份归档库逐字节一致。离线评测下的「技能与协议」子页显示 LLM 首 Token 时延、Token 统计、沙盒成功率、自主核验率和运行计数。已完成真实 deepseek-v4-pro 6 题在线端到端评测切片（严格通过 5/6 = 83.3%，Q6 部分通过 1/6，失败 0/6；触发 3 次 Patch-Only Reflection 自修；均值 103.33 s、P50 85.5 s、P95 157.07 s），完整记录于 docs/LIVE_EVAL_REPORT.md。",
       "implementation": "evaluation.py 汇总归档调用与当前程序检查；thesis_eval/ 冻结 48 题题面与金标准，执行单点/统计、条件化混合检索跨站门控、GSSC 上下文压缩（净省 45.2% 且 0 证据丢失）、pandapower 交流潮流、双层数值核验（32/32 幻觉阻断 + Reflection 自修正）及 HITL 两轮补证（8/8 正确转移）离线探针，并自动生成 Markdown 与 LaTeX booktabs 三线表。 /api/eval/observability 聚合现有 LLM 数据、工作台运行计数与已登记资产总量。API 和页面标示当前进程范围，尚无样本的比例留空。",
       "output": "五层综合评测报告（local/老洼地智能体分层评测报告.md / .json）、48 题论文评测协议与离线探针报告（thesis_eval/README.md、thesis_eval/results/本地实验结果.md / offline_probes.json）及 verify_reliability_and_contracts.py 验收回执。 平均与 P95 TTFT、含估算的 Token 总量、沙盒和核验样本，以及各模块运行计数。",
       "checks": [
@@ -1313,6 +1322,14 @@ footer {margin-top:24px;color:var(--sub);font-size:.86rem}
         [
           "高阶 API 与 Chromium 回归",
           "研究实施/老洼地数据接入_20261119/verify_workbench.py"
+        ],
+        [
+          "6 题真实 DeepSeek 在线端到端评测脚本",
+          "研究实施/老洼地数据接入_20261119/run_live_eval_slice.py"
+        ],
+        [
+          "真实模型在线评测报告（含延迟与缺陷分析）",
+          "docs/LIVE_EVAL_REPORT.md"
         ]
       ],
       "adapt": "分层表使用本项目题目与程序评分。独立值班复核、误报与漏报、现场连续监测和反馈时延需另行验收。"
@@ -1380,9 +1397,9 @@ footer {margin-top:24px;color:var(--sub);font-size:.86rem}
         "monitor",
         "tools"
       ],
-      "now": "已有事件工单台、通知回执、问答首页和值班工具和 60 条 OpenAPI 路径。复审 26 已修复。工单仅展示合法操作，销项和复开均要求依据，旧版本提交返回 409。代码中业务署名与令牌主体的绑定仍待专项处理。真实班表、交接签认、对象权限、并发状态与目标环境工作台待验。 本轮工作台区分已核验读数、条件计算、待核原因、人工复核备注及待核参考条款。历史会话仍保留原记录，主对话提示重新核验。条件复算单独进入会话记录。 生产 API 和外部 Worker 共用 PostgreSQL 队列、SSE、熔断及工单状态。双节点 kind 在运行中强制删除一只 Worker Pod，另一节点接管，SSE 从原事件号跨 API 续读。 8765 首页改为以问答为主。历史对话、主接线、工单、柜级档案和人工复核从侧栏进入，研究工具默认收起。回复先呈现结论，原表证据可展开，回答完成后保持在对话中。 首页可用三类异常查证入口打开检验。1440 和 390 像素浏览器均已复验检验记录、逐轮查询展开和日报下载。 研究工作台支持两类五步证据交换与质疑仲裁（reactive_collaboration.py）：① 1010 无功补偿与 II 段过压的同点复算（单投、仅调压、先调压再补偿）；② 下井双回 1009→1010 N-1 转供双口径包络仲裁（pandapower 平衡潮流 110.78 A vs 表计代数峰值 159.69 A vs 比例修正包络 167.70 A），并在 GovernanceMultiAgentPanel.jsx 展示三口径包络对比表与角色消息。 最近一轮已核验且完成的假设检验可一键对照相邻整点。调压补偿和 N-1 卡片可显示跨时段校核与原表链接。 工单可查看自动初诊、下载原表、刷新初诊并直接转问答。调压补偿会诊可展示 24 小时离散投切方案。 交流潮流页可按需计算全周分时优化与典型日 6 种动作预算。分时会诊与交流潮流复用电压、投容及馈线无功 SVG 图。 交流潮流页支持按需加载参数灵敏度和信息价值排序。当前 N-1 工况为 1009 退运、1010 受电。 值班问答可以切换自主深度 Agent 和严格审计单，默认进入严格审计单。自主模式已用老洼地全周归档复验，外部 DeepSeek 的同题质量和延迟待测。 值班问答顶部可打开长期记忆，回复可预填排障案例。侧栏提供深度排查，已用老洼地全周归档复验专项报告。 工作台侧栏可打开实时态势与两票审批。预诊断告警和异常工单可起草演练票据，留痕可回查。现场操作依据仍待人工确认。 自主完成回合可从侧栏重新打开，显示当时的计划、图表、工具摘要和核验结果。两个问答模式各有 6 张首页示例。通过自主回复可打开关联画布、起草演练票据或带目标进入深度排查。 值班问答提供「一键写入长期记忆」确认条和 / 技能快捷菜单。「多智体与治理」增加子智能体辩论子视图，「离线评测」增加技能与协议子页。",
-      "implementation": "后端已升级为FastAPI + Uvicorn ASGI 单机多进程运行时、统一动态 DAG 编排内核（laowadi/dag_engine.py）、PostgreSQL 16 + TimescaleDB + pgvector 存储与运维保障体系，提供 60 条 OpenAPI 3.1 路径（/docs，含 /api/dag/run|resume|threads、/api/storage/* 与 /api/ops/*）、默认 2×API Worker + 2×独立外部 Job Worker OS 进程水平扩展、持久化外部任务队列与 Last-Event-ID 断点续传 SSE、跨进程共享三态熔断器、标准 NDJSON 结构化日志及在线热备与沙箱 DR 演练；React 19 + Meta Astryx 前端 SingleLineDiagram.jsx 实现 100% 图模自动排版，GovernanceMultiAgentPanel.jsx 集成统一动态 DAG 任意节点挂起/恢复控制台、多 Worker 进程池、熔断器、TimescaleDB/pgvector 与热备/DR/JSON 日志面板。 Astryx 页面的值班外壳由 main.jsx 与 duty-layout.css 提供。AgentCopilotPane.jsx 维护历史会话、简洁输入和结果证据，非首页工具按需加载。 工单使用数据库版本校验流转，工作台可直接下载源表、查看站内通知和撤销回执。 AgentCopilotPane.jsx 从 SSE 展示查证计划，终审后显示各轮判定和可下载的原表出处。 工单刷新使用 revision，冲突返回 409。问答沿用当前会话。GovernanceMultiAgentPanel.jsx 显示越限校核、调档及投切次数、网损节省、动作清单和默认折叠的逐时表。 GET /api/powerflow/weekly-schedule 使用现有只读归档与 viewer 权限。PowerFlowPanel.jsx 在操作员点击后才加载周度数据；DailyScheduleChart.jsx 标出 10.70/9.30 kV、0 kvar 和整点动作，并适配深浅主题。 GET /api/powerflow/sensitivity-voi 经 viewer 权限从只读归档计算。工作台用纯 SVG 展示低值与高值扰动，支持切换 ΔU、ΔI 与 VoI。当前模型仅在目标柜和 N-1 基线均为 1010 时计算可比较的电流偏移。 /api/agent/stream 将同步回调逐条送入异步 SSE，模块未就绪时返回 503。/api/sandbox/run 复用工作台只读归档、共享限流和工程师权限。AgentCopilotPane.jsx 负责两种问答入口，AgentStreamArtifacts.jsx 在回复中呈现计划、思考过程、沙盒结果及核验回执。严格审计单沿用 /api/diagnose/stream 和断点续传。 MemoryPlaybookDrawer.jsx 管理语义红线、排障案例和操作规程。DeepInvestigationView.jsx 显示调查进度、隐患及报告预览，并读取历史报告。/api/memory 和 /api/deep-research/* 沿用工作台身份校验。 /api/actions/tickets/* 管理操作票、消缺通知单与现场核查单。API 串行处理同一运行库的人工勾选和签发请求，缺必选项返回 409。Webhook 默认本地演练，正式通知地址由服务端配置 LAOWADI_ACTION_WEBHOOK_URL。 AgentStreamArtifacts.jsx 合并流式 artifact、最终图表和沙盒输出，支持 Markdown 表格、围栏代码和编号列表。SVG 图点即时显示悬浮值，可点击固定并按 Esc 关闭。main.jsx 保存深浅外观，并按日常巡检、告警与专项排查、研究工具整理导航。 AgentCopilotPane.jsx 消费记忆建议并调用现有记忆写入接口。技能菜单从 /api/skills 加载，回车执行后显示核查项和证据。两个新面板沿用侧栏现有入口。",
-      "output": "FastAPI 单机多进程服务、统一 DAG、SQLite 任务队列及 SSE 续接、存储与运维控制台、Astryx 工作台及本轮企业级 Agent 复审。 PostgreSQL 跨 Pod 共享运行态与演练记录。 8765 对话首页、侧栏和按需加载的值班工具入口。 工单合法流转、并发版本保护、原表证据和撤销记录。 反向有功假设检验面板及诊断单。 假设检验快捷追问及调压补偿、N-1 跨时段稳健性校核表。 班次工单初诊卡和 24 小时分时投切方案卡。 7 日结果与典型日帕累托表，24 小时电压、投容和无功对比图。 参数灵敏度龙卷风图、待索要现场资料和 VoI 排名表。 自主模式支持逐字回答、折叠代码和日志、查看紧凑表格及散点图、折线图和柱状图。正文显示完整后呈现证据核验徽章。 长期记忆抽屉、六阶段排查驾驶舱、Markdown 和可打印 HTML 报告导出。 两票编号、风险等级、逐项人工复核记录、签发和驳回状态、通知演练及推送回执。 自主历史对话、图表即时读数、双模式示例与三项快捷操作，已随 Vite 生产构建交付。 记忆确认、技能安装与快捷执行、三路辩论、只读 MCP 注册、遥测接入及观测指标。",
+      "now": "已有事件工单台、通知回执、问答首页和值班工具和 60 条 OpenAPI 路径。复审 26 已修复。工单仅展示合法操作，销项和复开均要求依据，旧版本提交返回 409。代码中业务署名与令牌主体的绑定仍待专项处理。真实班表、交接签认、对象权限、并发状态与目标环境工作台待验。 本轮工作台区分已核验读数、条件计算、待核原因、人工复核备注及待核参考条款。历史会话仍保留原记录，主对话提示重新核验。条件复算单独进入会话记录。 生产 API 和外部 Worker 共用 PostgreSQL 队列、SSE、熔断及工单状态。双节点 kind 在运行中强制删除一只 Worker Pod，另一节点接管，SSE 从原事件号跨 API 续读。 8765 首页改为以问答为主。历史对话、主接线、工单、柜级档案和人工复核从侧栏进入，研究工具默认收起。回复先呈现结论，原表证据可展开，回答完成后保持在对话中。 首页可用三类异常查证入口打开检验。1440 和 390 像素浏览器均已复验检验记录、逐轮查询展开和日报下载。 研究工作台支持两类五步证据交换与质疑仲裁（reactive_collaboration.py）：① 1010 无功补偿与 II 段过压的同点复算（单投、仅调压、先调压再补偿）；② 下井双回 1009→1010 N-1 转供双口径包络仲裁（pandapower 平衡潮流 110.78 A vs 表计代数峰值 159.69 A vs 比例修正包络 167.70 A），并在 GovernanceMultiAgentPanel.jsx 展示三口径包络对比表与角色消息。 最近一轮已核验且完成的假设检验可一键对照相邻整点。调压补偿和 N-1 卡片可显示跨时段校核与原表链接。 工单可查看自动初诊、下载原表、刷新初诊并直接转问答。调压补偿会诊可展示 24 小时离散投切方案。 交流潮流页可按需计算全周分时优化与典型日 6 种动作预算。分时会诊与交流潮流复用电压、投容及馈线无功 SVG 图。 交流潮流页支持按需加载参数灵敏度和信息价值排序。当前 N-1 工况为 1009 退运、1010 受电。 值班问答可以切换自主深度 Agent 和严格审计单，默认进入严格审计单。自主模式已用老洼地全周归档复验，外部 DeepSeek 的同题质量和延迟待测。 值班问答顶部可打开长期记忆，回复可预填排障案例。侧栏提供深度排查，已用老洼地全周归档复验专项报告。 工作台侧栏可打开实时态势与两票审批。预诊断告警和异常工单可起草演练票据，留痕可回查。现场操作依据仍待人工确认。 自主完成回合可从侧栏重新打开，显示当时的计划、图表、工具摘要和核验结果。两个问答模式各有 6 张首页示例。通过自主回复可打开关联画布、起草演练票据或带目标进入深度排查。 值班问答提供「一键写入长期记忆」确认条和 / 技能快捷菜单。「多智体与治理」增加子智能体辩论子视图，「离线评测」增加技能与协议子页。 工作台生产构建将 React、Astryx、Lucide 抽入各自 Vendor，浏览器先加载入口与所需包。已在本机工作台采集三张浅色主题截图。",
+      "implementation": "后端已升级为FastAPI + Uvicorn ASGI 单机多进程运行时、统一动态 DAG 编排内核（laowadi/dag_engine.py）、PostgreSQL 16 + TimescaleDB + pgvector 存储与运维保障体系，提供 60 条 OpenAPI 3.1 路径（/docs，含 /api/dag/run|resume|threads、/api/storage/* 与 /api/ops/*）、默认 2×API Worker + 2×独立外部 Job Worker OS 进程水平扩展、持久化外部任务队列与 Last-Event-ID 断点续传 SSE、跨进程共享三态熔断器、标准 NDJSON 结构化日志及在线热备与沙箱 DR 演练；React 19 + Meta Astryx 前端 SingleLineDiagram.jsx 实现 100% 图模自动排版，GovernanceMultiAgentPanel.jsx 集成统一动态 DAG 任意节点挂起/恢复控制台、多 Worker 进程池、熔断器、TimescaleDB/pgvector 与热备/DR/JSON 日志面板。 Astryx 页面的值班外壳由 main.jsx 与 duty-layout.css 提供。AgentCopilotPane.jsx 维护历史会话、简洁输入和结果证据，非首页工具按需加载。 工单使用数据库版本校验流转，工作台可直接下载源表、查看站内通知和撤销回执。 AgentCopilotPane.jsx 从 SSE 展示查证计划，终审后显示各轮判定和可下载的原表出处。 工单刷新使用 revision，冲突返回 409。问答沿用当前会话。GovernanceMultiAgentPanel.jsx 显示越限校核、调档及投切次数、网损节省、动作清单和默认折叠的逐时表。 GET /api/powerflow/weekly-schedule 使用现有只读归档与 viewer 权限。PowerFlowPanel.jsx 在操作员点击后才加载周度数据；DailyScheduleChart.jsx 标出 10.70/9.30 kV、0 kvar 和整点动作，并适配深浅主题。 GET /api/powerflow/sensitivity-voi 经 viewer 权限从只读归档计算。工作台用纯 SVG 展示低值与高值扰动，支持切换 ΔU、ΔI 与 VoI。当前模型仅在目标柜和 N-1 基线均为 1010 时计算可比较的电流偏移。 /api/agent/stream 将同步回调逐条送入异步 SSE，模块未就绪时返回 503。/api/sandbox/run 复用工作台只读归档、共享限流和工程师权限。AgentCopilotPane.jsx 负责两种问答入口，AgentStreamArtifacts.jsx 在回复中呈现计划、思考过程、沙盒结果及核验回执。严格审计单沿用 /api/diagnose/stream 和断点续传。 MemoryPlaybookDrawer.jsx 管理语义红线、排障案例和操作规程。DeepInvestigationView.jsx 显示调查进度、隐患及报告预览，并读取历史报告。/api/memory 和 /api/deep-research/* 沿用工作台身份校验。 /api/actions/tickets/* 管理操作票、消缺通知单与现场核查单。API 串行处理同一运行库的人工勾选和签发请求，缺必选项返回 409。Webhook 默认本地演练，正式通知地址由服务端配置 LAOWADI_ACTION_WEBHOOK_URL。 AgentStreamArtifacts.jsx 合并流式 artifact、最终图表和沙盒输出，支持 Markdown 表格、围栏代码和编号列表。SVG 图点即时显示悬浮值，可点击固定并按 Esc 关闭。main.jsx 保存深浅外观，并按日常巡检、告警与专项排查、研究工具整理导航。 AgentCopilotPane.jsx 消费记忆建议并调用现有记忆写入接口。技能菜单从 /api/skills 加载，回车执行后显示核查项和证据。两个新面板沿用侧栏现有入口。 workbench/vite.config.js 使用 Rolldown 分包，保留 Astryx 初始化顺序及仅在懒加载页面出现的模块。verify_workbench.py 检查入口、预加载 Vendor、500 kB 上限和两矿目录。",
+      "output": "FastAPI 单机多进程服务、统一 DAG、SQLite 任务队列及 SSE 续接、存储与运维控制台、Astryx 工作台及本轮企业级 Agent 复审。 PostgreSQL 跨 Pod 共享运行态与演练记录。 8765 对话首页、侧栏和按需加载的值班工具入口。 工单合法流转、并发版本保护、原表证据和撤销记录。 反向有功假设检验面板及诊断单。 假设检验快捷追问及调压补偿、N-1 跨时段稳健性校核表。 班次工单初诊卡和 24 小时分时投切方案卡。 7 日结果与典型日帕累托表，24 小时电压、投容和无功对比图。 参数灵敏度龙卷风图、待索要现场资料和 VoI 排名表。 自主模式支持逐字回答、折叠代码和日志、查看紧凑表格及散点图、折线图和柱状图。正文显示完整后呈现证据核验徽章。 长期记忆抽屉、六阶段排查驾驶舱、Markdown 和可打印 HTML 报告导出。 两票编号、风险等级、逐项人工复核记录、签发和驳回状态、通知演练及推送回执。 自主历史对话、图表即时读数、双模式示例与三项快捷操作，已随 Vite 生产构建交付。 记忆确认、技能安装与快捷执行、三路辩论、只读 MCP 注册、遥测接入及观测指标。 自主对话截图含 1006 散点图、计划与核验徽章，潮流截图含 VoI 龙卷风图，辩论截图含三路分析、反驳和裁决。Chromium 视口为 1440×900，PNG 为 2880×1800。",
       "checks": [
         "从告警和异常工单起草票据，复验必选项未勾全及取消后返回 409、并发签发与取消的状态一致性、批准后的勾选锁定、驳回及通知演练留痕。",
         "对照告警当时的复算值与操作票核对项，缺少原表、现场铭牌或真实潮流结果时保持待复核。确认模拟签发和通知回执仅用于演练。",
@@ -1420,7 +1437,8 @@ footer {margin-top:24px;color:var(--sub);font-size:.86rem}
         "复验三种指标、深浅主题、桌面及窄屏，以及页面打开时不提前请求。",
         "用生产构建验证会话刷新、历史恢复、最终与流式 artifact 去重、Markdown 三种结构、工具摘要和图点悬浮、点击及关闭。",
         "验证关联画布跳转、两票起草参数和深度专项目标预填。浏览器刷新后保留外观，回看自主历史时恢复先前的问答方式。",
-        "用 Chromium 生产构建复验确认入库、/ 技能执行、三路卡片与裁决、安装技能、登记客户端、填充演练帧及指标显示。"
+        "用 Chromium 生产构建复验确认入库、/ 技能执行、三路卡片与裁决、安装技能、登记客户端、填充演练帧及指标显示。",
+        "确认 Vite 构建无 500 kB 体积告警，生产资源可通过 HTTP 加载。用 Chromium 验证入口、会话、画布跳转和高阶面板。逐张核对实机截图的关键图表和状态。"
       ],
       "files": [
         [
@@ -1646,6 +1664,22 @@ footer {margin-top:24px;color:var(--sub);font-size:.86rem}
         [
           "子智能体辩论面板",
           "研究实施/老洼地数据接入_20261119/workbench/src/SubagentDebatePanel.jsx"
+        ],
+        [
+          "Vite Vendor 分包配置",
+          "研究实施/老洼地数据接入_20261119/workbench/vite.config.js"
+        ],
+        [
+          "1006 自主分析截图",
+          "docs/screenshots/autonomous_sandbox_chat.png"
+        ],
+        [
+          "潮流参数灵敏度截图",
+          "docs/screenshots/topology_and_powerflow.png"
+        ],
+        [
+          "三路辩论截图",
+          "docs/screenshots/debate_and_tickets.png"
         ]
       ],
       "adapt": "第 13、16 章提供应用集成与验收思路。前端组件以 Astryx 官方文档和实际版本为准，数据与电气判定继续使用本项目的只读查询和复核流程。"
@@ -1768,6 +1802,14 @@ footer {margin-top:24px;color:var(--sub);font-size:.86rem}
         [
           "归档原件打包",
           "研究实施/老洼地数据接入_20261119/scripts/stage_archive.py"
+        ],
+        [
+          "统一开发与验收 Makefile 快捷入口",
+          "Makefile"
+        ],
+        [
+          "GitHub Actions CI（ruff + 20 门禁 + 构建）",
+          ".github/workflows/ci.yml"
         ]
       ],
       "adapt": "第 16 章用于组织集成和交付，真实持续监测与故障表现以矿方提供的证据验收。"
@@ -2352,6 +2394,39 @@ footer {margin-top:24px;color:var(--sub);font-size:.86rem}
       ],
       "verified": "全量 20 套自动化验证套件（含新增 verify_advanced_agent_v3 及 verify_workbench 9 项新增 API 验收）100% 通过；Vite 生产构建（243 ms）、Chromium 回归与 127.0.0.1:8765 实机联调通过；两份只读黄金归档库与 9 份现场原件 SHA-256 严格一致。",
       "next": "按需开展真实 deepseek-v4-pro 同题质量与延迟实测，并对接矿方真实连续 SCADA 流与外部只读 MCP 服务。"
+    },
+    {
+      "date": "2026-11-22",
+      "title": "前端 Vendor 拆包、矿井 Profile 目录与实机截图",
+      "stages": [
+        "data",
+        "review"
+      ],
+      "done": [
+        "Vite/Rolldown 分离 React、Astryx 与 Lucide Vendor，原 639.0 kB 入口拆为启动脚本和约 80.3 kB 应用入口代码，最大 JS 分包为 372.5 kB。",
+        "新增只读 GET /api/profiles 目录接口并在 127.0.0.1:8765 采集散点图与执行计划、潮流灵敏度、三路辩论三张 2× 截图（docs/screenshots/*.png）。"
+      ],
+      "verified": "verify_workbench.py 验证两矿 Profile 数量、无效文件隔离、重复处理和配置刷新，以及 Vendor 预加载、JS 体积与 Chromium 生产资源加载。Vite 构建通过，消除 500 kB 大小告警。首屏预加载的 JS gzip 合计约 289 kB，拆包前约 282 kB。实机截图已逐张核对内容、像素尺寸和页面错误，两份归档库及九份原件 SHA-256 一致。",
+      "next": "东坡图模继续作为示例保留，接入其他实际矿井需补充真实量测和设备台账；已合并至联合重构、真实模型评测与四语 README 更新提交中。"
+    },
+    {
+      "date": "2026-11-22",
+      "title": "工程重构、四语 README 去水分与 6 题真实 deepseek-v4-pro 在线端到端评测",
+      "stages": [
+        "data",
+        "agent-loop",
+        "tools",
+        "evaluation",
+        "review",
+        "deployment"
+      ],
+      "done": [
+        "【代码重构与解耦】laowadi/powerflow.py 用线程安全 _BoundedLRUCache（OrderedDict + TTL + threading.Lock）替换 4 个全局裸字典缓存；laowadi/subagent_debate.py 升级为 6 类议题动态辩论（feeder_polarity / reverse_power / zero_incomer / n1_transfer / reactive_overvoltage / overvoltage_tap）并由 MineProfile 驱动；laowadi/deep_research.py 接入 MineProfile；laowadi/skills_engine.py 为自定义 Markdown 技能接入 run_autonomous_agent 动态 SOP 核查，并在 register_mcp_client() 支持可选只读 JSON-RPC 2.0 探测。",
+        "【真实模型 Bug 修复与 6 题在线评测】修复 deepseek-v4-pro 在沙盒分析中误 import sqlite3、末轮 tools=None 返回空文本（改为 tool_choice='none' + 非空摘要兜底）及 skills_engine 整型 verified_cells 迭代异常；运行 run_live_eval_slice.py 产出真实客观报告 docs/LIVE_EVAL_REPORT.md（严格通过 5/6 = 83.3%，Q6 部分通过 1/6，失败 0/6，触发 3 次 Patch-Only Reflection，均值 103.33 s / P50 85.5 s / P95 157.07 s）。",
+        "【工程化与四语开源主页去水分】新增根目录 Makefile（make setup/up/test/lint/build-ui/docker/mcp）与 profiles/dongpo_demo.json（东坡 35/6 kV 示例图模）；.github/workflows/ci.yml 新增 ruff E9/F63/F7/F82 静态门禁；同步更新 README.md / README.zh-CN.md / README.ja.md / README.ko.md（更正 React 19 + Vite 徽章、嵌入 3 张工作台截图、严格区分 20 套离线确定性门禁与真实大模型在线评测并补充适用边界与已知局限）。"
+      ],
+      "verified": "全量 20 套自动化验证套件（含 verify_workbench 含 Vite Vendor 分包与 /api/profiles、verify_advanced_agent_v3 含 dongpo_demo.json 与议题动态辩论、verify_autonomous_sandbox 及 thesis_eval.probe）100% 通过；62 个 Python 模块编译零错误；两份只读黄金归档库（laowadi.sqlite3、laowadi_events.sqlite3）SHA-256 严格未变；127.0.0.1:8765 已重建重启并实测 /healthz 与 /api/profiles 返回 200（laowadi + dongpo_demo）。",
+      "next": "优化 MemoryStore 口语化电压红线正则触发与自主模式多步轮次耗时（当前 P50 85.5 s），后续接入矿方新增连续 SCADA 日报与现场真实台账开展跨矿实测复核。"
     }
   ]
 }

@@ -56,7 +56,7 @@ from laowadi.db.postgres import probe_runtime
 from laowadi.source_files import document_manifest, verified_original
 from laowadi.logging_config import bind_log_context, configure_logging, get_logger, log_event
 from laowadi.llm import ChatClient, LLMError
-from laowadi.mine_schema import load_mine_profile
+from laowadi.mine_schema import MineProfile, load_mine_profile
 from laowadi.schemas import (
     ActionApproveRequest,
     ActionChecklistRequest,
@@ -1000,6 +1000,33 @@ def create_app(
     @app.get("/api/mine-profile", tags=["Mine Profile"])
     def api_mine_profile():
         return workbench.mine_profile()
+
+    @app.get("/api/profiles", tags=["Mine Profile"])
+    def api_profiles():
+        default_profile = load_mine_profile()
+        profiles = {default_profile.mine_id: default_profile}
+        for path in sorted((ROOT / "profiles").glob("*.json")):
+            if path.is_symlink() or not path.is_file():
+                continue
+            try:
+                profile = MineProfile.model_validate_json(path.read_bytes())
+            except (OSError, ValidationError):
+                log_event(api_logger, logging.WARNING, "profile_catalog_skipped", "矿井图模未通过目录校验。",
+                          filename=path.name)
+                continue
+            if profile.mine_id in profiles:
+                log_event(api_logger, logging.WARNING, "profile_catalog_duplicate", "矿井图模编号重复。",
+                          filename=path.name, mine_id=profile.mine_id)
+                continue
+            profiles[profile.mine_id] = profile
+        return {"profiles": [{
+            "mine_id": profile.mine_id,
+            "mine_name": profile.mine_name,
+            "stations_count": len(profile.stations),
+            "buses_count": len(profile.buses),
+            "transformers_count": len(profile.transformers),
+            "feeders_count": len(profile.feeders),
+        } for profile in profiles.values()]}
 
     @app.post("/api/powerflow", tags=["AC Power Flow"])
     def api_powerflow(req: PowerFlowRequest):

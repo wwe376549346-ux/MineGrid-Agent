@@ -7,7 +7,7 @@
 [![CI](https://github.com/wwe376549346-ux/MineGrid-Agent/actions/workflows/ci.yml/badge.svg)](https://github.com/wwe376549346-ux/MineGrid-Agent/actions/workflows/ci.yml)
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-OpenAPI%203.1-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
-[![React 19](https://img.shields.io/badge/React-19%20%2B%20Meta%20Astryx-61DAFB?logo=react&logoColor=black)](https://react.dev/)
+[![React 19](https://img.shields.io/badge/React-19%20%2B%20Vite-61DAFB?logo=react&logoColor=black)](https://react.dev/)
 [![pandapower](https://img.shields.io/badge/AC%20Power%20Flow-pandapower%203.x-orange)](https://www.pandapower.org/)
 [![MCP](https://img.shields.io/badge/MCP-JSON--RPC%202.0%20Read--Only-6B4FBB)](https://modelcontextprotocol.io/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
@@ -40,7 +40,53 @@
 
 ---
 
+## 워크벤치 실기 스크린샷
+
+<p align="center">
+  <img src="docs/screenshots/autonomous_sandbox_chat.png" alt="자율 샌드박스 분석 및 SVG 차트" width="100%" /><br/>
+  <sub><b>자율 에이전트 &amp; Generative UI:</b> 동적 실행 계획, 읽기 전용 Python/SQL 산점도 및 사후 근거 검증 배지.</sub>
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/topology_and_powerflow.png" alt="VoI 민감도 토네이도 차트" width="49%" />
+  <img src="docs/screenshots/debate_and_tickets.png" alt="3병렬 서브에이전트 토론 중재" width="49%" /><br/>
+  <sub><b>좌:</b> pandapower 파라미터 민감도 및 VoI 우선순위 차트. &nbsp;·&nbsp; <b>우:</b> 계측·조류·안전 규정 3병렬 서브에이전트 토론 중재.</sub>
+</p>
+
+---
+
+## 결정론적 CI 검증 vs. 실제 LLM 라이브 평가
+
+- **결정론적 오프라인 CI 게이트(20개 스위트)**: 원본 Excel 셀 매칭, 적대적 환각 차단(32건), 등가회로 가정 하의 168시간 탭·커패시터 최적화(모델 과전압 `35h → 0h`)를 오프라인에서 재현 검증합니다.
+- **실제 `deepseek-v4-pro` 엔드투엔드 평가(`N = 6`, 상세 보고서: [docs/LIVE_EVAL_REPORT.md](docs/LIVE_EVAL_REPORT.md))**:
+  - 엄격 통과 **`5 / 6` (83.3%)** · 부분 통과 **`1 / 6`** (Q6) · 실패 **`0 / 6`**
+  - Patch-Only Reflection **`3`회** 발동 · 응답 지연 **P50 `85.5 s` / P95 `157.07 s`**
+
+---
+
+## 멀티 광산 어댑터(`MineProfile`) 및 알려진 한계
+
+- **선언적 어댑터 예시**: [`profiles/dongpo_demo.json`](研究实施/老洼地数据接入_20261119/profiles/dongpo_demo.json) (35/6 kV 동포 데모 프로파일, `GET /api/profiles` 조회 가능. 제2의 실측 광산 데이터셋이 아닌 온보딩 템플릿입니다).
+- **알려진 한계**: 실측 아카이브는 단일 탄광 7일(168시간) 데이터에 국한되며, 미확인 변압기 탭 및 케이블 허용전류는 `model_assumptions`로 명시됩니다. 수십 초대 응답 특성상 무인 실시간 보호 제어용이 아니며 모든 작업은 운전원 승인 하에 권고안으로만 제공됩니다.
+
+---
+
 ## 빠른 시작
+
+### 루트 `Makefile` 단축 명령
+
+```bash
+git clone git@github.com:wwe376549346-ux/MineGrid-Agent.git
+cd MineGrid-Agent
+
+make setup      # .venv-power 구축, SHA-256 무결성 검증 및 핵심 게이트 실행
+make up         # FastAPI + React 19 워크벤치 실행 (http://127.0.0.1:8765/)
+make test       # 20개 결정론적 회귀 테스트 게이트 일괄 실행
+make lint       # 정적 구문 및 미정의 심볼 검사 (ruff / py_compile)
+make docker     # docker compose 컨테이너 빌드 및 실행
+```
+
+*(PostgreSQL 16 + pgvector는 선택적 런타임 저장소이며, 미설정 시 로컬 SQLite로 자동 폴백합니다.)*
 
 ### Docker 원클릭 실행
 
@@ -56,10 +102,7 @@ docker compose up --build
 ```bash
 git clone git@github.com:wwe376549346-ux/MineGrid-Agent.git
 cd MineGrid-Agent
-bash 研究实施/老洼地数据接入_20261119/scripts/setup_collab.sh
-
-cd 研究实施/老洼地数据接入_20261119
-../.venv-power/bin/python -B -m laowadi workbench --port 8765 --workers 1 --external-workers 1
+make setup && make up
 ```
 
 > **보안 원칙**: 골든 SQLite 아카이브는 항상 `mode=ro`(SHA-256 무결성 검증)로 보호되며, 모든 제어 권고안은 운전원의 명시적 승인을 필수 조건으로 합니다. 라이선스는 [MIT License](LICENSE)를 따릅니다.

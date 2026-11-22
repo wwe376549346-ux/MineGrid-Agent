@@ -441,7 +441,7 @@ SANDBOX_TOOL_SCHEMA = {
             "properties": {
                 "code": {
                     "type": "string",
-                    "description": "要执行的只读 Python 分析脚本。表结构：reading(day,time,station,cabinet,metric,value,marker,source_row,source_col)、report(day,filename,sheet,sha256)、cabinet(station,number,label,aliases)、summary(...)。",
+                    "description": "要执行的只读 Python 分析脚本。禁止 import sqlite3 或 pandas，直接调用预注入 query_sql(sql) 返回 list[dict]，metric 严格区分大小写（'Uab','Ia','P','cos'）。表结构：reading(day,time,station,cabinet,metric,value,marker,source_row,source_col)、report(day,filename,sheet,sha256)、cabinet(station,number,label,aliases)、summary(...)。",
                 },
                 "timeout_s": {
                     "type": "number",

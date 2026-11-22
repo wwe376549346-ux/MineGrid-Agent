@@ -7,7 +7,7 @@
 [![CI](https://github.com/wwe376549346-ux/MineGrid-Agent/actions/workflows/ci.yml/badge.svg)](https://github.com/wwe376549346-ux/MineGrid-Agent/actions/workflows/ci.yml)
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-OpenAPI%203.1-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
-[![React 19](https://img.shields.io/badge/React-19%20%2B%20Meta%20Astryx-61DAFB?logo=react&logoColor=black)](https://react.dev/)
+[![React 19](https://img.shields.io/badge/React-19%20%2B%20Vite-61DAFB?logo=react&logoColor=black)](https://react.dev/)
 [![pandapower](https://img.shields.io/badge/AC%20Power%20Flow-pandapower%203.x-orange)](https://www.pandapower.org/)
 [![MCP](https://img.shields.io/badge/MCP-JSON--RPC%202.0%20Read--Only-6B4FBB)](https://modelcontextprotocol.io/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
@@ -25,7 +25,7 @@
 
 **MineGrid-Agent** is a domain-specific neuro-symbolic multi-agent system engineered for continuous health monitoring, evidence-grounded root-cause diagnosis, AC power-flow verification, and operator decision support in coal-mine 35/10 kV distribution networks.
 
-Built on real hourly SCADA operational archives (35 kV surface substation with 25 switch cabinets, 1535 underground central substation with 15 switch cabinets, 16,800 hourly telemetry cells, 2,100 daily summary rows, primary one-line diagrams, and 68 safety regulations & national standards including *Coal Mine Safety Regulations 2025*, *GB/T 50417-2017*, and *GB/T 12325*), MineGrid-Agent eliminates numeric hallucinations and unverified causal leaps by tightly coupling LLM reasoning with deterministic electrical verification, nonlinear Newton-Raphson AC power flow, and human-in-the-loop (HITL) state graphs.
+Built on real hourly SCADA operational archives (35 kV surface substation with 25 switch cabinets, 1535 underground central substation with 15 switch cabinets, 16,800 hourly telemetry cells, 2,100 daily summary rows, primary one-line diagrams, and 68 safety regulations & national standards including *Coal Mine Safety Regulations 2025*, *GB/T 50417-2017*, and *GB/T 12325*), MineGrid-Agent mitigates numeric hallucinations and unverified causal leaps by tightly coupling LLM reasoning with deterministic electrical verification, nonlinear Newton-Raphson AC power flow, and human-in-the-loop (HITL) state graphs.
 
 ---
 
@@ -50,7 +50,7 @@ flowchart LR
 
   subgraph Guard["Neuro-Symbolic Verification & Interfaces"]
     C1["Claim-Level Grounding [[1]] / [[delta]]<br/>Cell Coordinates + Tool Receipts"]
-    C2["Patch-Only Reflection<br/>Targeted Claim Repair · Zero Hallucination"]
+    C2["Patch-Only Reflection<br/>Targeted Claim Repair & Guardrails"]
     C3["React 19 Workbench · FastAPI · MCP Server<br/>Proactive Incident Tickets · Read-Only Sandbox"]
   end
 
@@ -100,28 +100,94 @@ flowchart LR
 
 ---
 
-## Engineering Evaluation & Ablation Metrics
+## Workbench Screenshots
 
-All metrics below are deterministically reproduced against the read-only operational archive via the automated verification suite:
+<p align="center">
+  <img src="docs/screenshots/autonomous_sandbox_chat.png" alt="Autonomous Sandbox & Inline SVG Charts" width="100%" /><br/>
+  <sub><b>Autonomous Sandbox &amp; Generative UI:</b> Live plan tree, read-only Python/SQL scatter &amp; trend plots, and post-hoc provenance verification badge.</sub>
+</p>
 
-| Evaluation Dimension | Sample Size | Full System (`MineGrid-Agent`) | Baseline / Ablation (`w/o Module`) | Measured Engineering Gain |
-| :--- | :---: | :---: | :---: | :--- |
-| **Point & Multi-Cabinet Telemetry Receipts (`S01–S08`, `M01–M08`)** | 16 cases | **100.0%** (16/16 value & cell match) | Manual stitching / context overflow | Median latency `0.111 ms`, 100% source cell binding |
-| **Conditional Hybrid RAG Cross-Station Gate (`C1535`)** | 4 cases | **100.0%** (2/2 missing-archive gate) | **0.0%** (pure BM25) | Prevents fabricating readings for unarchived underground cabinets |
-| **GSSC Context Engineering (`w/o GSSC`)** | 16 cases | **45.2%** net compression (`179.7k → 98.4k` chars) | 0.0% compression | **100.0% (28/28)** retention of extrema & reverse-power anomalies |
-| **`pandapower` AC Power Flow, Tap & N-1 (`P01–P06`)** | 6 cases | **100.0%** (6/6 NR convergence & gold match) | **0.0%** (no nonlinear solver) | Calibrated residual `≤ 0.05 kV`; exact tap `+2` voltage & loss quantification |
-| **Neuro-Symbolic Verification & Hallucination Blocking** | 32 adversarial | **100.0% (32/32)** blocked + Reflection repair | **0.0%** (unverified generation) | Blocks fake values on real cells, swapped cabinets, unit & coordinate errors |
-| **HITL State-Graph Dynamic Supplement (`H01–H08`)** | 8 cases | **100.0% (8/8)** state transitions & recalculation | No checkpoint / conflict tracking | Reuses 50%–75% unaffected nodes; preserves field-vs-archive conflicts |
-| **168-Hour Discrete Tap-Cap DP Optimization** | 7 days (168 h) | **0 / 168 h** violations (`-109.02 kWh` loss) | **35 / 168 h** violations (baseline) | Eliminates 100% overvoltage hours while saving `1.85%` network loss |
+<p align="center">
+  <img src="docs/screenshots/topology_and_powerflow.png" alt="One-Line Topology &amp; pandapower VoI Sensitivity" width="49%" />
+  <img src="docs/screenshots/debate_and_tickets.png" alt="3-Way Parallel Subagent Debate &amp; Action Tickets" width="49%" /><br/>
+  <sub><b>Left:</b> Parameter sensitivity tornado chart &amp; VoI ranking driven by pandapower AC power flow. &nbsp;·&nbsp; <b>Right:</b> 3-way parallel subagent debate arbitration (Telemetry vs. Physics vs. Safety).</sub>
+</p>
+
+---
+
+## Deterministic CI Gates vs. Live LLM Evaluation
+
+> **Important Distinction:** We strictly separate **deterministic offline regression gates** (SQLite provenance, `pandapower` physics, security guardrails, API contracts) from **live external LLM end-to-end runs** so software assertions are never presented as 100% open-ended LLM accuracy.
+
+### A. Deterministic Offline CI Regression Gates (20 Suites)
+
+All 20 regression suites run offline against the immutable operational archive (`laowadi.sqlite3`, 168 h) on every push in [GitHub Actions CI](.github/workflows/ci.yml):
+
+| Deterministic Gate / Component | Scope Covered | Verified Property (Offline Determinism) |
+| :--- | :---: | :--- |
+| **Point & Multi-Cabinet Telemetry Receipts (`S01–S08`, `M01–M08`)** | 16 cases | **16/16** exact SQLite value & Excel coordinate binding (`0.111 ms` median query) |
+| **Conditional Hybrid RAG Cross-Station Gate (`C1535`)** | 4 cases | **2/2** unarchived underground station refusal (`1535` 1101/1201) vs. 0% on pure BM25 |
+| **GSSC Context Compression (`w/o GSSC`)** | 16 cases | **45.2%** char reduction (`179.7k → 98.4k`) with **28/28** archived extrema/reverse-power retention |
+| **`pandapower` AC Power Flow, Tap & N-1 (`P01–P06`)** | 6 cases | **6/6** Newton-Raphson convergence; fitted bus residual `≤ 0.05 kV`; tap `+2` eliminates modelled 10 kV II overvoltage |
+| **Neuro-Symbolic Verifier Adversarial Cases** | 32 adversarial | **32/32** injected coordinate/value/unit/cabinet errors caught + Patch-Only Reflection tested |
+| **HITL State-Graph Supplement (`H01–H08`)** | 8 cases | **8/8** cross-process suspend/resume transitions reusing `50%–75%` unaffected nodes |
+| **168-Hour Discrete Tap-Cap DP Optimization** | 7 days (168 h) | Modelled overvoltage hours **`35 → 0`** and active loss **`-109.02 kWh (+1.85%)`** under equivalent circuit assumptions |
+
+### B. Live `deepseek-v4-pro` End-to-End Evaluation Slice (`N = 6`)
+
+Real, unedited API runs against `deepseek-v4-pro` (`fallback_to_local=False`, full details in [docs/LIVE_EVAL_REPORT.md](docs/LIVE_EVAL_REPORT.md)):
+
+| Metric | Live API Observation (`deepseek-v4-pro`, 2026-11-22) |
+| :--- | :---: |
+| **Strict Programmatic Pass** | **`5 / 6` (83.3%)** *(Q1 Strict Incomer, Q2 Reverse Power, Q3 C1535 Guard, Q4 Python Sandbox Pearson `-0.801`, Q5 `pandapower` Tap `+2`)* |
+| **Partial Pass** | **`1 / 6`** *(Q6 extracted 10.9 kV peak & 1 rule candidate, but regex missed structured `10.65 kV` threshold field)* |
+| **Fail / Timeout / Error** | **`0 / 6`** |
+| **Patch-Only Reflections Triggered** | **`3`** *(verifier caught & repaired grounded/warning narratives on Q1 [×2] and Q3 [×1])* |
+| **Latency (Mean / P50 / P95)** | **`103.33 s` / `85.5 s` / `157.07 s`** *(multi-step ReAct tool + `pandapower` / sandbox round-trips)* |
+
+---
+
+## Multi-Mine Quick Adapter (`MineProfile`)
+
+All health thresholds, bus-balance equations, SLD auto-layout coordinates, and `pandapower` AC networks are driven declaratively by `MineProfile` JSON/YAML schemas (`GET /api/profiles`):
+
+- **Primary Operational Baseline**: `laowadi` (35/10 kV Laowadi Mine — backed by 7 real `.xls` operational reports).
+- **Declarative Onboarding Demo**: [`profiles/dongpo_demo.json`](研究实施/老洼地数据接入_20261119/profiles/dongpo_demo.json) (35/6 kV Dongpo demo topology — included as a zero-code onboarding template & CI schema test fixture; **not** a second real-mine SCADA dataset).
+
+```bash
+# Inspect registered mine profiles via API
+curl -s http://127.0.0.1:8765/api/profiles
+```
+
+---
+
+## Scope & Known Limitations
+
+1. **7-Day Single-Mine Real Archive**: All live empirical metrics are derived from 7 consecutive days (`2026-11-10` to `2026-11-16`, 168 hourly snapshots) from one coal mine (`laowadi`); multi-month seasonality and unseen substation topologies require additional field data.
+2. **Parameterized Equivalent-Circuit Assumptions**: Where field transformer tap positions, `uk%`, rated capacity (`Sn`), or underground cable ampacity nameplates are absent from daily logs, `pandapower` uses explicitly disclosed equivalents (`model_assumptions`) and surfaces priority field requests via Value-of-Information (`VoI`) ranking.
+3. **Interactive Engineering Decision Support Only**: End-to-end LLM + AC power-flow turns take tens of seconds (`P50 = 85.5 s`); this system is **not** a sub-second protection relay or drop-in unattended SCADA control product. Every ticket/switching recommendation requires explicit human operator verification and sign-off.
 
 ---
 
 ## Quick Start
 
+### Unified `Makefile` Shortcuts
+
+```bash
+git clone git@github.com:wwe376549346-ux/MineGrid-Agent.git
+cd MineGrid-Agent
+
+make setup      # Create .venv-power, verify SHA-256 & run core gates
+make up         # Launch FastAPI + React 19 workbench at http://127.0.0.1:8765/
+make test       # Run all 20 deterministic verification gates
+make lint       # Run static syntax & undefined-name lint (ruff / py_compile)
+make docker     # Build & launch containerized stack via docker compose
+```
+
 ### Prerequisites
 - **Python 3.11+** (3.12 recommended)
-- **Node.js 20+** (only required when rebuilding the React 19 frontend)
-- **PostgreSQL 16 + pgvector** *(optional; automatically falls back to local SQLite for runtime state)*
+- **Node.js 22+** (only required when rebuilding the React 19 + Vite frontend)
+- **PostgreSQL 16 + pgvector** *(optional runtime-state backend; defaults to zero-config local SQLite out of the box)*
 
 ### 1. Clone & Bootstrap Environment
 
@@ -137,7 +203,7 @@ docker compose up --build
 ```bash
 git clone git@github.com:wwe376549346-ux/MineGrid-Agent.git
 cd MineGrid-Agent
-bash 研究实施/老洼地数据接入_20261119/scripts/setup_collab.sh
+make setup
 ```
 
 The bootstrap script creates the virtual environment (`.venv-power`), installs `laowadi-power-agent` in editable mode, verifies the SHA-256 checksums of the read-only archives, and runs the core pre-merge test gates.
@@ -155,8 +221,9 @@ COAL_API_KEY=your-api-key-here
 ### 3. Launch the Interactive Operator Workbench
 
 ```bash
-cd 研究实施/老洼地数据接入_20261119
-../.venv-power/bin/python -B -m laowadi workbench --port 8765 --workers 1 --external-workers 1
+make up
+# Or manually from 研究实施/老洼地数据接入_20261119:
+# ../.venv-power/bin/python -B -m laowadi workbench --port 8765 --workers 1 --external-workers 1
 ```
 
 Open **`http://127.0.0.1:8765/`** in your browser:
@@ -209,13 +276,15 @@ cd 研究实施/老洼地数据接入_20261119
 | Path | Description |
 | :--- | :--- |
 | [研究实施/老洼地数据接入_20261119/laowadi/](研究实施/老洼地数据接入_20261119/laowadi/) | Core Python package (`diagnose.py`, `diagnostic_claims.py`, `hypothesis.py`, `verifier.py`, `powerflow.py`, `multi_agent.py`, `reactive_collaboration.py`, `dag_engine.py`, `supplement.py`, `proactive.py`, `rag.py`, `context.py`, `mcp_server.py`, `api.py`) |
-| [研究实施/老洼地数据接入_20261119/workbench/](研究实施/老洼地数据接入_20261119/workbench/) | React 19 + Meta Astryx + Vite frontend workbench (topology canvas, SSE chat stream, AC power-flow charts, sensitivity tornado chart, incident ticket panel, HITL supplement UI) |
-| [研究实施/老洼地数据接入_20261119/profiles/](研究实施/老洼地数据接入_20261119/profiles/) | Declarative YAML/JSON `MineProfile` topology & electrical parameter schemas |
+| [研究实施/老洼地数据接入_20261119/workbench/](研究实施/老洼地数据接入_20261119/workbench/) | React 19 + Vite frontend workbench (topology canvas, SSE chat stream, AC power-flow charts, sensitivity tornado chart, incident ticket panel, HITL supplement UI) |
+| [研究实施/老洼地数据接入_20261119/profiles/](研究实施/老洼地数据接入_20261119/profiles/) | Declarative JSON/YAML `MineProfile` schemas (`dongpo_demo.json` 35/6 kV onboarding example) |
 | [研究实施/老洼地数据接入_20261119/local/](研究实施/老洼地数据接入_20261119/local/) | Read-only SQLite telemetry & event golden archives (`laowadi.sqlite3`, `laowadi_events.sqlite3`) |
+| [docs/](docs/) | Live `deepseek-v4-pro` evaluation slice report ([LIVE_EVAL_REPORT.md](docs/LIVE_EVAL_REPORT.md)) & workbench UI screenshots |
+| [Makefile](Makefile) | Unified top-level commands (`make setup`, `make up`, `make test`, `make lint`, `make docker`, `make mcp`) |
 | [研究实施/老洼地数据接入_20261119/scripts/setup_collab.sh](研究实施/老洼地数据接入_20261119/scripts/setup_collab.sh) | One-command environment setup, SHA-256 verification & pre-merge test gate script |
-| [研究实施/老洼地数据接入_20261119/thesis_eval/](研究实施/老洼地数据接入_20261119/thesis_eval/) | 48-case six-dimensional offline benchmark & 4-way ablation suite (`cases.json`, `gold.json`, `probe.py`, `run.py`, `score.py`) |
+| [研究实施/老洼地数据接入_20261119/run_live_eval_slice.py](研究实施/老洼地数据接入_20261119/run_live_eval_slice.py) | Reproducible 6-question live LLM end-to-end evaluation harness |
 | [项目知识库/资料/老洼地/](项目知识库/资料/老洼地/) | Original 7 operational `.xls` reports and 2 primary one-line `.png` diagrams (strictly read-only) |
-| [.github/workflows/ci.yml](.github/workflows/ci.yml) | Automated GitHub Actions CI pipeline (archive integrity, Python test matrix, React build) |
+| [.github/workflows/ci.yml](.github/workflows/ci.yml) | Automated GitHub Actions CI pipeline (`ruff` lint, archive integrity, 20 Python gates, React build) |
 
 ---
 
