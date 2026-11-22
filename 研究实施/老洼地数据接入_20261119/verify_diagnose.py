@@ -173,7 +173,7 @@ def _verify_hypothesis_loop(archive):
             try:
                 context = json.loads(messages[-1]["content"])
             except json.JSONDecodeError:
-                assert not options["tools"]
+                assert {tool["function"]["name"] for tool in options["tools"]} == {"submit_diagnosis"}
                 return {"content": '{"claims":[]}'}, {}
             return {"content": json.dumps(context["available_checks"][0]["action"])}, {}
 

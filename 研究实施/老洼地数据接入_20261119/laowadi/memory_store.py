@@ -48,6 +48,44 @@ def _utc_now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def _parse_utc_iso(ts: Any) -> datetime | None:
+    raw = str(ts or "").strip()
+    if not raw:
+        return None
+    try:
+        if re.fullmatch(r"\d{4}-\d{2}-\d{2}", raw):
+            dt = datetime.strptime(raw, "%Y-%m-%d").replace(hour=23, minute=59, second=59, tzinfo=timezone.utc)
+            return dt
+        dt = datetime.fromisoformat(raw.replace("Z", "+00:00").replace(" ", "T"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone.utc)
+    except ValueError:
+        return None
+
+
+def _normalize_expires_at(raw: Any) -> str:
+    text = str(raw or "").strip()
+    if not text:
+        return ""
+    dt = _parse_utc_iso(text)
+    if dt is None:
+        raise ValueError("expires_at 须为有效 ISO 日期或时间（如 2026-12-31 或 2026-12-31T23:59:59Z）。")
+    return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def is_memory_expired(expires_at: Any, *, now: datetime | None = None) -> bool:
+    exp_dt = _parse_utc_iso(expires_at)
+    if exp_dt is None:
+        return False
+    ref_now = now if now is not None else datetime.now(timezone.utc)
+    if ref_now.tzinfo is None:
+        ref_now = ref_now.replace(tzinfo=timezone.utc)
+    else:
+        ref_now = ref_now.astimezone(timezone.utc)
+    return exp_dt <= ref_now
+
+
 def _connect(db_path: Path | None = None) -> sqlite3.Connection:
     path = Path(db_path) if db_path is not None else MEMORY_DB
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -67,11 +105,15 @@ def _connect(db_path: Path | None = None) -> sqlite3.Connection:
             enabled INTEGER NOT NULL DEFAULT 1,
             source TEXT NOT NULL DEFAULT 'operator',
             hit_count INTEGER NOT NULL DEFAULT 0,
+            expires_at TEXT NOT NULL DEFAULT '',
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL
         )
         """
     )
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(operational_memory)").fetchall()}
+    if "expires_at" not in cols:
+        conn.execute("ALTER TABLE operational_memory ADD COLUMN expires_at TEXT NOT NULL DEFAULT ''")
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_mem_cat_enabled ON operational_memory(category, enabled)"
     )
@@ -99,7 +141,7 @@ def _normalize_tags(raw: Any) -> list[str]:
     return []
 
 
-def _row_to_dict(row: sqlite3.Row) -> dict[str, Any]:
+def _row_to_dict(row: sqlite3.Row, *, now: datetime | None = None) -> dict[str, Any]:
     raw_tags = row["tags"] or "[]"
     try:
         tags = json.loads(raw_tags)
@@ -114,6 +156,8 @@ def _row_to_dict(row: sqlite3.Row) -> dict[str, Any]:
             parsed_thr = json.loads(raw_thr)
         except Exception:
             parsed_thr = raw_thr
+    raw_exp = row["expires_at"] if "expires_at" in row.keys() else ""
+    clean_exp = str(raw_exp or "").strip()
     return {
         "id": row["id"],
         "category": row["category"],
@@ -125,9 +169,121 @@ def _row_to_dict(row: sqlite3.Row) -> dict[str, Any]:
         "enabled": bool(row["enabled"]),
         "source": row["source"],
         "hit_count": int(row["hit_count"]),
+        "expires_at": clean_exp or None,
+        "is_expired": is_memory_expired(clean_exp, now=now),
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
     }
+
+
+_METRIC_NAME_MAP = {
+    "uab": "Uab",
+    "voltage": "Uab",
+    "电压": "Uab",
+    "ia": "Ia",
+    "current": "Ia",
+    "电流": "Ia",
+    "p": "P",
+    "power": "P",
+    "有功": "P",
+    "cos": "cos",
+    "pf": "cos",
+    "功率因数": "cos",
+}
+
+
+def _extract_rule_signature(
+    category: str,
+    title: str,
+    content: str,
+    scope_cabinet: str | None,
+    metric_threshold: Any,
+) -> dict[str, Any] | None:
+    if str(category or "").strip() != "semantic":
+        return None
+    clean_cab = str(scope_cabinet or "").strip()
+    parsed_thr = metric_threshold
+    if isinstance(parsed_thr, str) and (parsed_thr.strip().startswith("{") or parsed_thr.strip().startswith("[")):
+        try:
+            parsed_thr = json.loads(parsed_thr)
+        except Exception:
+            pass
+    if isinstance(parsed_thr, dict):
+        raw_m = str(parsed_thr.get("metric") or "").strip().lower()
+        norm_m = _METRIC_NAME_MAP.get(raw_m)
+        if norm_m and parsed_thr.get("value") is not None:
+            try:
+                val = float(parsed_thr["value"])
+                op = str(parsed_thr.get("operator") or ">").strip() or ">"
+                return {"metric": norm_m, "operator": op, "value": val, "scope_cabinet": clean_cab}
+            except (TypeError, ValueError):
+                pass
+    blob = f"{title or ''} {content or ''} {metric_threshold or ''}"
+    kv = _extract_voltage_kv(blob)
+    if kv is not None:
+        return {"metric": "Uab", "operator": ">", "value": float(kv), "scope_cabinet": clean_cab}
+    return None
+
+
+def _find_conflicts_against_rows(
+    rows: list[dict[str, Any]],
+    *,
+    category: str,
+    title: str,
+    content: str,
+    scope_cabinet: str | None = None,
+    metric_threshold: Any = None,
+    exclude_id: str | None = None,
+    now: datetime | None = None,
+) -> list[dict[str, Any]]:
+    sig = _extract_rule_signature(category, title, content, scope_cabinet, metric_threshold)
+    if sig is None:
+        return []
+    conflicts: list[dict[str, Any]] = []
+    for mem in rows:
+        if exclude_id and mem.get("id") == exclude_id:
+            continue
+        if not mem.get("enabled", True) or is_memory_expired(mem.get("expires_at"), now=now):
+            continue
+        esig = _extract_rule_signature(
+            mem.get("category", ""),
+            mem.get("title", ""),
+            mem.get("content", ""),
+            mem.get("scope_cabinet"),
+            mem.get("metric_threshold"),
+        )
+        if esig is None or esig["metric"] != sig["metric"] or esig["operator"] != sig["operator"]:
+            continue
+        if abs(esig["value"] - sig["value"]) < 1e-6:
+            continue
+        if esig["scope_cabinet"] == sig["scope_cabinet"]:
+            ctype = "direct_conflict"
+            scope_desc = f"{esig['scope_cabinet']} 柜" if esig["scope_cabinet"] else "全站通用"
+            reason = (
+                f"与同范围（{scope_desc}）生效规则 {mem['id']} 冲突："
+                f"{esig['metric']} {esig['operator']} {esig['value']} vs {sig['value']}。"
+            )
+        elif esig["scope_cabinet"] == "" or sig["scope_cabinet"] == "":
+            ctype = "scope_overlap_conflict"
+            other_scope = "全站通用" if esig["scope_cabinet"] == "" else f"{esig['scope_cabinet']} 柜"
+            reason = (
+                f"与{other_scope}生效规则 {mem['id']} 范围重叠且阈值不一致："
+                f"{esig['metric']} {esig['operator']} {esig['value']} vs {sig['value']}。"
+            )
+        else:
+            continue
+        conflicts.append({
+            "memory_id": mem["id"],
+            "title": mem["title"],
+            "scope_cabinet": mem.get("scope_cabinet"),
+            "metric": sig["metric"],
+            "operator": sig["operator"],
+            "existing_value": esig["value"],
+            "incoming_value": sig["value"],
+            "conflict_type": ctype,
+            "reason": reason,
+        })
+    return conflicts
 
 
 def list_memories(
@@ -135,10 +291,13 @@ def list_memories(
     category: str | None = None,
     enabled_only: bool = False,
     cabinet: str | None = None,
+    include_expired: bool | None = None,
+    now: datetime | None = None,
     db_path: Path | None = None,
 ) -> list[dict[str, Any]]:
     if category is not None and category not in MEMORY_CATEGORIES:
         raise ValueError(f"category 须为 {', '.join(MEMORY_CATEGORIES)} 之一。")
+    eff_include_expired = (not enabled_only) if include_expired is None else bool(include_expired)
     clauses: list[str] = []
     params: list[Any] = []
     if category:
@@ -156,7 +315,78 @@ def list_memories(
             f"SELECT * FROM operational_memory {where} ORDER BY enabled DESC, updated_at DESC",
             tuple(params),
         ).fetchall()
-        return [_row_to_dict(r) for r in rows]
+        items = [_row_to_dict(r, now=now) for r in rows]
+        if not eff_include_expired:
+            items = [m for m in items if not m["is_expired"]]
+        return items
+    finally:
+        conn.close()
+
+
+def detect_memory_conflicts(
+    *,
+    category: str,
+    title: str,
+    content: str,
+    scope_cabinet: str | None = None,
+    metric_threshold: Any = None,
+    exclude_id: str | None = None,
+    now: datetime | None = None,
+    db_path: Path | None = None,
+) -> list[dict[str, Any]]:
+    """Detect conflicts against currently enabled, non-expired semantic memories."""
+    if category != "semantic":
+        return []
+    active = list_memories(
+        category="semantic",
+        enabled_only=True,
+        include_expired=False,
+        now=now,
+        db_path=db_path,
+    )
+    return _find_conflicts_against_rows(
+        active,
+        category=category,
+        title=title,
+        content=content,
+        scope_cabinet=scope_cabinet,
+        metric_threshold=metric_threshold,
+        exclude_id=exclude_id,
+        now=now,
+    )
+
+
+def prune_expired_memories(
+    *,
+    disable_only: bool = True,
+    now: datetime | None = None,
+    db_path: Path | None = None,
+) -> dict[str, Any]:
+    """Disable (or delete) enabled operational memories whose `expires_at` has elapsed."""
+    conn = _connect(db_path)
+    try:
+        rows = conn.execute(
+            "SELECT id, expires_at FROM operational_memory WHERE enabled = 1 AND expires_at <> ''"
+        ).fetchall()
+        expired_ids = [r["id"] for r in rows if is_memory_expired(r["expires_at"], now=now)]
+        if expired_ids:
+            if disable_only:
+                ts = _utc_now()
+                conn.executemany(
+                    "UPDATE operational_memory SET enabled = 0, updated_at = ? WHERE id = ?",
+                    [(ts, mid) for mid in expired_ids],
+                )
+            else:
+                conn.executemany(
+                    "DELETE FROM operational_memory WHERE id = ?",
+                    [(mid,) for mid in expired_ids],
+                )
+            conn.commit()
+        return {
+            "count": len(expired_ids),
+            "memory_ids": expired_ids,
+            "mode": "disabled" if disable_only else "deleted",
+        }
     finally:
         conn.close()
 
@@ -183,6 +413,9 @@ def create_memory(
     tags: Any = None,
     enabled: bool = True,
     source: str = "operator",
+    expires_at: Any = None,
+    supersede_conflicts: bool = False,
+    governance_report: dict[str, Any] | None = None,
     db_path: Path | None = None,
 ) -> dict[str, Any]:
     if category not in MEMORY_CATEGORIES:
@@ -194,16 +427,45 @@ def create_memory(
     clean_cab = str(scope_cabinet or "").strip()[:24]
     clean_thr = _normalize_threshold(metric_threshold)
     clean_tags = _normalize_tags(tags)
+    clean_exp = _normalize_expires_at(expires_at)
     mem_id = f"MEM-{uuid.uuid4().hex[:12].upper()}"
     now = _utc_now()
 
     conn = _connect(db_path)
     try:
+        conflicts: list[dict[str, Any]] = []
+        superseded_ids: list[str] = []
+        if enabled and not is_memory_expired(clean_exp) and category == "semantic":
+            existing_rows = [
+                _row_to_dict(r)
+                for r in conn.execute(
+                    "SELECT * FROM operational_memory WHERE category = 'semantic' AND enabled = 1"
+                ).fetchall()
+            ]
+            conflicts = _find_conflicts_against_rows(
+                existing_rows,
+                category=category,
+                title=clean_title,
+                content=clean_content,
+                scope_cabinet=clean_cab,
+                metric_threshold=clean_thr,
+            )
+            if supersede_conflicts and conflicts:
+                direct_ids = [c["memory_id"] for c in conflicts if c["conflict_type"] == "direct_conflict"]
+                if direct_ids:
+                    conn.executemany(
+                        "UPDATE operational_memory SET enabled = 0, updated_at = ? WHERE id = ?",
+                        [(now, mid) for mid in direct_ids],
+                    )
+                    superseded_ids = direct_ids
+                    sup_set = set(direct_ids)
+                    conflicts = [c for c in conflicts if c["memory_id"] not in sup_set]
+
         conn.execute(
             """
             INSERT INTO operational_memory
-              (id, category, title, content, scope_cabinet, metric_threshold, tags, enabled, source, hit_count, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+              (id, category, title, content, scope_cabinet, metric_threshold, tags, enabled, source, hit_count, expires_at, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
             """,
             (
                 mem_id,
@@ -215,15 +477,31 @@ def create_memory(
                 json.dumps(clean_tags, ensure_ascii=False),
                 1 if enabled else 0,
                 str(source or "operator")[:32],
+                clean_exp,
                 now,
                 now,
             ),
         )
         conn.commit()
         row = conn.execute("SELECT * FROM operational_memory WHERE id = ?", (mem_id,)).fetchone()
-        return _row_to_dict(row)
+        out = _row_to_dict(row)
+        if governance_report is not None:
+            governance_report["conflicts"] = conflicts
+            governance_report["superseded_memory_ids"] = superseded_ids
+        return out
     finally:
         conn.close()
+
+
+def create_memory_with_report(**kwargs) -> dict[str, Any]:
+    """Create a memory and return `{memory, conflicts, superseded_memory_ids}`."""
+    report: dict[str, Any] = {"conflicts": [], "superseded_memory_ids": []}
+    mem = create_memory(governance_report=report, **kwargs)
+    return {
+        "memory": mem,
+        "conflicts": report["conflicts"],
+        "superseded_memory_ids": report["superseded_memory_ids"],
+    }
 
 
 def update_memory(
@@ -236,6 +514,9 @@ def update_memory(
     metric_threshold: Any = ...,
     tags: Any = ...,
     enabled: bool | None = None,
+    expires_at: Any = ...,
+    supersede_conflicts: bool = False,
+    governance_report: dict[str, Any] | None = None,
     db_path: Path | None = None,
 ) -> dict[str, Any] | None:
     conn = _connect(db_path)
@@ -247,7 +528,8 @@ def update_memory(
         if not existing:
             return None
 
-        updates: dict[str, Any] = {"updated_at": _utc_now()}
+        now = _utc_now()
+        updates: dict[str, Any] = {"updated_at": now}
         if category is not None:
             if category not in MEMORY_CATEGORIES:
                 raise ValueError(f"category 须为 {', '.join(MEMORY_CATEGORIES)} 之一。")
@@ -270,6 +552,45 @@ def update_memory(
             updates["tags"] = json.dumps(_normalize_tags(tags), ensure_ascii=False)
         if enabled is not None:
             updates["enabled"] = 1 if enabled else 0
+        if expires_at is not ...:
+            updates["expires_at"] = _normalize_expires_at(expires_at)
+
+        eff_cat = updates.get("category", existing["category"])
+        eff_title = updates.get("title", existing["title"])
+        eff_content = updates.get("content", existing["content"])
+        eff_cab = updates.get("scope_cabinet", existing["scope_cabinet"])
+        eff_thr = updates.get("metric_threshold", existing["metric_threshold"])
+        eff_enabled = bool(updates.get("enabled", existing["enabled"]))
+        eff_exp = updates.get("expires_at", existing["expires_at"] if "expires_at" in existing.keys() else "")
+
+        conflicts: list[dict[str, Any]] = []
+        superseded_ids: list[str] = []
+        if eff_enabled and not is_memory_expired(eff_exp) and eff_cat == "semantic":
+            existing_rows = [
+                _row_to_dict(r)
+                for r in conn.execute(
+                    "SELECT * FROM operational_memory WHERE category = 'semantic' AND enabled = 1"
+                ).fetchall()
+            ]
+            conflicts = _find_conflicts_against_rows(
+                existing_rows,
+                category=eff_cat,
+                title=eff_title,
+                content=eff_content,
+                scope_cabinet=eff_cab,
+                metric_threshold=eff_thr,
+                exclude_id=existing["id"],
+            )
+            if supersede_conflicts and conflicts:
+                direct_ids = [c["memory_id"] for c in conflicts if c["conflict_type"] == "direct_conflict"]
+                if direct_ids:
+                    conn.executemany(
+                        "UPDATE operational_memory SET enabled = 0, updated_at = ? WHERE id = ?",
+                        [(now, mid) for mid in direct_ids],
+                    )
+                    superseded_ids = direct_ids
+                    sup_set = set(direct_ids)
+                    conflicts = [c for c in conflicts if c["memory_id"] not in sup_set]
 
         set_sql = ", ".join(f"{k} = ?" for k in updates)
         conn.execute(
@@ -278,9 +599,26 @@ def update_memory(
         )
         conn.commit()
         row = conn.execute("SELECT * FROM operational_memory WHERE id = ?", (existing["id"],)).fetchone()
-        return _row_to_dict(row)
+        out = _row_to_dict(row)
+        if governance_report is not None:
+            governance_report["conflicts"] = conflicts
+            governance_report["superseded_memory_ids"] = superseded_ids
+        return out
     finally:
         conn.close()
+
+
+def update_memory_with_report(memory_id: str, **kwargs) -> dict[str, Any] | None:
+    """Update a memory and return `{memory, conflicts, superseded_memory_ids}` or `None`."""
+    report: dict[str, Any] = {"conflicts": [], "superseded_memory_ids": []}
+    mem = update_memory(memory_id, governance_report=report, **kwargs)
+    if mem is None:
+        return None
+    return {
+        "memory": mem,
+        "conflicts": report["conflicts"],
+        "superseded_memory_ids": report["superseded_memory_ids"],
+    }
 
 
 def delete_memory(memory_id: str, *, db_path: Path | None = None) -> bool:
@@ -362,12 +700,15 @@ def extract_custom_voltage_thresholds(
     memories: list[dict[str, Any]],
     *,
     cabinet: str | None = None,
+    now: datetime | None = None,
 ) -> list[dict[str, Any]]:
     """Extract active operator-defined 10 kV / 35 kV voltage thresholds from semantic memories only."""
     target_cab = str(cabinet).strip() if cabinet is not None else ""
     found: list[dict[str, Any]] = []
     for mem in memories:
         if not mem.get("enabled", True) or mem.get("category") != "semantic":
+            continue
+        if is_memory_expired(mem.get("expires_at"), now=now):
             continue
         scab = str(mem.get("scope_cabinet") or "").strip()
         if target_cab and scab and scab != target_cab:
@@ -473,16 +814,116 @@ def detect_memory_candidates(
     return suggestions[:2]
 
 
+def distill_ticket_memory_candidate(
+    ticket: dict[str, Any],
+    *,
+    action: str | None = None,
+    note: str = "",
+    existing_memories: list[dict[str, Any]] | None = None,
+) -> dict[str, Any] | None:
+    """Distill a close/dispute/supplement incident ticket into a draft episodic memory candidate."""
+    if not isinstance(ticket, dict):
+        return None
+    eff_action = str(action or ticket.get("status") or "").strip().lower()
+    if eff_action not in {"close", "closed", "dispute", "disputed", "supplement", "supplemented"}:
+        return None
+    eff_note = str(note or ticket.get("resolution_note") or "").strip()
+    if len(eff_note) < 6:
+        return None
+
+    tid = str(ticket.get("ticket_id") or "").strip()
+    cab_raw = str(ticket.get("cabinet") or "").strip()
+    scope_cab = cab_raw if re.fullmatch(r"\d{3,4}", cab_raw) else None
+    at_time = str(ticket.get("at_time") or "").strip()
+    src_id = str(ticket.get("source_finding_id") or "").strip()
+
+    if eff_action in {"dispute", "disputed"}:
+        action_label = "工单人工否决经验"
+        reason = "检测到值班员否决了自动告警/初诊，建议沉淀为负样本排障案例，供后续排查对照参考。"
+    elif eff_action in {"supplement", "supplemented"}:
+        action_label = "工单现场补证结论"
+        reason = "检测到工单补充了现场台账/复核依据，建议沉淀为历史案例记忆。"
+    else:
+        action_label = "工单结案复盘案例"
+        reason = "检测到告警工单已完成销项结案，建议将处置依据沉淀为可复用排障经验。"
+
+    cab_prefix = f"{cab_raw} 柜" if cab_raw else "全站"
+    raw_title = str(ticket.get("title") or src_id or tid or "异常处理").strip()
+    title = f"{action_label}（{cab_prefix}）：{raw_title}"[:140]
+    ev_cells = [str(c) for c in (ticket.get("evidence_cells") or [])[:4] if c]
+    parts = [f"处置结论：{eff_note[:600]}"]
+    if at_time:
+        parts.append(f"关联时段：{at_time[:16]}")
+    if src_id:
+        parts.append(f"来源规则：{src_id}")
+    if ev_cells:
+        parts.append(f"原表依据：{', '.join(ev_cells)}")
+    content = "；".join(parts)[:2000]
+
+    ticket_tag = f"ticket:{tid}" if tid else ""
+    existing = existing_memories or []
+    for mem in existing:
+        if ticket_tag and ticket_tag in (mem.get("tags") or []):
+            return None
+        if str(mem.get("title", "")).strip().lower() == title.lower():
+            return None
+        if str(mem.get("content", "")).strip().lower() == content.lower():
+            return None
+
+    tags = ["工单蒸馏", action_label]
+    if scope_cab:
+        tags.append(scope_cab)
+    if src_id:
+        tags.append(src_id)
+    if ticket_tag:
+        tags.append(ticket_tag)
+
+    return {
+        "category": "episodic",
+        "title": title,
+        "content": content,
+        "scope_cabinet": scope_cab,
+        "metric_threshold": None,
+        "tags": list(dict.fromkeys(tags))[:12],
+        "source": "ticket_distill",
+        "source_ticket_id": tid or None,
+        "reason": reason,
+    }
+
+
 def format_memories_for_prompt(memories: list[dict[str, Any]]) -> str:
     if not memories:
         return ""
     lines = ["## 当前已启用的矿井长期运营记忆与定制红线（请务必遵守并在结论中引用）"]
     cat_labels = {"semantic": "语义/红线", "episodic": "历史案例", "procedural": "SOP/规程"}
+    sigs_seen: list[dict[str, Any]] = []
+    has_conflict = False
     for m in memories:
         cat = cat_labels.get(m["category"], m["category"])
         cab = f" [适用柜: {m['scope_cabinet']}]" if m.get("scope_cabinet") else ""
         thr = f" [定制阈值: {m['metric_threshold']}]" if m.get("metric_threshold") else ""
-        lines.append(f"- [{cat} · {m['id']}]{cab}{thr} **{m['title']}**：{m['content']}")
+        exp = f" [有效期至: {str(m['expires_at'])[:10]}]" if m.get("expires_at") else ""
+        lines.append(f"- [{cat} · {m['id']}]{cab}{thr}{exp} **{m['title']}**：{m['content']}")
+        sig = _extract_rule_signature(
+            m.get("category", ""),
+            m.get("title", ""),
+            m.get("content", ""),
+            m.get("scope_cabinet"),
+            m.get("metric_threshold"),
+        )
+        if sig is not None:
+            for prev in sigs_seen:
+                if (
+                    prev["metric"] == sig["metric"]
+                    and prev["operator"] == sig["operator"]
+                    and abs(prev["value"] - sig["value"]) >= 1e-6
+                    and (prev["scope_cabinet"] == sig["scope_cabinet"] or prev["scope_cabinet"] == "" or sig["scope_cabinet"] == "")
+                ):
+                    has_conflict = True
+                    break
+            sigs_seen.append(sig)
+    if has_conflict:
+        lines.append("- [冲突提醒] 检测到多条启用中的语义阈值存在跨条冲突，回答中须显式说明差异并提示值班员核准或停用旧规则。")
     return "\n".join(lines)
 
 
@@ -501,11 +942,38 @@ class MemoryStore:
     def create(self, **kwargs) -> dict[str, Any]:
         return create_memory(db_path=self.db_path, **kwargs)
 
+    def create_with_report(self, **kwargs) -> dict[str, Any]:
+        return create_memory_with_report(db_path=self.db_path, **kwargs)
+
     def update(self, memory_id: str, **kwargs) -> dict[str, Any] | None:
         return update_memory(memory_id, db_path=self.db_path, **kwargs)
+
+    def update_with_report(self, memory_id: str, **kwargs) -> dict[str, Any] | None:
+        return update_memory_with_report(memory_id, db_path=self.db_path, **kwargs)
 
     def delete(self, memory_id: str) -> bool:
         return delete_memory(memory_id, db_path=self.db_path)
 
     def retrieve(self, question: str, *, cabinets: list[str] | None = None, limit: int = 6) -> list[dict[str, Any]]:
         return retrieve_relevant_memories(question, cabinets=cabinets, limit=limit, db_path=self.db_path)
+
+    def detect_conflicts(self, **kwargs) -> list[dict[str, Any]]:
+        return detect_memory_conflicts(db_path=self.db_path, **kwargs)
+
+    def prune_expired(self, **kwargs) -> dict[str, Any]:
+        return prune_expired_memories(db_path=self.db_path, **kwargs)
+
+    def distill_ticket(
+        self,
+        ticket: dict[str, Any],
+        *,
+        action: str | None = None,
+        note: str = "",
+    ) -> dict[str, Any] | None:
+        existing = self.list(include_expired=True)
+        return distill_ticket_memory_candidate(
+            ticket,
+            action=action,
+            note=note,
+            existing_memories=existing,
+        )

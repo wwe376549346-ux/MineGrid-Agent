@@ -705,6 +705,12 @@ class Workbench:
             "sla": self.ticket_store.sla_metrics(),
         }
 
+    def list_incident_groups(self, *, status: str | None = "active"):
+        return {
+            "groups": self.ticket_store.list_incident_groups(status=status or "active"),
+            "sla": self.ticket_store.sla_metrics(),
+        }
+
     def create_ticket(self, request: dict, *, actor: str = "dispatcher"):
         ticket, created = self.ticket_store.create_ticket_with_outbox(
             source_finding_id=request["source_finding_id"],
@@ -747,7 +753,23 @@ class Workbench:
             raise RequestError(409, str(exc)) from None
         except ValueError as exc:
             raise RequestError(400, str(exc)) from None
-        return {"ticket": updated, "detail": self.ticket_store.get_ticket_detail(ticket_id)}
+        detail = self.ticket_store.get_ticket_detail(ticket_id)
+        candidate = None
+        if detail is not None:
+            try:
+                from laowadi.memory_store import distill_ticket_memory_candidate, list_memories
+
+                mem_db = self.reviews_db.parent / "laowadi_memory.sqlite3"
+                existing = list_memories(include_expired=True, db_path=mem_db) if mem_db.is_file() else []
+                candidate = distill_ticket_memory_candidate(
+                    detail,
+                    action=request["action"],
+                    note=request.get("note", ""),
+                    existing_memories=existing,
+                )
+            except Exception:
+                candidate = None
+        return {"ticket": updated, "detail": detail, "memory_candidate": candidate}
 
     def proactive_status(self):
         return self.proactive_watcher.status()

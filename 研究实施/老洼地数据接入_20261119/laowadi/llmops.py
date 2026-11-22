@@ -114,6 +114,14 @@ def execute_tool_calls_parallel(
             res = toolbox.execute(item["name"], item["arguments"])
             dt = (time.monotonic() - t0) * 1000.0
             serial_sum += dt
+            r_status = str(res.get("status") or "ok")
+            r_err = str(res.get("error") or res.get("message") or "")[:180] if r_status in {"error", "failed", "exception"} else ""
+            GLOBAL_LLMOPS.record_tool_execution(
+                tool_name=item["name"],
+                status=r_status,
+                elapsed_ms=dt,
+                error=r_err,
+            )
             out.append({**item, "result": res, "elapsed_ms": round(dt, 2)})
         wall_ms = round((time.monotonic() - t_wall0) * 1000.0, 2)
         return out, {
@@ -130,6 +138,14 @@ def execute_tool_calls_parallel(
             thread_tb = DiagnosticToolbox(thread_arc, profile=getattr(toolbox, "profile", None))
             res = thread_tb.execute(item["name"], item["arguments"])
         dt = (time.monotonic() - t0) * 1000.0
+        r_status = str(res.get("status") or "ok")
+        r_err = str(res.get("error") or res.get("message") or "")[:180] if r_status in {"error", "failed", "exception"} else ""
+        GLOBAL_LLMOPS.record_tool_execution(
+            tool_name=item["name"],
+            status=r_status,
+            elapsed_ms=dt,
+            error=r_err,
+        )
         return {**item, "result": res, "elapsed_ms": round(dt, 2)}
 
     workers = max(2, min(int(max_workers), len(parsed_calls)))
@@ -266,6 +282,100 @@ class LLMOpsRegistry:
         self._ttft_ms: deque[float] = deque(maxlen=200)
         self._tpot_ms: deque[float] = deque(maxlen=200)
         self._models_used: dict[str, int] = {}
+        self.tool_calls_total = 0
+        self.tool_errors_total = 0
+        self._tool_stats: dict[str, dict[str, Any]] = {}
+        self._step_stats: dict[str, dict[str, Any]] = {}
+        self._recent_steps: deque[dict[str, Any]] = deque(maxlen=200)
+        self.feedback_total = 0
+        self.feedback_helpful_total = 0
+        self.feedback_negative_total = 0
+        self._feedback_by_verdict: dict[str, int] = {}
+        self._feedback_by_target: dict[str, int] = {}
+
+    def record_tool_execution(
+        self,
+        *,
+        tool_name: str,
+        status: str,
+        elapsed_ms: float,
+        error: str = "",
+    ) -> None:
+        name = str(tool_name or "unknown").strip() or "unknown"
+        st = str(status or "ok").strip()
+        ms = max(0.0, float(elapsed_ms or 0.0))
+        is_err = st in {"error", "failed", "exception"} or bool(str(error or "").strip())
+        with self._lock:
+            self.tool_calls_total += 1
+            if is_err:
+                self.tool_errors_total += 1
+            entry = self._tool_stats.setdefault(
+                name,
+                {"calls": 0, "errors": 0, "total_ms": 0.0, "max_ms": 0.0, "last_error": ""},
+            )
+            entry["calls"] += 1
+            if is_err:
+                entry["errors"] += 1
+                if error:
+                    entry["last_error"] = str(error)[:180]
+            entry["total_ms"] += ms
+            if ms > entry["max_ms"]:
+                entry["max_ms"] = ms
+
+    def record_step_trace(
+        self,
+        *,
+        mode: str,
+        stage: str,
+        latency_ms: float,
+        tokens: int = 0,
+        cost_cny: float = 0.0,
+        status: str = "ok",
+        tool_count: int = 0,
+        error: str = "",
+    ) -> None:
+        clean_mode = str(mode or "unknown").strip() or "unknown"
+        clean_stage = str(stage or "unknown").strip() or "unknown"
+        clean_status = str(status or "ok").strip()
+        ms = max(0.0, float(latency_ms or 0.0))
+        tok = max(0, int(tokens or 0))
+        cost = max(0.0, float(cost_cny or 0.0))
+        is_err = clean_status not in {"ok", "completed", "verified"} or bool(str(error or "").strip())
+        with self._lock:
+            entry = self._step_stats.setdefault(
+                clean_stage,
+                {"count": 0, "errors": 0, "total_ms": 0.0, "max_ms": 0.0, "total_tokens": 0, "total_cost_cny": 0.0},
+            )
+            entry["count"] += 1
+            if is_err:
+                entry["errors"] += 1
+            entry["total_ms"] += ms
+            if ms > entry["max_ms"]:
+                entry["max_ms"] = ms
+            entry["total_tokens"] += tok
+            entry["total_cost_cny"] = round(entry["total_cost_cny"] + cost, 6)
+            self._recent_steps.append({
+                "mode": clean_mode,
+                "stage": clean_stage,
+                "status": clean_status,
+                "latency_ms": round(ms, 2),
+                "tokens": tok,
+                "cost_cny": round(cost, 6),
+                "tool_count": max(0, int(tool_count or 0)),
+                "error": str(error or "")[:180],
+            })
+
+    def record_operator_feedback(self, *, verdict: str, target_type: str = "diagnosis") -> None:
+        clean_v = str(verdict or "").strip() or "unknown"
+        clean_t = str(target_type or "").strip() or "diagnosis"
+        with self._lock:
+            self.feedback_total += 1
+            if clean_v == "helpful":
+                self.feedback_helpful_total += 1
+            else:
+                self.feedback_negative_total += 1
+            self._feedback_by_verdict[clean_v] = self._feedback_by_verdict.get(clean_v, 0) + 1
+            self._feedback_by_target[clean_t] = self._feedback_by_target.get(clean_t, 0) + 1
 
     def record_llm_call(self, record: dict[str, Any]) -> None:
         with self._lock:
@@ -344,6 +454,33 @@ class LLMOpsRegistry:
                 if self.execution_completed_total
                 else 0.0
             )
+            tool_metrics = {
+                name: {
+                    "calls": st["calls"],
+                    "errors": st["errors"],
+                    "error_rate_pct": round(st["errors"] / st["calls"] * 100.0, 2) if st["calls"] else 0.0,
+                    "avg_ms": round(st["total_ms"] / st["calls"], 2) if st["calls"] else 0.0,
+                    "max_ms": round(st["max_ms"], 2),
+                    "last_error": st["last_error"],
+                }
+                for name, st in sorted(self._tool_stats.items())
+            }
+            step_metrics_by_stage = {
+                stage: {
+                    "count": st["count"],
+                    "errors": st["errors"],
+                    "avg_ms": round(st["total_ms"] / st["count"], 2) if st["count"] else 0.0,
+                    "max_ms": round(st["max_ms"], 2),
+                    "total_tokens": st["total_tokens"],
+                    "total_cost_cny": round(st["total_cost_cny"], 6),
+                }
+                for stage, st in sorted(self._step_stats.items())
+            }
+            helpful_rate = (
+                round(self.feedback_helpful_total / self.feedback_total * 100.0, 2)
+                if self.feedback_total
+                else 0.0
+            )
             return {
                 "llm_calls_total": self.calls_total,
                 "llm_errors_total": self.errors_total,
@@ -370,10 +507,24 @@ class LLMOpsRegistry:
                 "parallel_tool_batches_total": self.parallel_tool_batches_total,
                 "parallel_tool_saved_ms_total": self.parallel_tool_saved_ms_total,
                 "models_used": dict(self._models_used),
+                "tool_calls_total": self.tool_calls_total,
+                "tool_errors_total": self.tool_errors_total,
+                "tool_metrics": tool_metrics,
+                "step_metrics_by_stage": step_metrics_by_stage,
+                "recent_steps": list(self._recent_steps)[-20:],
+                "operator_feedback": {
+                    "total": self.feedback_total,
+                    "helpful": self.feedback_helpful_total,
+                    "negative": self.feedback_negative_total,
+                    "helpful_rate_pct": helpful_rate,
+                    "by_verdict": dict(self._feedback_by_verdict),
+                    "by_target_type": dict(self._feedback_by_target),
+                },
             }
 
     def render_prometheus_lines(self) -> list[str]:
         s = self.summary()
+        fbk = s["operator_feedback"]
         return [
             "# HELP laowadi_llm_calls_total Total LLM inference calls.",
             "# TYPE laowadi_llm_calls_total counter",
@@ -411,6 +562,18 @@ class LLMOpsRegistry:
             "# HELP laowadi_parallel_tool_batches_total Multi-tool batches executed in parallel.",
             "# TYPE laowadi_parallel_tool_batches_total counter",
             f"laowadi_parallel_tool_batches_total {s['parallel_tool_batches_total']}",
+            "# HELP laowadi_tool_calls_total Total individual read-only tool calls executed.",
+            "# TYPE laowadi_tool_calls_total counter",
+            f"laowadi_tool_calls_total {s['tool_calls_total']}",
+            "# HELP laowadi_tool_errors_total Total read-only tool calls returning errors.",
+            "# TYPE laowadi_tool_errors_total counter",
+            f"laowadi_tool_errors_total {s['tool_errors_total']}",
+            "# HELP laowadi_operator_feedback_total Total operator feedback events recorded.",
+            "# TYPE laowadi_operator_feedback_total counter",
+            f"laowadi_operator_feedback_total {fbk['total']}",
+            "# HELP laowadi_operator_feedback_negative_total Total negative/disputed operator feedback events.",
+            "# TYPE laowadi_operator_feedback_negative_total counter",
+            f"laowadi_operator_feedback_negative_total {fbk['negative']}",
         ]
 
 

@@ -28,3 +28,6 @@ laowadi = "laowadi.__main__:main"
 
 [tool.setuptools.packages.find]
 include = ["laowadi*"]
+
+[tool.setuptools.package-data]
+laowadi = ["data/standards_corpus.json"]

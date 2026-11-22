@@ -180,6 +180,8 @@ class MemoryCreateRequest(BaseModel):
     scope_cabinet: str | None = Field(default=None, min_length=1, max_length=24)
     metric_threshold: dict[str, Any] | Annotated[str, Field(max_length=240)] | float | None = None
     tags: list[MemoryTag] = Field(default_factory=list, max_length=12)
+    expires_at: str | None = Field(default=None, max_length=40)
+    supersede_conflicts: bool = False
 
     @field_validator("metric_threshold")
     @classmethod
@@ -204,6 +206,14 @@ class MemoryPatchRequest(BaseModel):
 
     enabled: bool | None = None
     content: MemoryContent | None = None
+    expires_at: str | None = Field(default=None, max_length=40)
+    supersede_conflicts: bool | None = None
+
+
+class MemoryPruneRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    disable_only: bool = True
 
 
 class DeepResearchRequest(BaseModel):
@@ -497,3 +507,38 @@ class OutboxDispatchRequest(BaseModel):
 
     limit: int = Field(default=50, ge=1, le=200)
     force_retry_now: bool = False
+
+
+class FeedbackCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    target_type: Literal["diagnosis", "autonomous_turn", "action_ticket", "incident_ticket", "deep_research"]
+    verdict: Literal["helpful", "incorrect", "incomplete", "unsafe_suggestion", "rejected_ticket", "disputed_finding"]
+    target_id: str = Field(default="", max_length=64)
+    question: str = Field(default="", max_length=1000)
+    answer_excerpt: str = Field(default="", max_length=1200)
+    expected_correction: str = Field(default="", max_length=1200)
+    reason_tags: list[MemoryTag] = Field(default_factory=list, max_length=12)
+    mode: str = Field(default="", max_length=32)
+    cabinet: str = Field(default="", max_length=32)
+    at_time: str = Field(default="", max_length=32)
+    latency_ms: float | None = Field(default=None, ge=0)
+    total_tokens: int | None = Field(default=None, ge=0)
+    verification_status: str = Field(default="", max_length=40)
+
+
+class FeedbackExportRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    mark_exported: bool = False
+    include_exported: bool = True
+    limit: int = Field(default=100, ge=1, le=500)
+
+
+class MultimodalIntakeJsonRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    image_base64: str = Field(min_length=8, max_length=12_000_000)
+    mime_type: Literal["image/png", "image/jpeg", "image/webp"]
+    hint: str = Field(default="", max_length=1000)
+    mode: Literal["auto", "local", "deepseek"] = "auto"

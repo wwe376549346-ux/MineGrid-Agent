@@ -45,6 +45,32 @@ def _normalize_cell(text: str) -> str:
     return re.sub(r"\s*/\s*", " / ", text.strip())
 
 
+def parse_receipt_pointer(pointer):
+    """Resolve equivalent slash, dotted and bracketed receipt paths."""
+    if not isinstance(pointer, str) or len(pointer) > 256:
+        return None
+    match = re.fullmatch(r"(T[1-9]\d*)([#.:/])(.*)", pointer.strip().removeprefix("`").removesuffix("`").strip(), re.I)
+    if not match:
+        return None
+    receipt, separator, tail = match.groups()
+    tail = tail.strip()
+    if separator == "/":
+        tail = "/" + tail
+    if tail.startswith("/"):
+        parts = tail[1:].split("/")
+        if any(not part or re.search(r"~(?![01])", part) for part in parts):
+            return None
+        parts = [part.replace("~1", "/").replace("~0", "~") for part in parts]
+    else:
+        tail = tail.removeprefix("$")
+        tail = re.sub(r"""\[(['"])([\w-]+)\1\]""", r".\2", tail)
+        tail = re.sub(r"\[(\d+)\]", r".\1", tail).removeprefix(".")
+        if not re.fullmatch(r"[\w-]+(?:\.[\w-]+)*", tail):
+            return None
+        parts = tail.split(".")
+    return receipt.upper(), parts
+
+
 def _cells(obj) -> set[str]:
     """Collect coordinates from structured tool fields, never from arbitrary prose."""
     if isinstance(obj, dict):
@@ -359,7 +385,10 @@ def finalize_diagnosis(archive, draft, trace):
     report["summary"] = " ".join(fact["statement"] for fact in facts[:2])
     if report["summary"]:
         report["summary"] += " 现场原因与处置条件待复核。"
-    if hypothesis_trace := report.get("hypothesis_trace"):
+    if (hypothesis_trace := report.get("hypothesis_trace")) and hypothesis_trace["scenario"] == "dynamic_anomaly_review":
+        observed = [facts[i]["statement"] for i in hypothesis_trace["observation_fact_indices"]]
+        report["summary"] = " ".join([*observed, hypothesis_trace["stop_message"]])
+    elif hypothesis_trace:
         observed = [facts[i]["source"] for i in hypothesis_trace["observation_fact_indices"]]
         readings = "、".join(f'{row["cabinet"]} 柜 {row["value"]:g} kW' for row in observed if row["metric"] == "P")
         refutations = [check["judgment"] for check in hypothesis_trace["checks"]
@@ -561,7 +590,8 @@ def render_diagnosis_markdown(result: dict) -> str:
             lines += [
                 "", f'### 第 {check["round"]} 轮 · {check["hypothesis"]} {check["title"]}', "",
                 f'- 检验条件 · {check["criterion"]}',
-                f'- 查询 #{check["step"]} · {planner} · 参考查询 {prior}',
+                (f'- 查询 #{check["step"]} · {planner} · 参考查询 {prior}'
+                 if check["step"] is not None else "- 对照柜缺少归档，未执行查询。"),
                 f'  `{check["tool"]}` `{arguments}`',
                 f'- {labels[check["outcome"]]} · {check["judgment"]}',
             ]

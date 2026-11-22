@@ -74,11 +74,14 @@ jobs:
           set -o pipefail
           python -B verify_advanced_agent_v3.py 2>&1 | tee /tmp/g4v3.log || { echo "### Gate 4v3 Failed" >> "$GITHUB_STEP_SUMMARY"; echo '```' >> "$GITHUB_STEP_SUMMARY"; tail -n 40 /tmp/g4v3.log >> "$GITHUB_STEP_SUMMARY"; echo '```' >> "$GITHUB_STEP_SUMMARY"; exit 1; }
 
-      - name: Gate 5 — P0 correctness, claim grounding & duty closure
+      - name: Gate 5 — P0 correctness, claim grounding, duty closure & v4 upgrades
         run: |
           python -B verify_duty_closure.py
           python -B verify_p0_correctness.py
           python -B verify_diagnostic_claims.py
+          python -B verify_core_engine_upgrades.py
+          python -B verify_agent_governance_phase1.py
+          python -B verify_agent_v4_integration.py
 
       - name: Gate 6 — Core diagnosis & task alignment
         run: |

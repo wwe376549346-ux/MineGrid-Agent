@@ -10,23 +10,30 @@ from laowadi.model import select_with_client
 from laowadi.context import (
     DiagnosisSession,
     compress_tool_result,
-    extract_query_anchors,
     partition_relevant_reviews,
     select_relevant_reviews,
 )
 from laowadi.diag_tools import DIAGNOSTIC_TOOL_SCHEMAS, DiagnosticToolbox
-from laowadi.hypothesis import REVERSE_POWER, execute_hypotheses, hypothesis_scope
+from laowadi.hypothesis import (
+    REVERSE_POWER, dynamic_hypothesis_scope, execute_dynamic_hypotheses,
+    execute_hypotheses, hypothesis_scope, profile_query_anchors,
+)
 from laowadi.llm import ChatClient, LLMError
+from laowadi.llmops import classify_query_tier, dispatch_react_tool_round
 from laowadi.diagnostic_claims import (
     AUTHOR_INSTRUCTIONS,
     CLAIM_POLICY,
     MAX_CLAIMS,
+    SUBMIT_CLAIMS_SCHEMA,
+    SUBMIT_DIAGNOSIS,
     apply_claim_patches,
     audit_errors,
     audit_messages,
     blocked_claim_verdict,
     build_reflection_feedback,
     prepare_claims,
+    parse_json_submission,
+    submission_content,
     publish_claims,
 )
 from laowadi.local_router import (
@@ -40,7 +47,7 @@ from laowadi.graph import maybe_build_hitl_interrupt as _maybe_build_hitl_interr
 from laowadi.outcomes import classify_outcome
 from laowadi.report_evidence import result_catalog
 from laowadi.security import inspect_prompt_security
-from laowadi.storage import REPORT_STATION
+from laowadi.mine_schema import MineProfile
 from laowadi.task_alignment import execute_scoped_question
 from laowadi.verifier import (
     EVIDENCE_POLICY,
@@ -102,7 +109,8 @@ def diagnose_question(
     pause_after_node: str | None = None,
     human_input: dict | None = None,
     resume_policy: str = "strict",
-    auto_tier: bool = False,
+    auto_tier: bool = True,
+    profile: MineProfile | None = None,
     fallback_to_local: bool = False,
 ) -> dict:
     """Run hypothesis-driven electrical health diagnosis on the shared UnifiedDAGRuntime."""
@@ -117,9 +125,8 @@ def diagnose_question(
     )
 
     t0 = time.monotonic()
-    toolbox = DiagnosticToolbox(archive)
-    known_cabs = {num for _, num in archive.devices}
-    archive_snap = compute_snapshot(archive)
+    toolbox = DiagnosticToolbox(archive, profile=profile)
+    archive_snap = compute_snapshot(archive, toolbox.profile)
     day_hashes = {d: info["sha256"] for d, info in (archive_snap.get("reports") or {}).items() if isinstance(info, dict) and info.get("sha256")}
     persist_dag = bool(thread_id or pause_before_node or pause_after_node or human_input)
 
@@ -135,7 +142,7 @@ def diagnose_question(
     else:
         prior_turn = None
         effective_question = question
-        anchors = extract_query_anchors(question, known_cabs)
+        anchors = profile_query_anchors(toolbox.profile, question, archive.devices)
         prior_messages = []
         context_snapshot = {
             "turn": 1,
@@ -244,8 +251,9 @@ def diagnose_question(
     if hypothesis:
         scenario, at = hypothesis
         tier_info = {"tier": "slow", "reason": scenario.kind.replace("_review", "_hypothesis_review")}
-    c1535_cabs = {num for st, num in archive.devices if st != REPORT_STATION}
-    s35_cabs = {num for st, num in archive.devices if st == REPORT_STATION}
+    primary = toolbox.profile.primary_station
+    c1535_cabs = {num for st, num in archive.devices if st != primary}
+    s35_cabs = {num for st, num in archive.devices if st == primary}
     req_cabs = anchors.get("cabinets") or []
     only_unarchived_station = (
         bool(req_cabs)
@@ -277,7 +285,8 @@ def diagnose_question(
             emit("fallback", message="事件候选查询选择失败，按本地任务范围继续复核。")
             return options[0]
 
-        scoped = None if hypothesis else execute_scoped_question(
+        dynamic = None if hypothesis or cap_params else dynamic_hypothesis_scope(toolbox, effective_question, anchors)
+        scoped = None if hypothesis or dynamic else execute_scoped_question(
             archive, toolbox, question, anchors, context_snapshot["current_anchors"],
             budget=max_tool_calls, emit=emit, selector=select_event_tool if eff_client is not None else None,
         )
@@ -293,6 +302,12 @@ def diagnose_question(
                     "report": refusal["report"], "tool_trace": [], "rounds": 0,
                     "task_alignment": {"kind": "date_coverage", "status": "insufficient_data",
                                        "scope": {"days": req_days}, "gaps": refusal["report"]["missing_evidence"]}}
+        if dynamic:
+            return execute_dynamic_hypotheses(
+                archive, toolbox, dynamic, question=effective_question, client=eff_client,
+                max_rounds=max_rounds, max_tool_calls=max_tool_calls, emit=emit,
+                summarize=_summarize_tool_result, fallback_to_local=fallback_to_local,
+            )
         if hypothesis:
             planned = execute_hypotheses(
                 archive, toolbox, effective_question, scenario, at, client=eff_client,
@@ -606,6 +621,7 @@ def diagnose_question(
         "tool_trace": trace,
         "llm_records": exec_out.get("llm_records") or [],
         "claim_audit_runs": exec_out.get("claim_audit_runs") or [],
+        "submission_source": exec_out.get("submission_source"),
         "patch_reflections_used": int(exec_out.get("patch_reflections_used", 0)),
         "dag_execution": dag_meta,
     }
@@ -676,7 +692,11 @@ def _execute_diagnosis_core(
             "llm_records": [],
         }
 
-    system_content = SYSTEM_PROMPT
+    tier = classify_query_tier(effective_question, anchors)
+    full_diagnosis = tier["reason"] == "complex_diagnostic_reasoning"
+    system_content = SYSTEM_PROMPT if full_diagnosis else (
+        "你依据本矿只读证据回答本轮问题，优先使用直接匹配的查询，保留证据边界。\n" + AUTHOR_INSTRUCTIONS
+    )
 
     user_content = effective_question
     if review_memory:
@@ -723,12 +743,11 @@ def _execute_diagnosis_core(
                        }}, ensure_ascii=False),
         })
 
-    from laowadi.llmops import classify_query_tier, dispatch_react_tool_round
-
-    full_diagnosis = classify_query_tier(effective_question, anchors)["reason"] == "complex_diagnostic_reasoning"
     parallel_batches = 0
     parallel_saved_ms = 0.0
     round_idx = starting_round
+    submission_source = None
+    token_limit = 4096 if full_diagnosis else 2048
     for attempt in range(1, max_rounds + 1):
         round_idx = starting_round + attempt
         allow_tools = len(trace) < max_tool_calls and attempt <= min(3, max_rounds - 1)
@@ -741,10 +760,10 @@ def _execute_diagnosis_core(
         try:
             msg, rec = client.chat(
                 messages,
-                tools=DIAGNOSTIC_TOOL_SCHEMAS if allow_tools else None,
-                tool_choice="auto" if allow_tools else None,
-                max_tokens=4096 if allow_tools else 6144,
+                tools=[*DIAGNOSTIC_TOOL_SCHEMAS, SUBMIT_CLAIMS_SCHEMA] if allow_tools else [SUBMIT_CLAIMS_SCHEMA],
+                tool_choice="auto",
                 json_mode=not allow_tools,
+                max_tokens=token_limit if allow_tools else (6144 if full_diagnosis else 2500),
                 on_delta=lambda kind, text, r_no=round_idx: emit(
                     "llm_delta",
                     round=r_no,
@@ -779,8 +798,9 @@ def _execute_diagnosis_core(
         llm_records.append(rec)
 
         tool_calls = msg.get("tool_calls") or []
-        if tool_calls and allow_tools:
-            messages.append({"role": "assistant", "content": "", "tool_calls": tool_calls})
+        submitted = any((call.get("function") or {}).get("name") == SUBMIT_DIAGNOSIS for call in tool_calls)
+        if tool_calls and allow_tools and not submitted:
+            messages.append({**msg, "role": "assistant"})
             b_stats = dispatch_react_tool_round(
                 archive, toolbox, tool_calls,
                 round_idx=round_idx, max_tool_calls=max_tool_calls, seen_calls=seen_calls,
@@ -790,18 +810,20 @@ def _execute_diagnosis_core(
             if b_stats.get("parallel"):
                 parallel_batches += 1
                 parallel_saved_ms = round(parallel_saved_ms + float(b_stats.get("saved_ms", 0.0)), 2)
-            catalog = result_catalog(trace)
-            if catalog:
-                choices = {key: fact["statement"] for key, fact in catalog.items()}
+            updated_catalog = result_catalog(trace)
+            choices = {key: fact["statement"] for key, fact in updated_catalog.items() if key not in catalog}
+            catalog = updated_catalog
+            if choices:
                 messages.append({
                     "role": "user",
                     "content": "本轮可引用工具结果编号及证据原子：" + json.dumps(choices, ensure_ascii=False),
                 })
             continue
 
-        content = msg.get("content") or ""
+        content = ""
         try:
-            draft = json.loads(content)
+            content = submission_content(msg)
+            draft = parse_json_submission(content)
         except (ValueError, TypeError):
             draft = None
         effective_draft, patched_indices, patch_errors = apply_claim_patches(last_claims_draft, draft)
@@ -841,6 +863,7 @@ def _execute_diagnosis_core(
             })
             if not claim_errors:
                 report, verification = publish_claims(prepared)
+                submission_source = "submit_diagnosis" if submitted else "text_json"
                 stop_reason = "completed"
                 break
         if attempt < max_rounds:
@@ -877,6 +900,7 @@ def _execute_diagnosis_core(
         "llm_records": llm_records,
         "claim_verification": verification,
         "claim_audit_runs": audit_runs,
+        "submission_source": submission_source,
         "patch_reflections_used": patch_reflections_used,
         "parallel_tool_batches": parallel_batches,
         "parallel_saved_ms": parallel_saved_ms,

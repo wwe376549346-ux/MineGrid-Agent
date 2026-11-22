@@ -36,6 +36,7 @@ from laowadi import reactive_collaboration as reactive
 from laowadi.report_evidence import render_tool_facts
 from laowadi.security import inspect_prompt_security
 from laowadi.storage import REPORT_STATION
+from laowadi.subagent_debate import run_role_cross_examination
 from laowadi.verifier import (
     EVIDENCE_POLICY,
     bind_tool_fact,
@@ -1001,6 +1002,28 @@ def run_multi_agent_consultation(
         "llm_records": [],
         "dag_execution": dag_meta,
     }
+    if client is not None and verified:
+        model_debate = run_role_cross_examination(
+            client, question, [AGENT_ROLES[role]["title"] for role in [*selected, "auditor"]],
+            profile=profile,
+            evidence=checked["report"].get("confirmed_facts", []) + checked["report"].get("cited_standards", []),
+            on_event=emit,
+        )
+        out_done["model_debate"] = model_debate
+        out_done["llm_records"] = model_debate["llm_records"]
+        if model_debate["status"] == "model_debate":
+            out_done["model"] = client.model
+            out_done["mode"] = "model_debate"
+            messages.extend(
+                {"from": pos["role"], "to": "All", "type": "model_position",
+                 "content": pos["content"], "references": pos["references"]}
+                for pos in model_debate["positions"]
+            )
+            messages.extend(
+                {"from": rb["role"], "to": rb["target"], "type": "model_rebuttal",
+                 "content": rb["content"], "references": rb["references"]}
+                for rb in model_debate["rebuttals"]
+            )
     outcome = classify_outcome(out_done, execution_status="completed")
     out_done["outcome_layers"] = outcome
     out_done["business_status"] = outcome["business_status"]

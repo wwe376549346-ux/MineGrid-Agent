@@ -6,6 +6,8 @@ import {cellHref} from "./api.js";
 export const emptyAgentStream = {
   plan: [], reasoning: "", tools: [], runs: [], artifacts: [], content: "", verification: null,
   canvasHint: null, recommendedAction: null, deepResearchGoal: "", memorySuggestions: [], status: "running",
+  clarification: null, repair: null, repairAttempted: false, repairSucceeded: false,
+  incompleteReason: "", resultStatus: "ok",
 };
 
 function deltaText(event) {
@@ -121,6 +123,17 @@ export function applyAgentEvent(state, frame) {
     }
     case "verification_badge":
       return {...state, verification: event.verification ?? event.badge ?? event};
+    case "verification_repair":
+      return {
+        ...state,
+        repair: {status: event.status, notes: event.notes ?? []},
+        ...(event.status === "succeeded" ? {content: ""} : {}),
+      };
+    case "clarification_request":
+      return {
+        ...state,
+        clarification: {question: event.question ?? "", options: event.options ?? []},
+      };
     case "done": {
       const result = event.result ?? {};
       const plan = result.plan;
@@ -135,6 +148,11 @@ export function applyAgentEvent(state, frame) {
       return {
         ...state,
         status: "done",
+        resultStatus: result.status ?? "ok",
+        incompleteReason: result.incomplete_reason ?? "",
+        repairAttempted: Boolean(result.repair_attempted),
+        repairSucceeded: Boolean(result.repair_succeeded),
+        clarification: result.clarification_request ?? state.clarification ?? null,
         content: typeof content === "string" ? content : state.content,
         plan: Array.isArray(plan) ? plan : (plan?.items ?? plan?.steps ?? state.plan),
         reasoning: result.reasoning ?? state.reasoning,
@@ -478,7 +496,7 @@ export function SkillRunReceipt({result}) {
   </section>;
 }
 
-export function AgentStreamArtifacts({stream, onTextProgress, restored = false}) {
+export function AgentStreamArtifacts({stream, onTextProgress, onSelectClarification, restored = false}) {
   const glyphs = useMemo(() => Array.from(stream.content), [stream.content]);
   const [typed, setVisible] = useState(0);
   const visible = restored ? glyphs.length : typed;
@@ -487,6 +505,10 @@ export function AgentStreamArtifacts({stream, onTextProgress, restored = false})
     return stream.artifacts.filter(item => !inSandbox.has(artifactKey(item)));
   }, [stream.artifacts, stream.runs]);
   useEffect(() => {
+    if (visible < glyphs.length) return;
+    if (visible > glyphs.length) setVisible(glyphs.length);
+  }, [glyphs.length, visible]);
+  useEffect(() => {
     if (visible >= glyphs.length) return undefined;
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const step = reducedMotion ? glyphs.length : Math.max(1, Math.ceil((glyphs.length - visible) / 45));
@@ -494,6 +516,9 @@ export function AgentStreamArtifacts({stream, onTextProgress, restored = false})
     return () => window.clearTimeout(timer);
   }, [glyphs.length, visible]);
   useEffect(() => { onTextProgress(visible); }, [visible, onTextProgress]);
+
+  const showRepair = stream.repairAttempted || Boolean(stream.repair);
+  const repairOk = stream.repairSucceeded || stream.repair?.status === "succeeded";
 
   return <div className="agent-stream-artifacts">
     {Array.isArray(stream.plan) && stream.plan.length > 0 && <section className="agent-stream-card" aria-label="执行计划">
@@ -513,6 +538,29 @@ export function AgentStreamArtifacts({stream, onTextProgress, restored = false})
       {standaloneArtifacts.map(item => <ResultArtifact key={artifactKey(item)} item={item} />)}
     </section>}
     {visible > 0 && <AnswerText text={glyphs.slice(0, visible).join("")} />}
+    {stream.clarification?.options?.length > 0 && (
+      <section className="agent-stream-card" aria-label="需要补充范围">
+        <strong>请先确认查询范围</strong>
+        <div style={{display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8}}>
+          {stream.clarification.options.map(opt => (
+            <button key={opt} type="button" className="chat-artifact-btn" onClick={() => onSelectClarification?.(opt)}>
+              {opt}
+            </button>
+          ))}
+        </div>
+      </section>
+    )}
+    {stream.incompleteReason && (
+      <div className="agent-stream-card" role="status">
+        <Badge variant="warning" label="已达步数上限" />{" "}
+        <span>未形成完整答复（{stream.incompleteReason}），请缩小排查范围或继续追问。</span>
+      </div>
+    )}
+    {stream.status === "done" && visible >= glyphs.length && showRepair && (
+      <div className="agent-stream-verification">
+        <Badge variant={repairOk ? "success" : "error"} label={repairOk ? "核验自修已通过" : "核验自修未通过，已拦截"} />
+      </div>
+    )}
     {stream.status === "done" && visible >= glyphs.length && stream.verification && <VerificationBadge verification={stream.verification} />}
   </div>;
 }

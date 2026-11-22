@@ -221,7 +221,9 @@ export function IncidentTicketPanel({
   onDraftAction,
 }) {
   const [statusFilter, setStatusFilter] = useState(initialStatusFilter || "active");
+  const [viewMode, setViewMode] = useState("tickets");
   const [tickets, setTickets] = useState([]);
+  const [groups, setGroups] = useState([]);
   const [sla, setSla] = useState(null);
   const [llmops, setLlmops] = useState(null);
   const [selectedId, setSelectedId] = useState(null);
@@ -234,16 +236,24 @@ export function IncidentTicketPanel({
   const [actorName, setActorName] = useState("白班值班长");
   const [shiftName, setShiftName] = useState("早班 08:00-16:00");
   const [actionNote, setActionNote] = useState("");
+  const [distillCandidate, setDistillCandidate] = useState(null);
+  const [distillMsg, setDistillMsg] = useState("");
+  const [intakeHint, setIntakeHint] = useState("");
+  const [intakeBusy, setIntakeBusy] = useState(false);
+  const [intakeRes, setIntakeRes] = useState(null);
+  const [intakeErr, setIntakeErr] = useState("");
 
   async function refreshAll(nextStatus = statusFilter) {
     setLoading(true);
     setErr("");
     try {
-      const [tRes, mRes] = await Promise.all([
+      const [tRes, gRes, mRes] = await Promise.all([
         apiRequest(`/api/tickets?status=${encodeURIComponent(nextStatus)}&limit=50`),
+        apiRequest(`/api/tickets/groups?status=${encodeURIComponent(nextStatus)}`),
         apiRequest("/api/llmops/metrics"),
       ]);
       setTickets(tRes.tickets || []);
+      setGroups(gRes.groups || []);
       setSla(tRes.sla || null);
       setLlmops(mRes.llmops || null);
       onBadgeUpdate?.(tRes.sla?.unread_badge_count || 0);
@@ -268,6 +278,10 @@ export function IncidentTicketPanel({
   useEffect(() => {
     setDetail(current => current?.ticket_id === selectedId ? current : null);
     setActionNote("");
+    setDistillCandidate(null);
+    setDistillMsg("");
+    setIntakeRes(null);
+    setIntakeErr("");
     if (!selectedId) {
       return;
     }
@@ -343,6 +357,8 @@ export function IncidentTicketPanel({
       });
       setDetail(res.detail);
       setActionNote("");
+      setDistillCandidate(res.memory_candidate || null);
+      setDistillMsg("");
       setNotice(`工单 ${selectedId} 已流转至【${res.ticket.status_label}】。`);
       await refreshAfterTransition(res.detail);
     } catch (e) {
@@ -400,6 +416,74 @@ export function IncidentTicketPanel({
     a.download = `${detail.ticket_id}_cmms_workorder.json`;
     a.click();
     URL.revokeObjectURL(url);
+  }
+
+  async function handleDistillMemory() {
+    if (!detail?.ticket_id) return;
+    setBusy("distill");
+    setDistillMsg("");
+    setErr("");
+    try {
+      const res = await apiRequest(`/api/tickets/${encodeURIComponent(detail.ticket_id)}/distill-memory`, {
+        method: "POST",
+      });
+      if (res.candidate) {
+        setDistillCandidate(res.candidate);
+      } else {
+        setDistillMsg("当前工单暂无可沉淀的新结案/否决备注，或已写入长期记忆。");
+      }
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function confirmDistilledMemory() {
+    if (!distillCandidate) return;
+    setBusy("save-distill");
+    setErr("");
+    try {
+      const {reason: _r, source_ticket_id: _sid, source: _src, ...payload} = distillCandidate;
+      await apiRequest("/api/memory", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify(payload),
+      });
+      setDistillCandidate(null);
+      setDistillMsg("已将本次工单处置经验写入长期记忆（排障案例）。");
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function handleImageUpload(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setIntakeBusy(true);
+    setIntakeErr("");
+    setIntakeRes(null);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      if (intakeHint.trim()) fd.append("hint", intakeHint.trim());
+      fd.append("mode", "auto");
+      const resp = await fetch("/api/intake/image", {
+        method: "POST",
+        headers: authHeaders(),
+        body: fd,
+      });
+      const data = await resp.json().catch(() => null);
+      if (!resp.ok) throw new Error(data?.error || `上传失败 (${resp.status})`);
+      setIntakeRes(data);
+    } catch (e) {
+      setIntakeErr(e.message);
+    } finally {
+      setIntakeBusy(false);
+      event.target.value = "";
+    }
   }
 
   return <div className="view-stack">
@@ -486,29 +570,71 @@ export function IncidentTicketPanel({
       {err && <p role="alert" style={{margin: "10px 0 0", fontSize: 12.5, color: "#c92a2a"}}>{err}</p>}
     </Card>
 
-    {/* Status Filter Pills */}
-    <div className="apple-sld-filters">
-      {FILTER_OPTIONS.map(opt => (
-        <button
-          key={opt.id}
-          type="button"
-          className={"apple-filter-pill" + (statusFilter === opt.id ? " is-active" : "")}
-          disabled={!!busy}
-          onClick={() => setStatusFilter(opt.id)}
-        >
-          <span>{opt.label}</span>
-        </button>
-      ))}
+    {/* Status Filter Pills + Incident Group Toggle */}
+    <div style={{display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap"}}>
+      <div className="apple-sld-filters">
+        {FILTER_OPTIONS.map(opt => (
+          <button
+            key={opt.id}
+            type="button"
+            className={"apple-filter-pill" + (statusFilter === opt.id ? " is-active" : "")}
+            disabled={!!busy}
+            onClick={() => setStatusFilter(opt.id)}
+          >
+            <span>{opt.label}</span>
+          </button>
+        ))}
+      </div>
+      <div className="apple-sld-filters" aria-label="工单视图切换">
+        <button type="button" className={"apple-filter-pill" + (viewMode === "tickets" ? " is-active" : "")}
+          onClick={() => setViewMode("tickets")}>全部工单 ({tickets.length})</button>
+        <button type="button" className={"apple-filter-pill" + (viewMode === "groups" ? " is-active" : "")}
+          onClick={() => setViewMode("groups")}>事件聚合组 ({groups.length})</button>
+      </div>
     </div>
 
     {/* Split Master-Detail Ticket Workbench */}
     <div className="health-grid">
       <Card padding={0} className="findings-pane">
         <div className="pane-head">
-          <h3>事件工单列表 ({tickets.length})</h3>
+          <h3>
+            {viewMode === "groups" ? `事件聚合组 (${groups.length})` : `事件工单列表 (${tickets.length})`}
+          </h3>
+          {sla?.composite_incident_groups_active > 0 && (
+            <Badge variant="info" label={`复合事件 ${sla.composite_incident_groups_active} 组 · 归并 ${sla.correlated_tickets_active} 单`} />
+          )}
         </div>
         {loading ? (
           <div style={{padding: 24, textAlign: "center"}}><Spinner size="md" /></div>
+        ) : viewMode === "groups" ? (
+          groups.length === 0 ? (
+            <div className="empty-pane" style={{padding: 24}}>当前筛选条件下暂无事件聚合组。</div>
+          ) : (
+            <ul className="finding-list">
+              {groups.map(g => (
+                <li key={g.incident_group_id}>
+                  <div style={{padding: "10px 14px", borderBottom: "1px solid var(--border)"}}>
+                    <div className="finding-item-top" style={{marginBottom: 4}}>
+                      <Badge variant={SEVERITY_META[g.severity]?.badge || "neutral"} label={SEVERITY_META[g.severity]?.label || g.severity} />
+                      <Badge variant={g.is_composite ? "info" : "neutral"} label={g.is_composite ? `复合根因 · ${g.ticket_count} 单` : "独立事件"} />
+                      <code className="mono">{g.incident_group_id}</code>
+                    </div>
+                    <strong className="finding-title">{g.root_title}</strong>
+                    <div className="finding-cab" style={{marginTop: 4}}>{g.correlation_summary}</div>
+                    <div style={{display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6}}>
+                      {g.tickets.map(t => (
+                        <button key={t.ticket_id} type="button"
+                          className={"apple-filter-pill" + (selectedId === t.ticket_id ? " is-active" : "")}
+                          onClick={() => setSelectedId(t.ticket_id)}>
+                          <span>{t.correlation_role === "root" ? "主因 · " : ""}{t.source_finding_id} ({t.cabinet || "-"})</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )
         ) : tickets.length === 0 ? (
           <div className="empty-pane" style={{padding: 24}}>
             当前筛选条件下暂无工单。可点击上方「立即自主巡检预诊断」，筛查高、中优先级发现并建单。
@@ -526,6 +652,8 @@ export function IncidentTicketPanel({
                   <div className="finding-item-top">
                     <Badge variant={SEVERITY_META[t.severity]?.badge || "neutral"} label={SEVERITY_META[t.severity]?.label || t.severity} />
                     <Badge variant={STATUS_BADGE[t.status] || "neutral"} label={t.status_label} />
+                    {t.correlation_role === "root" && <Badge variant="info" label="主事件" />}
+                    {t.correlation_role === "correlated" && <Badge variant="teal" label="关联归并" />}
                     <code className="mono">{t.ticket_id}</code>
                   </div>
                   <strong className="finding-title">{t.title}</strong>
@@ -546,11 +674,17 @@ export function IncidentTicketPanel({
               <div className="detail-badges">
                 <Badge variant={SEVERITY_META[detail.severity]?.badge || "neutral"} label={SEVERITY_META[detail.severity]?.label} />
                 <Badge variant={STATUS_BADGE[detail.status] || "neutral"} label={detail.status_label} />
+                {detail.correlation_role === "root" && <Badge variant="info" label="复合主事件" />}
+                {detail.correlation_role === "correlated" && <Badge variant="teal" label="已归并关联事件" />}
                 <code className="mono">{detail.ticket_id}</code>
                 <code className="mono">{detail.source_finding_id}</code>
               </div>
               <div className="detail-actions">
                 <Button size="sm" variant="secondary" label="导出 CMMS 派工单" onClick={downloadCmmsWorkorder} />
+                {["closed", "disputed", "supplemented"].includes(detail.status) && (
+                  <Button size="sm" variant="secondary" label={busy === "distill" ? "提取中…" : "沉淀为排障记忆"}
+                    disabled={Boolean(busy)} onClick={handleDistillMemory} />
+                )}
                 {detail.source_finding_id.startsWith("HLTH-") && !["closed", "superseded"].includes(detail.status) && (
                   <Button size="sm" variant="secondary" label="刷新初诊" disabled={Boolean(busy)} onClick={() => refreshPreDiagnosis(detail)} />
                 )}
@@ -567,6 +701,28 @@ export function IncidentTicketPanel({
 
             <h2 className="detail-title">{detail.title}</h2>
             <p className="detail-summary">{detail.summary}</p>
+            {detail.incident_group_id && detail.correlation_role !== "standalone" && detail.correlation_reason && (
+              <div className="detail-block" style={{borderLeft: "3px solid #2b6cb0", paddingLeft: 10}}>
+                <strong>事件聚合组 {detail.incident_group_id}：</strong>{detail.correlation_reason}
+              </div>
+            )}
+            {distillCandidate && (
+              <div className="detail-block" style={{border: "1px solid var(--border-strong)", padding: 12, borderRadius: 10}}>
+                <div style={{display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap"}}>
+                  <strong>可沉淀为排障案例记忆（需人工确认）</strong>
+                  <Badge variant="info" label={distillCandidate.scope_cabinet ? `仅 ${distillCandidate.scope_cabinet} 柜` : "全站"} />
+                </div>
+                <p style={{margin: "6px 0", fontSize: 13}}><strong>{distillCandidate.title}</strong></p>
+                <p style={{margin: "4px 0 8px", fontSize: 12.5, opacity: 0.85}}>{distillCandidate.content}</p>
+                <div style={{display: "flex", gap: 8}}>
+                  <Button size="sm" variant="primary" label={busy === "save-distill" ? "写入中…" : "确认写入记忆库"}
+                    disabled={Boolean(busy)} onClick={confirmDistilledMemory} />
+                  <Button size="sm" variant="secondary" label="暂不写入" disabled={Boolean(busy)}
+                    onClick={() => setDistillCandidate(null)} />
+                </div>
+              </div>
+            )}
+            {distillMsg && <p style={{fontSize: 12.5, color: "#0a7c42"}}>{distillMsg}</p>}
             {onDraftAction && <IncidentActionDraft key={detail.ticket_id} ticket={detail} onDraftAction={onDraftAction} />}
             {detail.evidence_cells?.length > 0 && (
               <div className="detail-block">
@@ -574,6 +730,48 @@ export function IncidentTicketPanel({
                 <TicketEvidenceCells cells={detail.evidence_cells} />
               </div>
             )}
+            <div className="detail-block">
+              <div style={{display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap"}}>
+                <h4>现场照片取证（待核候选）</h4>
+                <Badge variant="warning" label="待人工核对 · 不自动改写归档" />
+              </div>
+              <div style={{display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginTop: 6}}>
+                <input
+                  type="text"
+                  value={intakeHint}
+                  onChange={e => setIntakeHint(e.target.value)}
+                  placeholder="可选说明：如 303柜保护屏/主变铭牌（仅作待核提示）"
+                  style={{flex: "1 1 220px", padding: "6px 8px", borderRadius: 6, border: "1px solid var(--border-strong)"}}
+                />
+                <label style={{cursor: intakeBusy ? "default" : "pointer", fontSize: 12.5}}>
+                  <span className="apple-filter-pill" style={{display: "inline-flex"}}>
+                    {intakeBusy ? "识别抽取中…" : "上传现场照片 (PNG/JPG/WebP)"}
+                  </span>
+                  <input type="file" accept="image/png,image/jpeg,image/webp" disabled={intakeBusy}
+                    onChange={handleImageUpload} style={{display: "none"}} />
+                </label>
+              </div>
+              {intakeErr && <p role="alert" style={{margin: "6px 0 0", fontSize: 12.5, color: "#c92a2a"}}>{intakeErr}</p>}
+              {intakeRes && (
+                <div style={{marginTop: 8, fontSize: 12.5}}>
+                  <span className="muted">识别状态：{intakeRes.status} · 需人工复核确认</span>
+                  {intakeRes.candidates?.length > 0 ? (
+                    <ul style={{margin: "4px 0 0", paddingLeft: 18}}>
+                      {intakeRes.candidates.map((c, idx) => (
+                        <li key={idx}>
+                          <strong>{c.field}</strong> = <code>{String(c.value)}{c.unit ? ` ${c.unit}` : ""}</code>
+                          {c.evidence && <span className="muted">（出处：{c.evidence}）</span>}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="muted" style={{margin: "4px 0 0"}}>
+                      {intakeRes.status === "unavailable" ? "当前未启用多模态视觉模型，仅保留接口待接入。" : "未识别到可确认的明确字段候选。"}
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
             {detail.superseded_reason && (
               <div className="detail-block" style={{borderLeft: "3px solid #f59f00", paddingLeft: 10}}>
                 <strong>数据更正替代说明：</strong>{detail.superseded_reason}

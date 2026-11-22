@@ -225,6 +225,7 @@ function ProtocolCard({onChange}) {
 
 function MetricsCard({metrics}) {
   const data = metrics.data;
+  const exportNegative = usePost();
   const tiles = data ? [
     ["平均 TTFT", data.ttft_ms_avg, " ms"],
     ["P95 TTFT", data.ttft_ms_p95, " ms"],
@@ -232,6 +233,23 @@ function MetricsCard({metrics}) {
     ["沙盒成功率", data.sandbox_success_rate_pct, "%"],
     ["自主核验通过率", data.verification_rate_pct, "%"],
   ] : [];
+  const toolMetrics = Object.entries(data?.llmops?.tool_metrics ?? {});
+  const fb = data?.feedback;
+
+  async function handleExportNegative() {
+    const res = await exportNegative.submit("/api/feedback/export-negative", {mark_exported: true, limit: 100});
+    if (res?.cases) {
+      const blob = new Blob([JSON.stringify(res, null, 2)], {type: "application/json"});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "agentops_negative_eval_cases.json";
+      a.click();
+      URL.revokeObjectURL(url);
+      metrics.refresh();
+    }
+  }
+
   return <section className="advanced-card">
     <header className="advanced-title"><h3><Activity size={17} /> Agent 可观测评测</h3>
       <Button size="sm" icon={<RefreshCw size={14} />} label="刷新指标" onClick={metrics.refresh} disabled={metrics.pending} /></header>
@@ -249,6 +267,45 @@ function MetricsCard({metrics}) {
       <dl className="advanced-counts">{Object.entries(COUNTS).map(([key, name]) => <div key={key}>
         <dt>{name}</dt><dd>{formatNum(data.counts?.[key])}</dd>
       </div>)}</dl>
+      {fb && (
+        <div style={{marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--border)"}}>
+          <div style={{display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap"}}>
+            <strong>值班员反馈回流（AgentOps）</strong>
+            <Button size="sm" variant="secondary" label={exportNegative.busy ? "导出中…" : "导出负样本回归集"}
+              disabled={exportNegative.busy || !(fb.negative_count > 0)} onClick={handleExportNegative} />
+          </div>
+          <dl className="advanced-counts" style={{marginTop: 6}}>
+            <div><dt>累计反馈</dt><dd>{formatNum(fb.total)}</dd></div>
+            <div><dt>正向采纳率</dt><dd>{fb.total ? `${fb.helpful_rate_pct}%` : "—"}</dd></div>
+            <div><dt>负样本</dt><dd>{formatNum(fb.negative_count)}</dd></div>
+            <div><dt>待导出负样本</dt><dd>{formatNum(fb.unexported_negative_count)}</dd></div>
+          </dl>
+          {exportNegative.result && <p className="muted">已导出 {exportNegative.result.count} 条负样本回归用例。</p>}
+          <Notice error={exportNegative.error} />
+        </div>
+      )}
+      {toolMetrics.length > 0 && (
+        <details style={{marginTop: 8}}>
+          <summary>工具执行时延与错误率明细（{toolMetrics.length} 个工具）</summary>
+          <div className="agent-stream-table" style={{marginTop: 6}}>
+            <table>
+              <thead><tr><th>工具</th><th>调用</th><th>错误</th><th>错误率</th><th>均值 ms</th><th>峰值 ms</th></tr></thead>
+              <tbody>
+                {toolMetrics.map(([name, m]) => (
+                  <tr key={name}>
+                    <td><code>{name}</code></td>
+                    <td>{m.calls}</td>
+                    <td>{m.errors}</td>
+                    <td>{m.error_rate_pct}%</td>
+                    <td>{m.avg_ms}</td>
+                    <td>{m.max_ms}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </details>
+      )}
     </>}
   </section>;
 }

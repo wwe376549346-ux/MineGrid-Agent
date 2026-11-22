@@ -10,6 +10,7 @@ import unicodedata
 from laowadi.security import inspect_prompt_security
 from laowadi.verifier import (
     _lookup_cell_db_record,
+    _normalize_cell,
     _standards,
     _tool_cells,
     _verify,
@@ -36,8 +37,56 @@ _AUDIT_CODES = {
 }
 MAX_CLAIMS = 16
 
+SUBMIT_DIAGNOSIS = "submit_diagnosis"
+
+
+def submission_schema(properties, required):
+    return {"type": "function", "function": {
+        "name": SUBMIT_DIAGNOSIS,
+        "description": "提交最终结构化诊断并进入本地核验。",
+        "parameters": {"type": "object", "properties": properties,
+                       "required": required, "additionalProperties": False},
+    }}
+
+
+SUBMIT_CLAIMS_SCHEMA = submission_schema({
+    "claims": {"type": "array", "items": {"type": "object", "properties": {
+        "stage": {"type": "string", "enum": list(STAGE_LABELS)},
+        "text": {"type": "string"},
+        "citations": {"type": "array", "items": {"type": "string"}},
+        "difference": {"type": "object", "properties": {"value": {"type": "number"}, "unit": {"type": "string"}},
+                       "required": ["value", "unit"], "additionalProperties": False},
+    }, "required": ["stage", "text", "citations"], "additionalProperties": False}},
+    "patches": {"type": "array", "items": {"type": "object"}},
+}, [])
+
+
+def submission_content(message):
+    """Read one final submission or accept the legacy JSON text contract."""
+    calls = message.get("tool_calls") or []
+    submissions = [(call.get("function") or {}) for call in calls
+                   if (call.get("function") or {}).get("name") == SUBMIT_DIAGNOSIS]
+    if submissions:
+        if len(calls) != 1:
+            raise ValueError("submit_diagnosis 必须在独立响应中调用一次。")
+        args = submissions[0].get("arguments")
+        return args if isinstance(args, str) else json.dumps(args, ensure_ascii=False)
+    if calls:
+        raise ValueError("请提交 submit_diagnosis 或完整 JSON。")
+    return message.get("content") or ""
+
+
+def parse_json_submission(content):
+    if isinstance(content, str):
+        content = content.strip()
+        fenced = re.fullmatch(r"```(?:json)?\s*(.*?)\s*```", content, re.S | re.I)
+        if fenced:
+            content = fenced.group(1)
+    return json.loads(content)
+
+
 AUTHOR_INSTRUCTIONS = """
-3. 停止取证后，亲自撰写逐句、带引用的工程诊断。只返回 JSON：
+3. 停止取证后，撰写逐句、带引用的工程诊断。若可用，单独调用 submit_diagnosis；否则返回完整 JSON：
 {"claims":[{"stage":"observation","text":"最直接的现象来自这个整点：[[1]]。","citations":["1112.xls / New Sheet1!H16"]}]}。
    - 硬性语法红线（违反任一条都会被核验器退回重写）：
      (a) 严禁在 text 正文中出现任何阿拉伯数字（0-9，包括柜号、电压等级、整点时刻、序号）或带单位中文数字！所有涉及的柜号、时刻、读数、方程或条文必须通过 [[1]]、[[2]] 等证据槽位自动展开带出，正文里用“该进线柜”“主变侧”“关联发电柜”“上述整点”等指代。
@@ -47,7 +96,7 @@ AUTHOR_INSTRUCTIONS = """
      (e) citations 数组中的每一项必须完全精确匹配本轮工具回执里实际出现过的原表坐标（如 "1112.xls / New Sheet1!H16"）、result_atoms 中的工具结果编号（注意格式为两段式如 "T4.1"、"T4.2"，绝不是 "T4.equations.1"）或本轮 search_coal_standards 返回的规程 ID；严禁自造未检索的条文号或单元格。
    - 每项 text 写一句独立意思，可自由组织措辞。[[1]]、[[2]] 等对应本句 citations 中的位置（1 到 6），发布时插入带完整对象、时点、量名、量值和单位的证据原子。
    - 若需要同柜同指标的整点有符号变化，cross_check 可附 "difference":{"value":-12.34,"unit":"kW"}，citations 依次是基准和对照两个原表坐标，text 用 [[delta]] 插入复算结果。其他计算先调用工具。
-   - 深度诊断按 observation → hypothesis（至少两种不同的待检解释）→ cross_check → standard → gap → followup 组织（强烈建议总共写七项：一条 observation、两条 hypothesis、一条 cross_check、一条 standard、一条 gap、一条 followup，精炼准确）。阐明每种假设的区分条件和证据实际支持到哪里。筛查、截图连线、假定潮流各自保留边界，不推认根因、开关状态、潮流实测或保护动作。
+   - 深度诊断按 observation → hypothesis（至少两种不同的待检解释）→ cross_check → standard → gap → followup 组织（强烈建议总共写七项：一条 observation、两条 hypothesis、一条 cross_check、一条 standard、一条 gap、一条 followup，精炼准确）。阐明每种假设的区分条件和证据实际支持到哪里。归档支持的筛查和带前提的仿真可以给出条件性判断，根因、开关状态或保护动作缺证时明确保留。
    - standard 要引用本轮检得的条文，写明适用条件和现场缺口；若本轮未调用规程工具或无可用条款，citations 必须留空 [] 并写明“本轮条文适用条件待核。”。gap 和 followup 的 citations 留空 []；只提出可收集、可比对的证据和验证目的，禁止设备操作指令。
    - 单纯数据问题按需作答，不扩写根因。收到核验反馈后重写完整 claims，在预算允许且缺少可查询证据时先补查。每次最多十六项，每项最多三百字、六条引用。
 """
@@ -104,7 +153,9 @@ def prepare_claims(archive, draft, trace, catalog, *, full_diagnosis, prior_repo
                 or any(not isinstance(ref, str) or not 1 <= len(ref) <= 200 for ref in claim["citations"])):
             errors.append(_issue(index, "claim_schema", "检查段落类型、文字长度和引用数组。"))
             continue
-        stage, body, citations = claim["stage"], claim["text"].strip(), claim["citations"]
+        stage, body = claim["stage"], claim["text"].strip()
+        citations = [_normalize_cell(ref) if ".xls" in ref and "!" in ref else ref.strip()
+                     for ref in claim["citations"]]
         inner_punct = re.findall(r"[。！？!?；;]", body.rstrip("。！？!?"))
         if inner_punct:
             punct_list = "、".join(dict.fromkeys(inner_punct))

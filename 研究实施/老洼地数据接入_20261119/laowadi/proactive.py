@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 import hashlib
 import json
 from pathlib import Path
+import re
 import sqlite3
 import threading
 import time
@@ -92,6 +93,9 @@ CREATE TABLE IF NOT EXISTS incident_ticket (
     resolution_note TEXT NOT NULL DEFAULT '',
     superseded_reason TEXT NOT NULL DEFAULT '',
     archive_version TEXT NOT NULL DEFAULT '',
+    incident_group_id TEXT NOT NULL DEFAULT '',
+    correlation_role TEXT NOT NULL DEFAULT 'standalone',
+    correlation_reason TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     acknowledged_at TEXT,
@@ -235,6 +239,239 @@ def _default_channel_sender(
         return {"ok": True, "http_status": code, "body": body[:160]}
 
 
+_FEEDER_ISOLATED_CATEGORIES = frozenset({
+    "persistent_negative_power",
+    "low_power_factor",
+    "capacitor_cos_anomaly",
+    "systematic_scale_offset",
+    "spare_floating_voltage",
+})
+
+_DT_SPAN_RE = re.compile(r"(20\d{2}-\d{2}-\d{2}\s+\d{2}:\d{2}(?::\d{2})?)")
+
+
+def _build_topology_neighborhood() -> dict[str, set[str]]:
+    """Build cabinet/bus -> topology neighborhood tokens dynamically from active MineProfile."""
+    tokens: dict[str, set[str]] = {}
+
+    def _add(key: str, *vals: str) -> None:
+        k = str(key or "").strip()
+        if not k:
+            return
+        bucket = tokens.setdefault(k, set())
+        for v in vals:
+            if v:
+                bucket.add(v)
+
+    try:
+        from laowadi.mine_schema import load_mine_profile
+
+        prof = load_mine_profile()
+        bus_chain_map: dict[str, str] = {}
+        for tr in prof.transformers:
+            chain = f"CHAIN_{tr.id}"
+            _add(tr.hv_cabinet, chain, tr.hv_bus, tr.lv_bus, f"CAB_{tr.hv_cabinet}", f"CAB_{tr.lv_cabinet}")
+            _add(tr.lv_cabinet, chain, tr.hv_bus, tr.lv_bus, f"CAB_{tr.hv_cabinet}", f"CAB_{tr.lv_cabinet}")
+            bus_chain_map[tr.hv_bus] = chain
+            bus_chain_map[tr.lv_bus] = chain
+            _add(tr.hv_bus, chain, tr.hv_bus, tr.lv_bus)
+            _add(tr.lv_bus, chain, tr.hv_bus, tr.lv_bus)
+        for bus in prof.buses:
+            chain = bus_chain_map.get(bus.id, "")
+            ref = bus.reference_cabinet
+            _add(bus.id, bus.id, chain, f"CAB_{ref}" if ref else "")
+            if bus.segment:
+                _add(bus.segment, bus.id, chain, f"CAB_{ref}" if ref else "")
+            if ref:
+                _add(ref, bus.id, chain, f"CAB_{ref}")
+        for fdr in prof.feeders:
+            if fdr.role in {"incomer", "transformer_hv", "transformer_lv"}:
+                chain = bus_chain_map.get(fdr.bus_id, "")
+                _add(fdr.cabinet, fdr.bus_id, chain, f"CAB_{fdr.cabinet}")
+            else:
+                _add(fdr.cabinet, f"CAB_{fdr.cabinet}")
+    except Exception:
+        # Fallback topology tokens for Laowadi 35/10 kV system if profile file unavailable
+        for c in ("303", "311", "1005", "10kV-I段"):
+            _add(c, "CHAIN_T1", "S35_35KV_I", "S35_10KV_I")
+        for c in ("306", "312", "1006", "10kV-II段"):
+            _add(c, "CHAIN_T2", "S35_35KV_II", "S35_10KV_II")
+    return tokens
+
+
+def _extract_ticket_topology_tokens(ticket: dict[str, Any], topo_map: dict[str, set[str]]) -> set[str]:
+    pre = ticket.get("pre_diagnosis") or {}
+    cat = str(pre.get("kind") or "").strip()
+    src = str(ticket.get("source_finding_id") or "").strip()
+    cab_raw = str(ticket.get("cabinet") or "").strip()
+    text_blob = f"{cab_raw} {ticket.get('title', '')}"
+    cabs = re.findall(r"(?<!\d)(30[036]|31[1-3]|10(?:0[5-9]|1[0-9]|2[0-9]|3[02]))(?!\d)", cab_raw)
+
+    is_feeder_isolated = (
+        cat in _FEEDER_ISOLATED_CATEGORIES
+        or src.startswith(("HLTH-MTR-", "HLTH-PQ-PF-"))
+    )
+    out: set[str] = set()
+    if is_feeder_isolated:
+        for c in cabs:
+            out.add(f"CAB_{c}")
+        if not out and cab_raw:
+            out.add(f"RAW_{cab_raw}")
+        return out
+
+    for c in cabs:
+        out.add(f"CAB_{c}")
+        out.update(topo_map.get(c, set()))
+    if "10kV-I段" in text_blob or "10 kV I段" in text_blob:
+        out.update(topo_map.get("S35_10KV_I", {"S35_10KV_I", "CHAIN_T1"}))
+    if "10kV-II段" in text_blob or "10 kV II段" in text_blob:
+        out.update(topo_map.get("S35_10KV_II", {"S35_10KV_II", "CHAIN_T2"}))
+    if "35kV" in text_blob or "35 kV" in text_blob:
+        if "II段" in text_blob:
+            out.update(topo_map.get("S35_35KV_II", {"S35_35KV_II", "CHAIN_T2"}))
+        if "I段" in text_blob:
+            out.update(topo_map.get("S35_35KV_I", {"S35_35KV_I", "CHAIN_T1"}))
+    if not out and cab_raw:
+        out.add(f"RAW_{cab_raw}")
+    return out
+
+
+def _parse_local_ts(ts: str) -> datetime | None:
+    s = str(ts or "").strip()
+    if not s:
+        return None
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"):
+        try:
+            return datetime.strptime(s[:19], fmt)
+        except ValueError:
+            pass
+    return None
+
+
+def _extract_ticket_time_window(ticket: dict[str, Any]) -> tuple[str, datetime | None, datetime | None]:
+    at_raw = str(ticket.get("at_time") or "").strip()
+    day = at_raw[:10] if re.match(r"^\d{4}-\d{2}-\d{2}", at_raw) else ""
+    pts: list[datetime] = []
+    dt0 = _parse_local_ts(at_raw)
+    if dt0 is not None:
+        pts.append(dt0)
+    for m in _DT_SPAN_RE.findall(f"{ticket.get('title', '')} {ticket.get('summary', '')}"):
+        dt = _parse_local_ts(m)
+        if dt is not None and (not day or m.startswith(day)):
+            pts.append(dt)
+    if not pts:
+        return day, None, None
+    return day or pts[0].strftime("%Y-%m-%d"), min(pts), max(pts)
+
+
+def _root_priority(ticket: dict[str, Any]) -> tuple[int, int, str, str, str]:
+    pre = ticket.get("pre_diagnosis") or {}
+    cat = str(pre.get("kind") or "")
+    src = str(ticket.get("source_finding_id") or "")
+    if "MODE-SINGLE" in src or "BAL-REV" in src or cat in {"zero_incomer_review", "reverse_power_review", "single_incomer_dual_transformer", "main_chain_reverse_power"}:
+        cat_prio = 3
+    elif "VOLT" in src or cat in {"voltage_over_limit", "voltage_high_35kv"}:
+        cat_prio = 2
+    else:
+        cat_prio = 1
+    sev_prio = {"high": 3, "medium": 2, "info": 1}.get(str(ticket.get("severity") or "medium"), 1)
+    at_s = str(ticket.get("at_time") or "9999-99-99 99:99:99")
+    return (-cat_prio, -sev_prio, at_s, src, str(ticket.get("ticket_id") or ""))
+
+
+def correlate_ticket_records(
+    tickets: list[dict[str, Any]],
+    *,
+    max_gap_hours: float = 6.0,
+) -> dict[str, dict[str, str]]:
+    """Cluster active incident tickets sharing same day, topological neighborhood, and time proximity."""
+    if not tickets:
+        return {}
+    topo_map = _build_topology_neighborhood()
+    parsed: list[dict[str, Any]] = []
+    for t in tickets:
+        day, start_dt, end_dt = _extract_ticket_time_window(t)
+        tokens = _extract_ticket_topology_tokens(t, topo_map)
+        parsed.append({
+            "ticket": t,
+            "day": day,
+            "start": start_dt,
+            "end": end_dt,
+            "tokens": tokens,
+        })
+
+    n = len(parsed)
+    parent = list(range(n))
+
+    def _find(x: int) -> int:
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    def _union(a: int, b: int) -> None:
+        ra, rb = _find(a), _find(b)
+        if ra != rb:
+            parent[rb] = ra
+
+    max_gap_s = max(0.0, float(max_gap_hours)) * 3600.0
+    for i in range(n):
+        pi = parsed[i]
+        if not pi["day"] or pi["start"] is None or pi["end"] is None:
+            continue
+        for j in range(i + 1, n):
+            pj = parsed[j]
+            if pi["day"] != pj["day"] or pj["start"] is None or pj["end"] is None:
+                continue
+            shared = pi["tokens"] & pj["tokens"]
+            if not shared:
+                continue
+            if pi["end"] < pj["start"]:
+                gap_s = (pj["start"] - pi["end"]).total_seconds()
+            elif pj["end"] < pi["start"]:
+                gap_s = (pi["start"] - pj["end"]).total_seconds()
+            else:
+                gap_s = 0.0
+            if gap_s <= max_gap_s:
+                _union(i, j)
+
+    clusters: dict[int, list[dict[str, Any]]] = {}
+    for idx, item in enumerate(parsed):
+        clusters.setdefault(_find(idx), []).append(item)
+
+    assignments: dict[str, dict[str, str]] = {}
+    for members in clusters.values():
+        ordered = sorted(members, key=lambda x: _root_priority(x["ticket"]))
+        root_item = ordered[0]
+        root_t = root_item["ticket"]
+        day_digits = (root_item["day"] or "0000-00-00").replace("-", "")
+        sig_seed = "|".join(sorted(str(m["ticket"].get("source_finding_id") or m["ticket"]["ticket_id"]) for m in ordered))
+        gid = f"INC-{day_digits}-{hashlib.sha1(sig_seed.encode('utf-8')).hexdigest()[:6].upper()}"
+        if len(ordered) == 1:
+            tid = root_t["ticket_id"]
+            assignments[tid] = {
+                "incident_group_id": gid,
+                "correlation_role": "standalone",
+                "correlation_reason": "单点独立异常事件，当前无同时段同拓扑关联工单。",
+            }
+            continue
+
+        all_cabs = list(dict.fromkeys(str(m["ticket"].get("cabinet") or "") for m in ordered if m["ticket"].get("cabinet")))
+        shared_summary = (
+            f"{root_item['day']} 同拓扑链及相邻时段（≤{int(max_gap_hours)}h）共归并 {len(ordered)} 张告警工单，"
+            f"主因锚定 {root_t.get('source_finding_id') or root_t['ticket_id']}（涉及 {', '.join(all_cabs[:5])}）。"
+        )
+        for idx_m, m in enumerate(ordered):
+            t = m["ticket"]
+            role = "root" if idx_m == 0 else "correlated"
+            assignments[t["ticket_id"]] = {
+                "incident_group_id": gid,
+                "correlation_role": role,
+                "correlation_reason": shared_summary,
+            }
+    return assignments
+
+
 class IncidentTicketStore:
     """Shift tickets and an outbox on the configured SQLite or PostgreSQL runtime."""
 
@@ -261,6 +498,13 @@ class IncidentTicketStore:
             if "revision" not in ticket_columns:
                 conn.execute("ALTER TABLE incident_ticket ADD COLUMN revision INTEGER NOT NULL DEFAULT 1")
                 conn.execute("UPDATE incident_ticket SET closed_at = NULL WHERE status NOT IN ('closed', 'superseded')")
+            if "incident_group_id" not in ticket_columns:
+                conn.execute("ALTER TABLE incident_ticket ADD COLUMN incident_group_id TEXT NOT NULL DEFAULT ''")
+            if "correlation_role" not in ticket_columns:
+                conn.execute("ALTER TABLE incident_ticket ADD COLUMN correlation_role TEXT NOT NULL DEFAULT 'standalone'")
+            if "correlation_reason" not in ticket_columns:
+                conn.execute("ALTER TABLE incident_ticket ADD COLUMN correlation_reason TEXT NOT NULL DEFAULT ''")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_ticket_group ON incident_ticket(incident_group_id)")
             outbox_columns = {row["name"] for row in conn.execute("PRAGMA table_info(alert_outbox)")}
             if "withdrawn_at" not in outbox_columns:
                 conn.execute("ALTER TABLE alert_outbox ADD COLUMN withdrawn_at TEXT")
@@ -284,6 +528,7 @@ class IncidentTicketStore:
 
     @staticmethod
     def _row_to_ticket(row: sqlite3.Row) -> dict[str, Any]:
+        keys = set(row.keys())
         return {
             "ticket_id": row["ticket_id"],
             "dedup_key": row["dedup_key"],
@@ -304,6 +549,9 @@ class IncidentTicketStore:
             "resolution_note": row["resolution_note"],
             "superseded_reason": row["superseded_reason"],
             "archive_version": row["archive_version"],
+            "incident_group_id": row["incident_group_id"] if "incident_group_id" in keys else "",
+            "correlation_role": row["correlation_role"] if "correlation_role" in keys else "standalone",
+            "correlation_reason": row["correlation_reason"] if "correlation_reason" in keys else "",
             "created_at": row["created_at"],
             "updated_at": row["updated_at"],
             "acknowledged_at": row["acknowledged_at"],
@@ -329,6 +577,7 @@ class IncidentTicketStore:
         dedup_key: str | None = None,
         channels: list[dict[str, str]] | None = None,
         sla_minutes: int = 30,
+        suppress_correlated_outbox: bool = False,
         actor: str = "proactive-watcher",
     ) -> tuple[dict[str, Any], bool]:
         """Atomically create a ticket (idempotent on dedup_key) AND enqueue outbox alerts in one transaction."""
@@ -338,6 +587,8 @@ class IncidentTicketStore:
         dkey = dedup_key or f"{source_finding_id}::{cabinet}::{at_time}"
         ev_cells = list(dict.fromkeys(str(c) for c in (evidence_cells or []) if c))
         eff_channels = channels if channels is not None else [{"channel": "in_app", "target_url": ""}]
+        if suppress_correlated_outbox:
+            eff_channels = []
 
         with self._write() as conn:
             existing = conn.execute("SELECT * FROM incident_ticket WHERE dedup_key = ?", (dkey,)).fetchone()
@@ -697,6 +948,103 @@ class IncidentTicketStore:
             ).fetchall()
         return [self._row_to_ticket(r) for r in rows]
 
+    def correlate_active_tickets(self, *, max_gap_hours: float = 6.0) -> dict[str, Any]:
+        """Cluster active tickets sharing topology neighborhood & time proximity without bumping revision."""
+        with self._write() as conn:
+            rows = conn.execute(
+                "SELECT * FROM incident_ticket WHERE status NOT IN ('closed', 'superseded') ORDER BY created_at ASC"
+            ).fetchall()
+            tickets = [self._row_to_ticket(r) for r in rows]
+            assignments = correlate_ticket_records(tickets, max_gap_hours=max_gap_hours)
+            updated = 0
+            groups: dict[str, list[dict[str, str]]] = {}
+            for t in tickets:
+                a = assignments.get(t["ticket_id"])
+                if not a:
+                    continue
+                groups.setdefault(a["incident_group_id"], []).append(a)
+                if (
+                    t.get("incident_group_id", "") != a["incident_group_id"]
+                    or t.get("correlation_role", "") != a["correlation_role"]
+                    or t.get("correlation_reason", "") != a["correlation_reason"]
+                ):
+                    conn.execute(
+                        """
+                        UPDATE incident_ticket
+                        SET incident_group_id = ?, correlation_role = ?, correlation_reason = ?
+                        WHERE ticket_id = ?
+                        """,
+                        (a["incident_group_id"], a["correlation_role"], a["correlation_reason"], t["ticket_id"]),
+                    )
+                    updated += 1
+        composite_groups = sum(1 for members in groups.values() if len(members) >= 2)
+        correlated_tickets = sum(
+            1 for members in groups.values() for m in members if m["correlation_role"] == "correlated"
+        )
+        return {
+            "groups_total": len(groups),
+            "composite_groups": composite_groups,
+            "correlated_tickets": correlated_tickets,
+            "updated_tickets": updated,
+        }
+
+    def list_incident_groups(
+        self,
+        *,
+        status: str | None = "active",
+        max_gap_hours: float = 6.0,
+    ) -> list[dict[str, Any]]:
+        """Return tickets grouped into root-cause incident clusters."""
+        tickets = self.list_tickets(status=status, limit=200)
+        if not tickets:
+            return []
+        fallback_assignments = correlate_ticket_records(tickets, max_gap_hours=max_gap_hours)
+        buckets: dict[str, list[dict[str, Any]]] = {}
+        for t in tickets:
+            fb = fallback_assignments.get(t["ticket_id"]) or {}
+            gid = str(t.get("incident_group_id") or fb.get("incident_group_id") or t["ticket_id"])
+            buckets.setdefault(gid, []).append(t)
+
+        sev_rank = {"high": 3, "medium": 2, "info": 1}
+        groups: list[dict[str, Any]] = []
+        for gid, members in buckets.items():
+            ordered = sorted(
+                members,
+                key=lambda x: (0 if x.get("correlation_role") == "root" else 1, _root_priority(x)),
+            )
+            root = ordered[0]
+            top_sev = max(ordered, key=lambda x: sev_rank.get(str(x.get("severity")), 1))["severity"]
+            latest_upd = max(str(m.get("updated_at") or "") for m in ordered)
+            status_counts: dict[str, int] = {}
+            for m in ordered:
+                st = str(m.get("status") or "open")
+                status_counts[st] = status_counts.get(st, 0) + 1
+            cabs = list(dict.fromkeys(str(m.get("cabinet") or "") for m in ordered if m.get("cabinet")))
+            corr_reason = str(root.get("correlation_reason") or "").strip()
+            if not corr_reason and len(ordered) == 1:
+                corr_reason = "单点独立异常事件，当前无同时段同拓扑关联工单。"
+            groups.append({
+                "incident_group_id": gid,
+                "root_ticket_id": root["ticket_id"],
+                "root_title": root["title"],
+                "root_source_finding_id": root["source_finding_id"],
+                "severity": top_sev,
+                "day": str(root.get("at_time") or "")[:10],
+                "ticket_count": len(ordered),
+                "correlated_count": max(0, len(ordered) - 1),
+                "is_composite": len(ordered) >= 2,
+                "cabinets": cabs,
+                "status_counts": status_counts,
+                "correlation_summary": corr_reason,
+                "latest_updated_at": latest_upd,
+                "tickets": ordered,
+            })
+
+        groups.sort(key=lambda g: g["latest_updated_at"], reverse=True)
+        groups.sort(key=lambda g: (0 if g["is_composite"] else 1))
+        groups.sort(key=lambda g: -sev_rank.get(str(g["severity"]), 1))
+        return groups
+
     def get_ticket_detail(self, ticket_id: str) -> dict[str, Any] | None:
         with self._write() as conn:
             row = conn.execute("SELECT * FROM incident_ticket WHERE ticket_id = ?", (ticket_id,)).fetchone()
@@ -746,14 +1094,23 @@ class IncidentTicketStore:
 
     def sla_metrics(self) -> dict[str, Any]:
         with closing(self._connect()) as conn:
-            t_rows = conn.execute("SELECT status, created_at, acknowledged_at FROM incident_ticket").fetchall()
+            t_rows = conn.execute(
+                "SELECT ticket_id, status, created_at, acknowledged_at, incident_group_id, correlation_role FROM incident_ticket"
+            ).fetchall()
             o_rows = conn.execute("SELECT status, COUNT(*) AS cnt FROM alert_outbox GROUP BY status").fetchall()
             w_row = conn.execute("SELECT * FROM watcher_state WHERE id = 1").fetchone()
 
         status_counts: dict[str, int] = {k: 0 for k in TICKET_STATUSES}
         ack_lats: list[float] = []
+        active_groups: dict[str, int] = {}
+        correlated_active = 0
         for r in t_rows:
             status_counts[r["status"]] = status_counts.get(r["status"], 0) + 1
+            if r["status"] not in ("closed", "superseded"):
+                gid = str(r["incident_group_id"] or "") or f"_solo_{r['ticket_id']}"
+                active_groups[gid] = active_groups.get(gid, 0) + 1
+                if r["correlation_role"] == "correlated":
+                    correlated_active += 1
             if r["acknowledged_at"]:
                 dt_c = _parse_iso(r["created_at"])
                 dt_a = _parse_iso(r["acknowledged_at"])
@@ -763,6 +1120,7 @@ class IncidentTicketStore:
         outbox_counts = {r["status"]: int(r["cnt"]) for r in o_rows}
         avg_ack_s = round(sum(ack_lats) / len(ack_lats), 2) if ack_lats else 0.0
         active_count = sum(v for k, v in status_counts.items() if k not in ("closed", "superseded"))
+        composite_groups_active = sum(1 for cnt in active_groups.values() if cnt >= 2)
         return {
             "tickets_total": len(t_rows),
             "tickets_active": active_count,
@@ -773,6 +1131,9 @@ class IncidentTicketStore:
             "tickets_handed_over": status_counts["handed_over"],
             "tickets_closed": status_counts["closed"],
             "tickets_superseded": status_counts["superseded"],
+            "incident_groups_active": len(active_groups),
+            "composite_incident_groups_active": composite_groups_active,
+            "correlated_tickets_active": correlated_active,
             "avg_ack_latency_s": avg_ack_s,
             "unread_badge_count": status_counts["open"] + status_counts["escalated"],
             "outbox_pending": outbox_counts.get("pending", 0),
@@ -1015,6 +1376,7 @@ class ProactiveWatcherDaemon:
                     else:
                         skipped += 1
 
+            corr_res = self.store.correlate_active_tickets()
             dispatch_res = self.store.dispatch_outbox()
             self.store.record_watcher_scan(archive_version=ver, created_count=len(created_tickets))
             elapsed_ms = round((time.monotonic() - t0) * 1000.0, 2)
@@ -1026,6 +1388,7 @@ class ProactiveWatcherDaemon:
                         "created": len(created_tickets),
                         "skipped": skipped,
                         "delivered": dispatch_res["delivered"],
+                        "correlation": corr_res,
                         "elapsed_ms": elapsed_ms,
                     },
                 },
@@ -1036,6 +1399,7 @@ class ProactiveWatcherDaemon:
                 "created_count": len(created_tickets),
                 "skipped_existing": skipped,
                 "created_tickets": created_tickets,
+                "correlation": corr_res,
                 "dispatch": dispatch_res,
                 "elapsed_ms": elapsed_ms,
             }

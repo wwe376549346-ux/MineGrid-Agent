@@ -14,10 +14,12 @@ import json
 import math
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import time
 from typing import Any
+from uuid import uuid4
 
 from laowadi.monitor import EVENT_DB
 from laowadi.storage import DB
@@ -73,6 +75,22 @@ FORBIDDEN_CALLS = frozenset({
     "type",
 })
 
+_BLOCKED_ATTRIBUTES = frozenset({
+    "ag_frame", "gi_frame", "cr_frame", "f_globals", "f_locals", "f_builtins",
+    "tb_frame", "f_back", "gi_yieldfrom", "cr_await", "ag_await", "attrgetter",
+    "methodcaller", "format", "format_map",
+    "system", "popen", "spawn", "unlink", "remove", "rmdir", "mkdir", "write_text",
+    "write_bytes", "to_sql", "to_csv", "to_excel", "to_json", "to_pickle", "save",
+    "savez", "savez_compressed", "dump", "load", "loadtxt", "genfromtxt", "fromfile",
+    "tofile", "memmap", "DataSource", "ctypeslib", "f2py", "read_csv", "read_pickle",
+    "from_pickle", "from_json", "from_excel",
+})
+
+
+def _restricted_attribute(name: str) -> bool:
+    return name.startswith("_") or name in _BLOCKED_ATTRIBUTES
+
+
 _RESULT_START = "__MINEGRID_SANDBOX_JSON_START__"
 _RESULT_END = "__MINEGRID_SANDBOX_JSON_END__"
 
@@ -94,48 +112,23 @@ def validate_sandbox_code(code: str) -> list[str]:
         if isinstance(node, ast.Import):
             for alias in node.names:
                 mod = alias.name
-                top = mod.split(".")[0]
-                if mod not in ALLOWED_IMPORTS and top not in ALLOWED_IMPORTS:
+                if mod not in ALLOWED_IMPORTS:
                     violations.append(f"禁止导入模块：{mod}")
         elif isinstance(node, ast.ImportFrom):
             mod = node.module or ""
-            top = mod.split(".")[0]
-            if node.level and node.level > 0:
+            if node.level:
                 violations.append("禁止相对导入。")
-            elif mod not in ALLOWED_IMPORTS and top not in ALLOWED_IMPORTS:
+            elif mod not in ALLOWED_IMPORTS:
                 violations.append(f"禁止从模块导入：{mod}")
+            for alias in node.names:
+                if alias.name == "*" or _restricted_attribute(alias.name):
+                    violations.append(f"禁止导入内部或受限属性：{alias.name}")
         elif isinstance(node, ast.Attribute):
-            if node.attr.startswith("__") and node.attr.endswith("__"):
-                violations.append(f"禁止访问双下划线魔术属性：{node.attr}")
-            elif node.attr in {"_module", "gi_frame", "cr_frame", "f_globals", "f_locals", "f_builtins"}:
-                violations.append(f"禁止访问内部帧属性：{node.attr}")
+            if _restricted_attribute(node.attr):
+                violations.append(f"禁止访问内部或受限属性：{node.attr}")
         elif isinstance(node, ast.Name):
-            if node.id.startswith("__") and node.id.endswith("__"):
-                violations.append(f"禁止访问保留标识符：{node.id}")
-            elif node.id in FORBIDDEN_CALLS:
-                violations.append(f"禁止使用内置高危函数/对象：{node.id}")
-        elif isinstance(node, ast.Call):
-            if isinstance(node.func, ast.Name) and node.func.id in FORBIDDEN_CALLS:
-                violations.append(f"禁止调用函数：{node.func.id}")
-            elif isinstance(node.func, ast.Attribute) and node.func.attr in {
-                "system",
-                "popen",
-                "spawn",
-                "unlink",
-                "remove",
-                "rmdir",
-                "mkdir",
-                "write_text",
-                "write_bytes",
-                "to_sql",
-                "to_csv",
-                "to_excel",
-                "to_json",
-                "to_pickle",
-                "save",
-                "dump",
-            }:
-                violations.append(f"禁止调用写盘或系统方法：.{node.func.attr}()")
+            if node.id.startswith("__") or node.id in FORBIDDEN_CALLS:
+                violations.append(f"禁止使用保留或受限标识符：{node.id}")
 
     # Deduplicate preserving order
     return list(dict.fromkeys(violations))
@@ -155,11 +148,10 @@ def _resolve_db_path(archive: Any, fallback: Path) -> Path:
     return fallback.resolve()
 
 
-def _resolve_event_db_path(archive: Any, fallback: Path) -> Path:
+def _resolve_event_db_path(archive: Any, fallback: Path) -> Path | None:
     if archive is not None:
-        ev = getattr(archive, "event_db_path", None)
-        if ev:
-            return Path(ev).resolve()
+        ev = getattr(archive, "events_db", None) or getattr(archive, "event_db_path", None)
+        return Path(ev).resolve() if ev else None
     return fallback.resolve()
 
 
@@ -243,17 +235,41 @@ import statistics
 import sys
 import traceback
 
-try:
-    import resource
-    # Cap CPU time strictly (leave virtual address space unconstrained for numpy/pandapower BLAS)
-    resource.setrlimit(resource.RLIMIT_CPU, (25, 25))
-except Exception:
-    pass
+import os
+import resource
+import threading
+import time
+from pathlib import Path
 
 payload = json.loads(sys.stdin.read())
 user_code = payload["code"]
 db_path = payload["db_path"]
 event_db_path = payload["event_db_path"]
+
+def _limit(kind, ceiling):
+    _, hard = resource.getrlimit(kind)
+    if hard != resource.RLIM_INFINITY:
+        ceiling = min(ceiling, hard)
+    resource.setrlimit(kind, (ceiling, ceiling))
+
+_limit(resource.RLIMIT_CPU, payload["cpu_seconds"])
+_limit(resource.RLIMIT_NOFILE, 96)
+_limit(resource.RLIMIT_FSIZE, 0)
+_limit(resource.RLIMIT_CORE, 0)
+memory_bytes = 2 * 1024 ** 3
+try:
+    _limit(resource.RLIMIT_AS, memory_bytes)
+except (ValueError, OSError):
+    if sys.platform != "darwin":
+        raise
+
+    def _enforce_rss():
+        while True:
+            if resource.getrusage(resource.RUSAGE_SELF).ru_maxrss > memory_bytes:
+                os._exit(70)
+            time.sleep(0.05)
+
+    threading.Thread(target=_enforce_rss, daemon=True).start()
 
 ALLOWED_IMPORTS = set(payload["allowed_imports"])
 _real_import = builtins.__import__
@@ -261,8 +277,7 @@ _real_import = builtins.__import__
 def _safe_import(name, globals=None, locals=None, fromlist=(), level=0):
     if level != 0:
         raise ImportError("Relative imports are disabled in sandbox.")
-    top = name.split(".")[0]
-    if name not in ALLOWED_IMPORTS and top not in ALLOWED_IMPORTS:
+    if name not in ALLOWED_IMPORTS and name.split(".")[0] not in ALLOWED_IMPORTS:
         raise ImportError(f"Module '{name}' is blocked in read-only sandbox.")
     return _real_import(name, globals, locals, fromlist, level)
 
@@ -283,7 +298,7 @@ _SAFE_BUILTINS["__import__"] = _safe_import
 _READONLY_SQL_RE = re.compile(r"^\s*(?:SELECT|WITH|EXPLAIN\s+QUERY\s+PLAN|PRAGMA\s+table_info)\b", re.I)
 
 def _open_ro(path_str):
-    conn = sqlite3.connect(f"file:{path_str}?mode=ro", uri=True)
+    conn = sqlite3.connect(Path(path_str).as_uri() + "?mode=ro", uri=True)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA query_only = ON")
     return conn
@@ -388,6 +403,7 @@ def run_python_analysis(
     code: str,
     *,
     timeout_s: float = DEFAULT_TIMEOUT_S,
+    container_image: str | None = None,
 ) -> dict[str, Any]:
     """Execute read-only analytical Python code in an isolated subprocess against the archive."""
     t0 = time.monotonic()
@@ -413,8 +429,9 @@ def run_python_analysis(
     payload = {
         "code": code_str,
         "db_path": str(db_path),
-        "event_db_path": str(event_db_path) if event_db_path.exists() else "",
+        "event_db_path": str(event_db_path) if event_db_path and event_db_path.is_file() else "",
         "allowed_imports": sorted(ALLOWED_IMPORTS),
+        "cpu_seconds": math.ceil(clamped_timeout),
         "start_marker": _RESULT_START,
         "end_marker": _RESULT_END,
     }
@@ -432,20 +449,49 @@ def run_python_analysis(
         "PYTHONNOUSERSITE": "1",
     }
 
+    container_image = container_image or os.environ.get("LAOWADI_SANDBOX_CONTAINER_IMAGE")
+    command = [sys.executable, "-B", "-c", _RUNNER_SCRIPT]
+    container_name = None
+    if container_image:
+        container_name = f"minegrid-analysis-{uuid4().hex}"
+        docker = shutil.which("docker") or "docker"
+        command = [
+            docker, "run", "--rm", "-i", "--name", container_name,
+            "--pull=never", "--network=none", "--read-only", "--cap-drop=ALL",
+            "--security-opt=no-new-privileges", "--pids-limit=64",
+            "--memory=2g", "--memory-swap=2g", "--cpus=1", "--user=65534:65534",
+            "--tmpfs", "/tmp:rw,noexec,nosuid,nodev,size=64m",
+        ]
+        for key, path in (("db_path", db_path), ("event_db_path", event_db_path)):
+            if payload[key]:
+                target = f"/{key}.sqlite3"
+                command.extend(["--mount", f"type=bind,source={path},target={target},readonly"])
+                payload[key] = target
+        for key in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS", "PYTHONNOUSERSITE"):
+            command.extend(["-e", f"{key}={clean_env[key]}"])
+        command.extend(["--entrypoint", "python3", "--", container_image, "-B", "-c", _RUNNER_SCRIPT])
+
     try:
         proc = subprocess.run(
-            [sys.executable, "-B", "-c", _RUNNER_SCRIPT],
+            command,
             input=json.dumps(payload, ensure_ascii=False),
             text=True,
             capture_output=True,
             timeout=clamped_timeout,
             env=clean_env,
         )
-    except subprocess.TimeoutExpired:
+    except (subprocess.TimeoutExpired, OSError) as exc:
+        timed_out = isinstance(exc, subprocess.TimeoutExpired)
+        if timed_out and container_name:
+            try:
+                subprocess.run([command[0], "rm", "-f", container_name], env=clean_env,
+                               capture_output=True, timeout=3, check=True)
+            except (OSError, subprocess.SubprocessError):
+                pass
         return {
-            "status": "timeout",
+            "status": "timeout" if timed_out else "error",
             "stdout": "",
-            "stderr": f"沙盒执行超时（超过 {clamped_timeout:.1f}s 限制，已强制终止）。",
+            "stderr": f"沙盒执行超时（超过 {clamped_timeout:.1f}s 限制）。" if timed_out else str(exc),
             "tables": [],
             "charts": [],
             "elapsed_ms": round((time.monotonic() - t0) * 1000.0, 2),
@@ -454,8 +500,8 @@ def run_python_analysis(
 
     raw_out = proc.stdout or ""
     s_idx = raw_out.find(_RESULT_START)
-    e_idx = raw_out.find(_RESULT_END, s_idx + len(_RESULT_START)) if s_idx >= 0 else -1
-    if s_idx < 0 or e_idx < 0:
+    e_idx = raw_out.rfind(_RESULT_END)
+    if s_idx < 0 or e_idx < s_idx + len(_RESULT_START):
         err_msg = (proc.stderr or raw_out or f"沙盒进程异常退出 (rc={proc.returncode})")[:MAX_STDERR_CHARS]
         return {
             "status": "error",

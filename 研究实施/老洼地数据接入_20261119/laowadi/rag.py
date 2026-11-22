@@ -18,7 +18,9 @@ from pathlib import Path
 from laowadi.diag_tools import DiagnosticToolbox
 from laowadi.mine_schema import MineProfile, load_mine_profile
 from laowadi.queries import Archive
-from laowadi.standards import hybrid_rank_documents, load_corpus, search_standards
+from laowadi.standards import (
+    DenseEmbeddingCache, EmbeddingProvider, load_corpus, rank_documents, search_standards,
+)
 from laowadi.storage import ROOT
 from laowadi.supplement import discover_single_incomer_window
 
@@ -486,8 +488,15 @@ build_laowadi_evidence_cards = build_mine_evidence_cards
 class ConditionalRAGEngine:
     """Hybrid BM25 + Electrical Concept Semantic RRF retriever over mine-profile evidence cards and 68 safety clauses."""
 
-    def __init__(self, archive: Archive, profile: MineProfile | None = None):
+    def __init__(
+        self, archive: Archive, profile: MineProfile | None = None, *,
+        embedding_provider: EmbeddingProvider | None = None,
+        embedding_cache: DenseEmbeddingCache | None = None,
+    ):
         self.archive = archive
+        self._dense = embedding_cache or (
+            DenseEmbeddingCache(embedding_provider) if embedding_provider is not None else None
+        )
         self.profile = profile or load_mine_profile()
         self.cards = build_mine_evidence_cards(archive, self.profile)
         self.clauses = load_corpus()
@@ -539,10 +548,8 @@ class ConditionalRAGEngine:
                 )
 
         # Hybrid BM25 + Concept Semantic RRF scores over all 8 evidence cards
-        hybrid_hits = {
-            item["index"]: item
-            for item in hybrid_rank_documents(q, self._card_texts)
-        }
+        hits, card_backend = rank_documents(q, self._card_texts, dense=self._dense)
+        hybrid_hits = {item["index"]: item for item in hits}
 
         scored_cards = []
         for idx, card in enumerate(self.cards):
@@ -552,7 +559,7 @@ class ConditionalRAGEngine:
             if h_info:
                 score += h_info["score"]
                 if h_info["semantic"] >= 0.08:
-                    matched_reasons.append(f"语义概念召回(cos={h_info['semantic']:.2f})")
+                    matched_reasons.append(f"{h_info['retrieval_backend']} (cos={h_info['semantic']:.2f})")
                 if h_info["bm25"] > 0:
                     matched_reasons.append(f"BM25={h_info['bm25']:.1f}")
             for cab in cabs_in_q:
@@ -584,7 +591,7 @@ class ConditionalRAGEngine:
         selected_cards = scored_cards[:top_k]
 
         # Retrieve normative standards from the 68-clause hybrid index
-        std_res = search_standards(q, top_k=top_k)
+        std_res = search_standards(q, top_k=top_k, embedding_cache=self._dense) if q else {}
         std_hits = std_res.get("hits", [])
 
         # Collect explicit missing evidence when query asks about unarchived parameters
@@ -601,6 +608,11 @@ class ConditionalRAGEngine:
         return {
             "query": q,
             "retrieval_mode": "hybrid_bm25_semantic_rrf",
+            "retrieval_backend": (
+                "dense+bm25" if std_res.get("retrieval_backend") == "dense+bm25"
+                and (not self._card_texts or card_backend == "dense+bm25")
+                else "lexical_fallback"
+            ),
             "station_filter": station,
             "cabinet_filter": cabinet,
             "day_filter": day,

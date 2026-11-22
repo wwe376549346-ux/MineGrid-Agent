@@ -138,7 +138,85 @@ function SkillTurn({turn}) {
   </div>;
 }
 
-function AutonomousTurn({turn, onTextProgress, onOpenMemory, onSyncCanvas, onDraftAction, onDeepResearch}) {
+function TurnFeedbackBar({targetType, targetId = "", question = "", answerExcerpt = "", mode = "", cabinet = "", verificationStatus = ""}) {
+  const [open, setOpen] = useState(false);
+  const [correction, setCorrection] = useState("");
+  const [verdict, setVerdict] = useState("incorrect");
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState("");
+  const [err, setErr] = useState("");
+
+  async function submitFeedback(chosenVerdict, expectedText = "") {
+    setBusy(true);
+    setErr("");
+    try {
+      await apiRequest("/api/feedback", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({
+          target_type: targetType,
+          target_id: String(targetId || ""),
+          verdict: chosenVerdict,
+          question: String(question || "").slice(0, 1000),
+          answer_excerpt: String(answerExcerpt || "").slice(0, 1200),
+          expected_correction: String(expectedText || "").slice(0, 1200),
+          mode: String(mode || ""),
+          cabinet: String(cabinet || ""),
+          verification_status: String(verificationStatus || ""),
+        }),
+      });
+      setDone(chosenVerdict === "helpful" ? "已记录采纳反馈" : "已记录负样本反馈");
+      setOpen(false);
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (done) {
+    return <span className="agent-mini-pill is-green">{done}</span>;
+  }
+
+  return <>
+    <button type="button" className="chat-artifact-btn" disabled={busy}
+      onClick={() => submitFeedback("helpful")}>
+      <CheckCircle2 size={12} /> 有帮助
+    </button>
+    <button type="button" className="chat-artifact-btn" disabled={busy}
+      onClick={() => setOpen(v => !v)}>
+      <ShieldAlert size={12} /> 纠错反馈
+    </button>
+    {open && (
+      <form className="inline-memory-drawer" onSubmit={e => {
+        e.preventDefault();
+        submitFeedback(verdict, correction);
+      }}>
+        <div className="inline-memory-row">
+          <select value={verdict} onChange={e => setVerdict(e.target.value)} aria-label="反馈类型">
+            <option value="incorrect">结论或数值有误</option>
+            <option value="incomplete">证据或排查不全</option>
+            <option value="unsafe_suggestion">处置建议存在风险</option>
+          </select>
+        </div>
+        <input
+          type="text"
+          value={correction}
+          onChange={e => setCorrection(e.target.value)}
+          placeholder="填写期望修正说明（可沉淀为负样本回归用例）"
+        />
+        {err && <div className="save-err">{err}</div>}
+        <div className="inline-memory-actions">
+          <button type="submit" className="inline-hitl-submit" disabled={busy}>提交反馈</button>
+          <button type="button" className="chat-artifact-btn" onClick={() => setOpen(false)}>取消</button>
+        </div>
+      </form>
+    )}
+    {err && !open && <span className="save-err">{err}</span>}
+  </>;
+}
+
+function AutonomousTurn({turn, onTextProgress, onOpenMemory, onSyncCanvas, onDraftAction, onDeepResearch, onSelectClarification}) {
   const {stream} = turn;
   const {canvasHint, recommendedAction, deepResearchGoal} = stream;
   const [drafting, setDrafting] = useState(false);
@@ -164,7 +242,7 @@ function AutonomousTurn({turn, onTextProgress, onOpenMemory, onSyncCanvas, onDra
     <div className="chat-agent-row">
       <div className="chat-agent-avatar" aria-hidden="true"><Sparkles size={14} /></div>
       <div className="chat-agent-body">
-        <AgentStreamArtifacts stream={stream} onTextProgress={onTextProgress} restored={Boolean(turn.result)} />
+        <AgentStreamArtifacts stream={stream} onTextProgress={onTextProgress} onSelectClarification={onSelectClarification} restored={Boolean(turn.result)} />
         {turn.stream.status === "running" && <div className="duty-progress" role="status"><Spinner size="sm" /> 正在分析</div>}
         {turn.stream.status === "stopped" && <small className="muted">已停止接收</small>}
         {turn.error && <div className="chat-error-box" role="alert">{turn.error}</div>}
@@ -179,6 +257,17 @@ function AutonomousTurn({turn, onTextProgress, onOpenMemory, onSyncCanvas, onDra
             <Search size={13} /> 升级为深度专项排查
           </button>
           <SaveReplyMemory question={turn.question} content={stream.content} onOpenMemory={onOpenMemory} />
+          {stream.resultStatus !== "clarify" && (
+            <TurnFeedbackBar
+              targetType="autonomous_turn"
+              targetId={String(turn.id)}
+              question={turn.question}
+              answerExcerpt={stream.content}
+              mode="autonomous"
+              cabinet={stream.canvasHint?.focus_cabinet || ""}
+              verificationStatus={stream.verification?.status || stream.resultStatus}
+            />
+          )}
         </div>}
         {draftError && <div className="chat-error-box" role="alert">{draftError}</div>}
         {stream.memorySuggestions.map(({key, draft}) => <MemorySuggestion key={key} draft={draft} />)}
@@ -1052,6 +1141,15 @@ function AgentTurnMessage({turn, sessionId, health, onSyncCanvas, onOpenCabinet,
             </button>
             <SaveReplyMemory question={turn.question} content={rep.summary || res.markdown}
               cabinet={res.context_snapshot?.active_anchors?.cabinets?.[0]} onOpenMemory={onOpenMemory} />
+            <TurnFeedbackBar
+              targetType="diagnosis"
+              targetId={String(turn.id)}
+              question={turn.question}
+              answerExcerpt={rep?.summary || res.markdown}
+              mode="strict"
+              cabinet={res.context_snapshot?.active_anchors?.cabinets?.[0] || ""}
+              verificationStatus={res.verification?.status || ""}
+            />
             <details className="duty-reply-more">
               <summary className="chat-artifact-btn">更多 <ChevronDown size={13} /></summary>
               <div className="duty-reply-menu">
@@ -1911,7 +2009,8 @@ export function AgentCopilotPane({
           <div className="duty-thread-column">
             {turns.map((t, index) => t.skillRun ? <SkillTurn key={t.id} turn={t} /> : t.stream ? (
               <AutonomousTurn key={t.id} turn={t} onTextProgress={followTypedAnswer} onOpenMemory={onOpenMemory}
-                onSyncCanvas={onSyncCanvas} onDraftAction={onDraftAction} onDeepResearch={onDeepResearch} />
+                onSyncCanvas={onSyncCanvas} onDraftAction={onDraftAction} onDeepResearch={onDeepResearch}
+                onSelectClarification={opt => sendQuestion(opt)} />
             ) : (
               <AgentTurnMessage
                 key={t.id}

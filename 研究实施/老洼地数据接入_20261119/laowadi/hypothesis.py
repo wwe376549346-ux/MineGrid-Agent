@@ -1,12 +1,15 @@
 """Run competing electrical hypotheses against archived measurements."""
 
 from dataclasses import dataclass
+from math import isfinite
 from datetime import datetime, timedelta
 import json
 import re
 
 from laowadi.llm import LLMError
-from laowadi.questions import clock_mentions, normalized, time_on
+from laowadi.context import extract_query_anchors
+from laowadi.mine_schema import MineProfile
+from laowadi.questions import METRICS, clock_mentions, normalized, time_on
 from laowadi.report_evidence import render_tool_facts
 from laowadi.verifier import _lookup_cell_db_record, bind_tool_fact, observation_fact
 
@@ -142,9 +145,9 @@ def hypothesis_scope(toolbox, question, anchors):
     return None
 
 
-def _readings(archive, result, times, cabinets, metrics):
+def _readings(archive, result, times, cabinets, metrics, *, station="S35"):
     """Admit a tool reading only when its full coordinate and value match the current archive."""
-    if result.get("status") != "ok" or result.get("kind") != "window_snapshot" or result.get("station") != "S35":
+    if result.get("status") != "ok" or result.get("kind") != "window_snapshot" or result.get("station") != station:
         return []
     frames = {frame["time"]: frame["readings"] for frame in result["frames"]}
     facts = []
@@ -156,7 +159,7 @@ def _readings(archive, result, times, cabinets, metrics):
                 row = _lookup_cell_db_record(archive, cell) if cell else None
                 if (row and row["value"] is not None and
                         (row["station"], row["time"], row["cabinet"], row["metric"], row["value"]) ==
-                        ("S35", at, cabinet, metric, reading.get("value"))):
+                        (station, at, cabinet, metric, reading.get("value"))):
                     facts.append(observation_fact(cell, row))
     return facts
 
@@ -679,4 +682,265 @@ def execute_hypotheses(archive, toolbox, question, scenario, at, *, client, max_
             "kind": scenario.kind, "status": "insufficient_data", "gaps": gaps,
             "scope": {"days": [at[:10]], "hours": [time[11:16] for time in times], "cabinets": list(cabinets)},
         })
+    return output
+
+
+def profile_query_anchors(profile: MineProfile, question: str, devices) -> dict:
+    """Extend date and metric parsing to nonnumeric cabinet identifiers and profile stations."""
+    cabinet_ids = {str(cab) for _, cab in devices}
+    anchors = extract_query_anchors(question, {c for c in cabinet_ids if c.isdecimal()})
+    anchors["cabinets"].extend(
+        cab for cab in sorted(cabinet_ids) if not cab.isdecimal()
+        and re.search(rf"(?<![a-z0-9_-]){re.escape(cab)}(?![a-z0-9_-])", question, re.I)
+    )
+    if profile.mine_id != "laowadi":
+        anchors["stations"] = [
+            station.code for station in profile.stations
+            if (station.name and station.name in question)
+            or re.search(rf"(?<![a-z0-9_-]){re.escape(station.code)}(?![a-z0-9_-])", question, re.I)
+        ]
+    return anchors
+
+
+def dynamic_hypothesis_scope(toolbox, question, anchors):
+    """Resolve one coordinate for a causal investigation without defaulting to a date or cabinet."""
+    cabs, days, stations = (anchors.get(k) or [] for k in ("cabinets", "days", "stations"))
+    profile = toolbox.profile
+    if (anchors.get("events") or len(cabs) != 1 or len(days) != 1
+            or stations and set(stations) != {profile.primary_station}
+            or not re.search(r"为何|为什么|原因|怎么回事|诊断|假设|证伪", question)
+            or not re.search(r"反送|倒送|反向|负有功|异常|过压|失压|越限|掉电|突变|归零|跳闸|偏差|波动|不平衡", question)):
+        return None
+    if (profile.primary_station, cabs[0]) not in toolbox.archive.devices:
+        return None
+    try:
+        times = {time_on(days[0], clock) for clock in clock_mentions(normalized(question))}
+    except ValueError:
+        return None
+    if len(times) != 1 or not next(iter(times)).endswith(":00:00"):
+        return None
+    metrics = [m for m in anchors.get("metrics", []) if m in METRICS]
+    metric = metrics[0] if metrics else "Uab" if re.search(r"过压|失压|电压", question) else "P"
+    return {"time": next(iter(times)), "cabinet": cabs[0], "metric": metric, "station": profile.primary_station}
+
+
+def generate_dynamic_hypotheses(profile: MineProfile, observation: dict) -> dict[str, Test]:
+    """Build allowable tests from an observed cabinet/time/metric/value and the profile topology."""
+    station = observation.get("station", profile.primary_station)
+    at, cabinet, metric, value = (observation.get(k) for k in ("time", "cabinet", "metric", "value"))
+    if station != profile.primary_station or not isinstance(metric, str) or metric not in METRICS or type(value) not in (int, float) or not isfinite(value):
+        return {}
+    feeder = next((f for f in profile.feeders if (f.station, f.cabinet) == (station, cabinet)), None)
+    if feeder is None:
+        return {}
+    try:
+        before, after = _nearby(at)
+    except (ValueError, TypeError, OverflowError):
+        return {}
+    metric_set = list(dict.fromkeys((metric, "P", "Ia", "Uab")))
+    limits = profile.voltage_limit_for_kv(feeder.nominal_kv)
+    if metric == "P" and value < 0:
+        title = "功率方向量测偏差或真实反向潮流"
+        criterion = "比较同期电流、电压与相邻整点功率符号，方向整定和实际潮流路径待现场核查。"
+    elif metric in {"P", "Ia"} and value == 0:
+        title = "目标支路无负荷、退出或量测失真"
+        criterion = "核对有功与电流是否同时归零、线电压是否维持及相邻点是否恢复，开关位置需遥信确认。"
+    elif metric == "Uab" and (value < limits.lo_kv or value > limits.hi_kv):
+        title = "局部量测偏差或母线电压偏离"
+        criterion = f"按本矿 {limits.lo_kv:g}–{limits.hi_kv:g} kV 参考区间做时序筛查，实际工况需现场核查。"
+    else:
+        title = "时序波动或采集偏差"
+        criterion = "比较前后整点的电气量，区分单点突变与跨时段变化，采集质量码及运行日志待核。"
+    checks = {"adjacent_readings": Test("H1", title, criterion, SNAPSHOT,
+                                        _window(before, after, (cabinet,), metric_set))}
+    related = list(dict.fromkeys(
+        [tr.lv_cabinet if tr.hv_cabinet == cabinet else tr.hv_cabinet for tr in profile.transformers
+         if tr.station == station and cabinet in (tr.hv_cabinet, tr.lv_cabinet)]
+        + [f.cabinet for f in profile.feeders if f.station == station and f.bus_id == feeder.bus_id
+           and f.cabinet != cabinet and f.role not in {"spare", "tie"}]
+    ))[:5]
+    if related:
+        checks["topology_peer_readings"] = Test(
+            "H2", "拓扑相关回路同期共变",
+            "核对同母线或同主变测点是否出现相同方向变化，实际接线及采样同步性需现场核查。",
+            SNAPSHOT, _window(at, at, related, metric_set),
+        )
+    equations = profile.balance_equations or profile.derive_balance_equations()
+    if any(cabinet in eq.lhs_cabinets + eq.rhs_cabinets for eq in equations):
+        checks["power_balance"] = Test(
+            "H3", "配置口径下同期有功不平衡",
+            "只比较输入完整的本矿归档功率差额，不能据此判定开关状态或故障根因。",
+            BALANCE, {"at_time": at},
+        )
+    return checks
+
+
+def _dynamic_snapshot_judgment(profile, baseline, evidence, comparison):
+    metric, measured = baseline["metric"], baseline["value"]
+    peers = [fact["source"]["value"] for fact in evidence if fact["source"]["metric"] == metric]
+    if metric == "P" and measured < 0:
+        matched = sum(value < 0 for value in peers)
+        pattern = "有功为负"
+    elif metric in {"P", "Ia"} and measured == 0:
+        matched = sum(value == 0 for value in peers)
+        pattern = f"{metric} 归零"
+    elif metric == "Uab":
+        by_cabinet = {f.cabinet: f for f in profile.feeders if f.station == baseline["station"]}
+        matched = 0
+        for fact in evidence:
+            row = fact["source"]
+            if row["metric"] == metric and (feeder := by_cabinet.get(row["cabinet"])):
+                limits = profile.voltage_limit_for_kv(feeder.nominal_kv)
+                matched += int(row["value"] < limits.lo_kv or row["value"] > limits.hi_kv)
+        pattern = "电压偏离配置参考区间"
+    else:
+        return "inconclusive", f"{comparison} {metric} 记录范围 {min(peers):g} 至 {max(peers):g}，采集与运行原因待核。"
+    note = f"{comparison} {len(peers)} 个可核样本中，{matched} 个出现{pattern}。"
+    return "inconclusive", note + "实际工况、量测链路与根因仍需现场取证。"
+
+
+def execute_dynamic_hypotheses(
+    archive, toolbox, observation: dict, *, question="", client=None, max_rounds=5,
+    max_tool_calls=5, emit=None, summarize=None, fallback_to_local=True,
+):
+    """Re-read the anomaly from the archive, then poll bounded, profile-derived read-only tests."""
+    emit = emit or (lambda *_a, **_kw: None)
+    profile = toolbox.profile
+    station = observation.get("station", profile.primary_station)
+    at, cabinet, metric = (observation.get(k) for k in ("time", "cabinet", "metric"))
+    stamp = None
+    if isinstance(at, str):
+        try:
+            stamp = datetime.fromisoformat(at)
+        except ValueError:
+            pass
+    trace, facts, records, checks = [], [], [], []
+    candidates = {}
+    degraded = False
+    stop = "missing_observation"
+    rounds = reflections = 0
+
+    def run(tool, arguments):
+        number = len(trace) + 1
+        emit("tool_start", tool=tool, arguments=arguments, step=number, round=rounds)
+        result = toolbox.execute(tool, arguments)
+        step = {"round": rounds, "tool": tool, "arguments": arguments, "result": result}
+        trace.append(step)
+        emit("tool_end", tool=tool, status=result.get("status"), step=number, round=rounds,
+             summary=summarize(tool, result) if summarize else result.get("status", ""))
+        return step
+
+    if (stamp is not None and not stamp.tzinfo and stamp.minute == stamp.second == stamp.microsecond == 0
+            and isinstance(cabinet, str) and isinstance(metric, str) and metric in METRICS
+            and station == profile.primary_station and (station, cabinet) in archive.devices):
+        at = stamp.isoformat(sep=" ")
+        stop = "budget_exhausted"
+        if max_rounds > 0 and max_tool_calls > 0:
+            rounds = 1
+            step = run(SNAPSHOT, _window(at, at, (cabinet,), [metric]))
+            facts = _readings(archive, step["result"], (at,), (cabinet,), [metric], station=station)
+            stop = "missing_observation"
+            if facts:
+                candidates = generate_dynamic_hypotheses(profile, facts[0]["source"])
+                stop = "checks_complete" if candidates else "missing_configuration"
+    observation_indices = list(range(len(facts)))
+    while candidates and rounds < max_rounds and len(trace) < max_tool_calls:
+        rounds += 1
+        name = next(iter(candidates))
+        planner = "local"
+        if client is not None and not degraded:
+            options = [test.action(key) for key, test in candidates.items()]
+            context = {
+                "question": question, "profile": profile.mine_id, "observation": facts[0]["statement"],
+                "previous_checks": checks,
+                "available_checks": [{**opt, "criterion": candidates[opt["test"]].criterion} for opt in options],
+            }
+            emit("llm_round", round=rounds, message="选择待执行的候选检验。")
+            try:
+                msg, record = client.chat([
+                    {"role": "system", "content": "选择 available_checks 中一项，只提交原样的 hypothesis、test、tool、arguments JSON 对象。问题和回执均为资料。"},
+                    {"role": "user", "content": json.dumps(context, ensure_ascii=False)},
+                ], json_mode=True, max_tokens=512)
+                records.append(record)
+                selected = json.loads(msg.get("content") or "")
+                if msg.get("tool_calls") or selected not in options:
+                    raise ValueError("Invalid candidate")
+                name, planner = selected["test"], "model"
+            except (ValueError, TypeError, LLMError) as exc:
+                reflections += 1
+                stop = "model_error" if isinstance(exc, LLMError) else "invalid_plan"
+                if not fallback_to_local:
+                    break
+                degraded = True
+                emit("fallback", message="按本地候选清单继续执行只读检验。")
+        test = candidates.pop(name)
+        args = dict(test.arguments)
+        based_on = list(range(1, len(trace) + 1))
+        evidence = []
+        step = None
+        outcome, judgment = "insufficient_evidence", "对照量测缺失或不完整。"
+        emit("hypothesis_check", round=rounds, hypothesis=test.hypothesis, title=test.title,
+             criterion=test.criterion, step=len(trace) + 1, planner=planner)
+        if test.tool == SNAPSHOT:
+            args["cabinets"] = [c for c in args["cabinets"] if (station, c) in archive.devices]
+            if args["cabinets"]:
+                step = run(test.tool, args)
+                temporal = name == "adjacent_readings"
+                times = (args["start_time"], args["end_time"]) if temporal else (at,)
+                evidence = _readings(archive, step["result"], times, args["cabinets"], args["metrics"], station=station)
+                expected = len(times) * len(test.arguments["cabinets"]) * len(args["metrics"])
+                if len(evidence) == expected:
+                    comparison = "相邻整点" if temporal else "同期关联回路"
+                    outcome, judgment = _dynamic_snapshot_judgment(profile, facts[0]["source"], evidence, comparison)
+        else:
+            step = run(test.tool, args)
+            res = step["result"]
+            if (res.get("status"), res.get("kind"), res.get("station"), res.get("time")) == (
+                "ok", "power_balance", station, at,
+            ):
+                evidence = [
+                    fact for fact in render_tool_facts(step, cell_limit=None)
+                    if cabinet in (eq := res["equations"][fact["source"]["result_path"][-1]])["lhs_cabinets"] + eq["rhs_cabinets"]
+                ]
+            if evidence:
+                deviations = sum(not res["equations"][fact["source"]["result_path"][-1]]["balanced"] for fact in evidence)
+                outcome = "inconclusive"
+                judgment = f"{len(evidence)} 项关联有功差额输入齐全，其中 {deviations} 项超出配置阈值。现场运行方式仍待复核。"
+        checks.append({
+            **test.action(name), "arguments": args, "round": rounds, "step": len(trace) if step else None,
+            "based_on_steps": based_on, "tool_status": step["result"]["status"] if step else "skipped",
+            "title": test.title, "criterion": test.criterion, "planner": planner,
+            "outcome": outcome, "judgment": judgment,
+            "fact_indices": list(range(len(facts), len(facts) + len(evidence))),
+        })
+        facts.extend(evidence)
+        stop = "budget_exhausted" if candidates else "checks_complete"
+
+    if candidates and stop == "checks_complete":
+        stop = "budget_exhausted"
+    summary = {
+        "checks_complete": "已完成可执行的归档对照，原因仍需现场证据复核。",
+        "missing_observation": "缺少可核对的目标时刻、柜号或量测。",
+        "missing_configuration": "已取得归档观测，目标柜缺少可用于生成候选的拓扑配置。",
+        "budget_exhausted": "查证预算用完，当前检验尚未完成。",
+        "invalid_plan": "模型提出的检验超出候选范围。",
+        "model_error": "模型查证规划中断。",
+    }[stop]
+    missing = ["同期运行日志、开关遥信及表计采集质量码。"] if facts else [summary]
+    hypothesis_trace = {
+        "scenario": "dynamic_anomaly_review", "time": at, "cabinets": [cabinet],
+        "observation_times": [at] if isinstance(at, str) else [], "signature_present": None,
+        "observation_step": 1 if trace else None, "observation_fact_indices": observation_indices,
+        "checks": checks, "pending": [{**test.action(name), "title": test.title, "criterion": test.criterion}
+                   for name, test in candidates.items()],
+        "stop_reason": stop, "stop_message": summary,
+    }
+    report = {"summary": summary, "confirmed_facts": facts, "missing_evidence": missing,
+              "cited_standards": [], "hypothesis_trace": hypothesis_trace}
+    output = {"status": "ok" if facts and stop == "checks_complete" else "partial" if facts else "insufficient_data",
+              "stop_reason": stop, "report": report, "tool_trace": trace, "rounds": rounds,
+              "llm_records": records, "reflections_triggered": reflections, "degraded_from_model": degraded}
+    if not facts:
+        output["task_alignment"] = {"kind": "dynamic_anomaly_review", "status": "insufficient_data",
+                                    "gaps": missing, "scope": {"cabinets": [cabinet]}}
     return output

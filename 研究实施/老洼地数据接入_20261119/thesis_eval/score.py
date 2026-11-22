@@ -68,6 +68,9 @@ def score_turn(observed, gold):
         counts["false_refusal"] = int(not is_refusal and refused)
         counts["binary_refusal_correct"] = int(refused == is_refusal)
         counts["decoded"] = 1
+        counts["structured_submissions"] = int(observed.get("answer_source") == "submit_diagnosis")
+        counts["conditional_eligible"] = int(gold["decision"] == "conditional")
+        counts["conditional_misclassified_as_insufficient"] = int(gold["decision"] == "conditional" and refused)
     fields = []
     for key in sorted(found.keys() | expected.keys()):
         claims = found.get(key, [])
@@ -100,6 +103,7 @@ def score_turn(observed, gold):
         all(type(r.get("usage", {}).get(k)) is int for k in ("prompt_tokens", "completion_tokens", "total_tokens"))
         for r in complete_records)
     return {"status": observed["status"], "counts": dict(counts), "fields": fields,
+            "answer_source": observed.get("answer_source"),
             "expected_decision": gold["decision"], "submitted_decision": answer["decision"] if answer else None,
             "wall_seconds": observed.get("wall_seconds"),
             "usage": ({key: sum(r["usage"][key] for r in complete_records)
@@ -121,6 +125,9 @@ def aggregate(rows):
     return {
         "episodes_planned": len(rows), "episodes_recorded": sum(r["recorded"] for r in rows),
         "turns_planned": len(turns), "turns_decoded": counts["decoded"],
+        "structured_submission_rate": ratio(counts["structured_submissions"], counts["decoded"]),
+        "conditional_as_insufficient_rate": ratio(counts["conditional_misclassified_as_insufficient"],
+                                                   counts["conditional_eligible"]),
         "task_exact": ratio(sum(all(t["counts"]["exact"] for t in r["turns"]) for r in rows), len(rows)),
         "numeric_hallucination_rate": ratio(counts["hallucinated"], counts["numeric_asserted"]),
         "numeric_error_rate": ratio(counts["wrong_number_or_unit"], counts["numeric_asserted"]),

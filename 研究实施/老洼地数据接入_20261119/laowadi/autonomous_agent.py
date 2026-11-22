@@ -22,6 +22,7 @@ from laowadi.memory_store import (
     format_memories_for_prompt,
     retrieve_relevant_memories,
 )
+from laowadi.questions import match_term, normalized
 from laowadi.security import inspect_prompt_security
 from laowadi.verifier import _lookup_cell_db_record
 
@@ -49,7 +50,7 @@ UPDATE_PLAN_TOOL_SCHEMA = {
                             "title": {"type": "string"},
                             "status": {
                                 "type": "string",
-                                "enum": ["pending", "running", "done", "failed"],
+                                "enum": ["pending", "running", "done", "failed", "skipped"],
                             },
                         },
                         "required": ["id", "title", "status"],
@@ -73,7 +74,7 @@ AUTONOMOUS_SYSTEM_PROMPT = """你是 MineGrid-Agent —— 一位资深的煤矿
    - 首轮可在同一次响应中**并行发起 1–3 个独立只读工具调用**（不要把可并行的工具拆成 4 轮串行调用）；
    - 涉及主变分接头调压、N-1 转供或末端无功补偿时**直接调用 `run_ac_power_flow`**，无需先重复调用 `check_power_balance`、`get_window_snapshot` 或再用沙盒重算相同潮流指标；
    - 拿到核心量化回执后即刻用 Markdown 总结结论并给出原表坐标，尽量在 **1–2 轮**工具调用内完成收口。
-2. **先立计划，边查边调**：面对复杂或开放式问题，可先调用 `update_plan` 列出 2–4 步清晰的排查计划（可与首轮数据工具同批并行发起），并在完成时更新状态。
+2. **先立计划，边查边调**：面对复杂或开放式问题，可先调用 `update_plan` 列出 2–4 步清晰的排查计划（可与首轮数据工具同批并行发起），查询前将对应步骤设为 running，执行状态由工具回执记录。主动取消的步骤标为 skipped。
 3. **善用两类武器**：
    - **11 个专业电气只读工具**：快速获取全站健康体检、时窗断面、母线功率守恒、单柜画像、日曲线基线、规程检索、条件化跨站核验、`pandapower` 交流潮流（基准校准/分接头灵敏度/N-1/无功补偿）等。
    - **只读 Python/SQL/NumPy/SciPy/pandapower 沙盒 (`run_python_analysis`)**：遇到任何固定工具未覆盖的开放式计算——如相关性/回归分析、R²、负荷曲线聚类、多柜统计排行、自定义假设潮流试算——**果断现场编写 Python 脚本跑出真实结果**，并通过 `emit_table(title, columns, rows)` 和 `emit_chart(title, chart_type, x_label, y_label, series)` 输出可供界面直接渲染的交互图表（`chart_type` 支持 `scatter`、`line`、`bar`）。
@@ -90,7 +91,7 @@ AUTONOMOUS_SYSTEM_PROMPT = """你是 MineGrid-Agent —— 一位资深的煤矿
 """
 
 
-_NUM_RE = re.compile(r"(?<![A-Za-z0-9_.-])(-?\d+(?:\.\d+)?)(?:\s*(?:kV|kW|kVar|kVA|kWh|A|%|档))?")
+_NUM_RE = re.compile(r"(?<![A-Za-z0-9_.-])(-?\d+(?:\.\d+)?)(?:\s*(?:kVar|kVA|kWh|kV|kW|A|%|档))?")
 
 
 def _extract_numbers_from_obj(obj: Any, pool: set[float], depth: int = 0) -> None:
@@ -135,7 +136,7 @@ def _compute_verification_badge(
     text = str(answer_markdown or "")
     norm_text = re.sub(r"[−－]", "-", text)
     unit_num_re = re.compile(
-        r"([+-]?\d+(?:\.\d+)?)\s*(kV|kW|kVar|kVA|kWh|A|%)",
+        r"([+-]?\d+(?:\.\d+)?)\s*(kVar|kVA|kWh|kV|kW|A|%)",
         re.I,
     )
     cited_cells = list(dict.fromkeys(_INLINE_CELL_RE.findall(text)))
@@ -863,6 +864,78 @@ def _infer_deep_research_goal(question: str, anchors: dict[str, Any]) -> str:
     return f"围绕「{q_short}」开展老洼地 7 日配电网 6 阶段深度专项排查与报告生成"
 
 
+def _clarification(archive, question, anchors, context_snapshot):
+    """Ask for missing scope only when the request depends on a particular archived observation."""
+    text = normalized(question)
+    point = bool(anchors.get("hours")) and bool(re.search(r"多少|读数|同期|异常|原因|为什么|核查", text))
+    specific = bool(re.search(
+        r"(?:这个|那个|该|此|哪[个台面])(?:柜|开关|设备|整点|时刻|异常|事件)"
+        r"|当时|那天|这次(?:跳闸|异常|停电)|某(?:柜|日)|(?:柜|设备).{0,8}(?:多少|读数)", text,
+    ))
+    causal = bool(re.search(r"为什么|为何|怎么回事|原因|证伪|排查|核查|分析", text)
+                  and re.search(r"异常|跳闸|归零|反送|负有功|过压|失压|掉电", text))
+    point = point or bool(not causal and re.search(r"^(?:请问|请查一下)?(?:有功|电流|电压|功率因数).{0,5}(?:多少|读数)", text))
+    planning = bool(re.search(r"方案|仿真|模拟|假设.{0,12}(?:退出|转供)|如果", text))
+    if not (point or specific or causal and not planning) or anchors.get("events"):
+        return None
+
+    period = bool(re.search(r"整周|全周|全期|全量|全时段|归档期|全部日期|近[一二三四五六七八九十0-9]+天|[这近过去最近]+[一二三四五六七八九十0-9]+天", text))
+    group = bool(re.search(r"全站|所有|各柜|各回|双回|\d+\s*(?:#|号)\s*主变|\d+\s*kv\s*[iⅠⅡ一二12]*\s*段", text))
+    current = (context_snapshot or {}).get("current_anchors", anchors)
+    candidates = [
+        (str(num), device) for (_, num), device in archive.devices.items()
+    ]
+    aliases = {
+        num for num, device in candidates
+        if any(match_term(normalized(label), text)
+               for label in (device.get("label"), *(device.get("aliases") or [])) if label)
+    }
+    cabinets = anchors.get("cabinets") or []
+    days = anchors.get("days") or []
+    need_cabinet = not group and not current.get("cabinets") and (
+        len(cabinets or aliases) != 1
+    )
+    available_days = archive.days()
+    need_day = not period and not current.get("days") and len(days or available_days) != 1
+    if not (need_cabinet or need_day):
+        if not cabinets and len(aliases) == 1:
+            anchors["cabinets"] = sorted(aliases)
+        if not days and not period and len(available_days) == 1:
+            anchors["days"] = list(available_days)
+        return None
+
+    slots = []
+    options = []
+    if need_cabinet:
+        slots.append("要查的柜号或设备")
+        eligible = cabinets or sorted(aliases) or list(dict.fromkeys(num for num, _ in candidates))
+        options.extend(f"{num} 柜" for num in eligible[:6])
+    if need_day:
+        slots.append("日期或时间窗")
+        options.extend(days or available_days[-7:])
+    return {"question": f"请确认{'和'.join(slots)}。", "options": options}
+
+
+def _update_plan(existing, raw_steps):
+    by_id = {step["id"]: step for step in existing}
+    updated = {}
+    for i, raw in enumerate(raw_steps[:12] if isinstance(raw_steps, list) else []):
+        if not isinstance(raw, dict):
+            continue
+        step_id = str(raw.get("id") or f"s{i + 1}")[:64]
+        if step_id.startswith("auto_") or step_id in updated:
+            continue
+        state = raw.get("status")
+        old = by_id.get(step_id)
+        if old and old["status"] in {"done", "failed"}:
+            state = "running" if state == "running" and old["status"] == "failed" else old["status"]
+        elif state not in {"pending", "running", "skipped"}:
+            state = old["status"] if old else "pending"
+        updated[step_id] = {"id": step_id, "title": old["title"] if old and old["status"] in {"done", "failed"}
+                            else str(raw.get("title") or "排查步骤")[:160], "status": state}
+    return list(updated.values()) + [s for s in existing if s["id"] not in updated]
+
+
 def run_autonomous_agent(
     archive: Any,
     question: str,
@@ -877,18 +950,13 @@ def run_autonomous_agent(
     t0 = time.monotonic()
     toolbox = DiagnosticToolbox(archive)
     known_cabs = {num for _, num in archive.devices}
+    context_snapshot = None
+    prior_anchors = dict(session.active_anchors) if session is not None else None
     if session is not None:
-        effective_question, anchors, _ctx_snap = session.resolve_question(question)
+        effective_question, anchors, context_snapshot = session.resolve_question(question)
     else:
         effective_question = question
         anchors = extract_query_anchors(question, known_cabs)
-    applied_memories = retrieve_relevant_memories(
-        effective_question,
-        cabinets=anchors.get("cabinets"),
-        limit=6,
-        db_path=memory_db_path,
-    )
-
     def emit(ev_type: str, **payload):
         if on_event is not None:
             on_event({"type": ev_type, "ts": round(time.monotonic() - t0, 3), **payload})
@@ -917,11 +985,35 @@ def run_autonomous_agent(
             "artifacts": [],
             "tool_trace": [],
             "verification_badge": badge,
+            "repair_attempted": False,
+            "repair_succeeded": False,
             "ui_artifact_hint": {"canvas": "topology", "focus_cabinet": None, "replay_index": None},
             "elapsed_seconds": round(time.monotonic() - t0, 3),
         }
         emit("done", result=res)
         return res
+
+    clarification = _clarification(archive, question, anchors, context_snapshot)
+    if clarification:
+        if session is not None:
+            session.active_anchors = prior_anchors
+        res = {
+            "status": "clarify", "mode": "autonomous", "answer_markdown": clarification["question"],
+            "clarification_request": clarification, "plan": [], "artifacts": [], "tool_trace": [],
+            "verification_badge": {"status": "unverified", "business_trusted": False, "notes": []},
+            "repair_attempted": False, "repair_succeeded": False,
+            "elapsed_seconds": round(time.monotonic() - t0, 3),
+        }
+        emit("clarification_request", **clarification)
+        emit("done", result=res)
+        return res
+
+    applied_memories = retrieve_relevant_memories(
+        effective_question,
+        cabinets=anchors.get("cabinets"),
+        limit=6,
+        db_path=memory_db_path,
+    )
 
     # 2. Offline / local autonomous mode
     if client is None:
@@ -971,6 +1063,8 @@ def run_autonomous_agent(
                 for t in local_out["tool_trace"]
             ],
             "verification_badge": badge,
+            "repair_attempted": False,
+            "repair_succeeded": False,
             "ui_artifact_hint": hint,
             "elapsed_seconds": round(time.monotonic() - t0, 3),
         }
@@ -1009,26 +1103,23 @@ def run_autonomous_agent(
     code_runs: list[dict[str, Any]] = []
     artifacts: list[dict[str, Any]] = []
     final_answer = ""
+    incomplete_reason = None
+    repair_attempted = repair_succeeded = False
     call_seq = 0
+    local_fallback = False
     step_limit = max(1, min(int(max_steps or 8), 12))
 
     try:
         for step_idx in range(step_limit):
             last_reasoning = ""
-            last_content = ""
 
             def _on_delta(kind: str, full_text: str):
-                nonlocal last_reasoning, last_content
+                nonlocal last_reasoning
                 if kind == "reasoning":
                     delta = full_text[len(last_reasoning) :]
                     if delta:
                         last_reasoning = full_text
                         emit("reasoning_delta", delta=delta, text=full_text)
-                elif kind == "content":
-                    delta = full_text[len(last_content) :]
-                    if delta:
-                        last_content = full_text
-                        emit("content_delta", delta=delta, text=full_text)
 
             is_last_turn = step_idx == step_limit - 1
             msg, _rec = client.chat(
@@ -1045,18 +1136,18 @@ def run_autonomous_agent(
             if full_reasoning and len(full_reasoning) > len(last_reasoning):
                 emit("reasoning_delta", delta=full_reasoning[len(last_reasoning) :], text=full_reasoning)
             full_content = str(msg.get("content") or "")
-            if full_content and len(full_content) > len(last_content):
-                emit("content_delta", delta=full_content[len(last_content) :], text=full_content)
 
             tool_calls = msg.get("tool_calls") or []
             if not tool_calls:
-                final_answer = full_content.strip()
-                # Mark remaining active plan steps done
-                if plan_steps:
-                    for s in plan_steps:
-                        if s["status"] in {"running", "pending"}:
-                            s["status"] = "done"
-                    emit("plan_update", steps=plan_steps)
+                if is_last_turn and any(step["status"] in {"pending", "running"} for step in plan_steps):
+                    incomplete_reason = "step_budget_exhausted"
+                else:
+                    final_answer = full_content.strip()
+                if not final_answer and incomplete_reason is None:
+                    incomplete_reason = "step_budget_exhausted" if is_last_turn else "empty_model_answer"
+                break
+            if is_last_turn:
+                incomplete_reason = "step_budget_exhausted"
                 break
 
             messages.append(msg)
@@ -1074,19 +1165,8 @@ def run_autonomous_agent(
                 cid = str(tc.get("id") or f"c{call_seq}")
 
                 if tname == "update_plan":
-                    raw_steps = targs.get("steps") or []
-                    plan_steps = [
-                        {
-                            "id": str(s.get("id") or f"s{i + 1}"),
-                            "title": str(s.get("title") or "排查步骤"),
-                            "status": str(s.get("status") or "pending")
-                            if s.get("status") in {"pending", "running", "done", "failed"}
-                            else "pending",
-                        }
-                        for i, s in enumerate(raw_steps[:12])
-                        if isinstance(s, dict)
-                    ]
-                    emit("plan_update", steps=plan_steps)
+                    plan_steps = _update_plan(plan_steps, targs.get("steps"))
+                    emit("plan_update", steps=[dict(step) for step in plan_steps])
                     messages.append({
                         "role": "tool",
                         "tool_call_id": cid,
@@ -1094,16 +1174,13 @@ def run_autonomous_agent(
                     })
                     continue
 
-                # Auto-maintain a live visible plan step if the model didn't call update_plan explicitly
-                auto_step_id = None
-                if not plan_steps or all(s["status"] == "done" for s in plan_steps):
-                    auto_step_id = f"auto_{call_seq}"
-                    plan_steps.append({
-                        "id": auto_step_id,
-                        "title": f"执行只读 Python 沙盒分析" if tname == "run_python_analysis" else f"调用只读工具 {tname}",
-                        "status": "running",
-                    })
-                    emit("plan_update", steps=plan_steps)
+                running = [step for step in plan_steps if step["status"] == "running"]
+                if len(running) == 1:
+                    plan_step = running[0]
+                else:
+                    plan_step = {"id": f"auto_{call_seq}", "title": f"调用只读工具 {tname}", "status": "running"}
+                    plan_steps.append(plan_step)
+                    emit("plan_update", steps=[dict(step) for step in plan_steps])
 
                 emit("tool_start", call_id=cid, tool=tname, arguments=targs)
                 t_res = toolbox.execute(tname, targs)
@@ -1130,16 +1207,13 @@ def run_autonomous_agent(
                     ok_flag = t_res.get("status") == "ok"
                     summary = f"沙盒执行 {t_res.get('status')}（{t_res.get('elapsed_ms', 0)} ms，{len(t_res.get('charts') or [])} 图 {len(t_res.get('tables') or [])} 表）"
                 else:
-                    ok_flag = t_res.get("status") != "error"
+                    ok_flag = t_res.get("status") in {"ok", "warning"}
                     summary = _summarize_tool_result(tname, t_res)
 
                 emit("tool_end", call_id=cid, tool=tname, summary=summary, ok=ok_flag)
 
-                if auto_step_id is not None:
-                    for s in plan_steps:
-                        if s["id"] == auto_step_id:
-                            s["status"] = "done" if ok_flag else "failed"
-                    emit("plan_update", steps=plan_steps)
+                plan_step["status"] = "done" if ok_flag else "failed"
+                emit("plan_update", steps=[dict(step) for step in plan_steps])
 
                 compact_res, _stats = compress_tool_result(tname, t_res, anchors)
                 messages.append({
@@ -1147,25 +1221,6 @@ def run_autonomous_agent(
                     "tool_call_id": cid,
                     "content": json.dumps(compact_res, ensure_ascii=False, default=str)[:14000],
                 })
-        if not final_answer.strip():
-            parts: list[str] = ["### 自主排查工具与沙盒执行汇总\n"]
-            for cr in code_runs:
-                if cr.get("stdout"):
-                    parts.append(f"**沙盒计算输出 ({cr.get('status', 'ok')})：**\n```text\n{str(cr['stdout']).strip()[:1200]}\n```\n")
-                elif cr.get("stderr"):
-                    parts.append(f"**沙盒执行异常：** `{str(cr['stderr']).strip()[:240]}`\n")
-                for tbl in cr.get("tables") or []:
-                    cols = tbl.get("columns") or []
-                    rows = (tbl.get("rows") or [])[:5]
-                    if cols and rows:
-                        parts.append(f"**{tbl.get('title', '数据表')}**：" + "；".join(str(r) for r in rows) + "\n")
-            for tr in tool_trace:
-                if tr["tool"] != "run_python_analysis":
-                    parts.append(f"- `{tr['tool']}`：{_summarize_tool_result(tr['tool'], tr['result'])}")
-            if len(parts) == 1:
-                parts.append("已完成检索与计算步骤，请结合上方工具执行回执与图表查看详情。")
-            final_answer = "\n".join(parts).strip()
-            emit("content_delta", delta=final_answer, text=final_answer)
     except LLMError as exc:
         # Seamless fallback to local autonomous sandbox so user never sees a dead screen
         local_out = _run_local_autonomous(
@@ -1176,13 +1231,51 @@ def run_autonomous_agent(
             emit,
             fallback_note=f"模型端点暂不可用（{exc}），已自动切换至本地自主沙盒引擎完成计算。",
         )
+        local_fallback = True
         final_answer = local_out["answer_markdown"]
         plan_steps = local_out["plan"]
         artifacts = local_out["artifacts"]
         tool_trace = local_out["tool_trace"]
         code_runs = local_out["code_runs"]
 
+    for step in plan_steps:
+        if step["status"] in {"running", "pending"}:
+            step["status"] = "skipped"
+    emit("plan_update", steps=[dict(step) for step in plan_steps])
+
     badge = _compute_verification_badge(archive, final_answer, tool_trace, code_runs)
+    if incomplete_reason:
+        badge.update(status="unverified", business_trusted=False, notes=["本轮未形成可核验的答复。"])
+    if badge["status"] == "failed":
+        repair_attempted = True
+        emit("verification_repair", status="attempted", notes=badge["notes"])
+        try:
+            revised, _ = client.chat(
+                [*messages, {"role": "assistant", "content": final_answer},
+                 {"role": "user", "content": (
+                     "逐项修正以下核验失败原因，仅使用本轮已取得的只读回执。"
+                     "删去无法支持的断言，直接返回完整 Markdown 答复。\n"
+                     + json.dumps(badge["notes"], ensure_ascii=False)
+                 )}],
+                max_tokens=3072, stream=False,
+            )
+            candidate = str(revised.get("content") or "").strip()
+            if candidate and not revised.get("tool_calls"):
+                corrected = _compute_verification_badge(archive, candidate, tool_trace, code_runs)
+                if corrected["status"] == "verified":
+                    final_answer, badge = candidate, corrected
+                    repair_succeeded = True
+        except LLMError:
+            pass
+        emit("verification_repair", status="succeeded" if repair_succeeded else "failed")
+    status = "ok"
+    if incomplete_reason:
+        status = "incomplete"
+    elif badge["status"] == "failed":
+        status = "verification_failed"
+        final_answer = "本轮答复未通过证据核验。请查看工具回执和核验原因。"
+    if final_answer and (not local_fallback or repair_attempted):
+        _stream_markdown_chunks(final_answer, emit)
     emit("verification_badge", **badge)
     hint = _infer_ui_artifact_hint(effective_question, anchors, tool_trace)
     rec_action = _infer_recommended_action(
@@ -1195,18 +1288,23 @@ def run_autonomous_agent(
         cabinets=anchors.get("cabinets"),
         existing_memories=applied_memories,
     )
+    if status != "ok":
+        rec_action, dr_goal, mem_suggestions = None, "", []
     if mem_suggestions:
         emit("memory_suggestion", suggestions=mem_suggestions)
-    if session is not None and hasattr(session, "record_autonomous_turn"):
+    if status == "ok" and session is not None and hasattr(session, "record_autonomous_turn"):
         session.record_autonomous_turn(
             question,
             final_answer,
             verified_cells=list(dict.fromkeys(_INLINE_CELL_RE.findall(final_answer)))[:6],
         )
     result = {
-        "status": "ok",
-        "mode": "autonomous_model",
-        "model": client.model,
+        "status": status,
+        **({"incomplete_reason": incomplete_reason} if incomplete_reason else {}),
+        "repair_attempted": repair_attempted,
+        "repair_succeeded": repair_succeeded,
+        "mode": "autonomous_local" if local_fallback else "autonomous_model",
+        "model": None if local_fallback else client.model,
         "answer_markdown": final_answer,
         "plan": plan_steps,
         "artifacts": artifacts,

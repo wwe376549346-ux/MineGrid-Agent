@@ -17,6 +17,7 @@ Enterprise Capabilities:
 from __future__ import annotations
 
 import asyncio
+import base64
 from collections import Counter
 from contextlib import contextmanager, suppress
 import csv
@@ -35,7 +36,7 @@ from pathlib import Path
 import sqlite3
 from threading import Lock
 import time
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 from urllib.parse import quote, unquote, urlsplit
 import uuid
 
@@ -72,6 +73,8 @@ from laowadi.schemas import (
     DAGRunRequest,
     DeepResearchRequest,
     DiagnoseRequest,
+    FeedbackCreateRequest,
+    FeedbackExportRequest,
     GraphDemoRequest,
     HealthzResponse,
     JobSubmitRequest,
@@ -82,7 +85,9 @@ from laowadi.schemas import (
     MemoryCategory,
     MemoryCreateRequest,
     MemoryPatchRequest,
+    MemoryPruneRequest,
     MultiAgentConsultRequest,
+    MultimodalIntakeJsonRequest,
     OutboxDispatchRequest,
     PowerFlowRequest,
     ProactiveReconcileRequest,
@@ -140,6 +145,7 @@ COMPUTE_RATE_LIMITED_PATHS = {
     "/api/powerflow",
     *READ_ONLY_COMPUTE_PATHS,
     "/api/multi-agent/consult",
+    "/api/intake/image",
     "/api/jobs",
 }
 
@@ -157,6 +163,10 @@ AUDITED_PATHS = {
     "/api/live/upload-report",
     "/api/actions/tickets/draft",
     "/api/memory",
+    "/api/memory/prune-expired",
+    "/api/feedback",
+    "/api/feedback/export-negative",
+    "/api/intake/image",
     "/api/skills",
     "/api/mcp/clients",
     "/api/sandbox/run",
@@ -176,7 +186,8 @@ AUDITED_PATHS = {
 
 AUTONOMOUS_EVENT_TYPES = {
     "plan_update", "reasoning_delta", "tool_start", "tool_end", "code_run",
-    "artifact", "content_delta", "verification_badge", "memory_suggestion", "done", "error",
+    "artifact", "content_delta", "verification_badge", "verification_repair",
+    "clarification_request", "memory_suggestion", "done", "error",
 }
 DEBATE_EVENT_TYPES = {"subagent_start", "subagent_done", "debate_rebuttal", "arbitration_done", "done", "error"}
 RESEARCH_EVENT_TYPES = {
@@ -407,6 +418,7 @@ def create_app(
     max_age_hours = float(os.environ.get("LAOWADI_MAX_DATA_AGE_HOURS", "0"))
     runtime_dir = workbench.sessions_db.parent
     memory_db_path = runtime_dir / "laowadi_memory.sqlite3"
+    feedback_db_path = runtime_dir / "laowadi_feedback.sqlite3"
     reports_dir = runtime_dir / "deep_reports"
     live_db_path = runtime_dir / "laowadi_live.sqlite3"
     actions_db_path = runtime_dir / "laowadi_actions.sqlite3"
@@ -897,6 +909,10 @@ def create_app(
         actor = getattr(request.state, "actor", "dispatcher")
         return workbench.create_ticket(req.model_dump(), actor=actor)
 
+    @app.get("/api/tickets/groups", tags=["Incident Tickets & Proactive Watcher"])
+    def api_list_incident_groups(status: str | None = Query(default="active")):
+        return workbench.list_incident_groups(status=status)
+
     @app.get("/api/tickets/{ticket_id}", tags=["Incident Tickets & Proactive Watcher"])
     def api_get_ticket(ticket_id: str):
         return workbench.get_ticket(unquote(ticket_id))
@@ -918,6 +934,14 @@ def create_app(
     def api_transition_ticket(ticket_id: str, req: TicketTransitionRequest, request: Request):
         actor = getattr(request.state, "actor", "值班员")
         return workbench.transition_ticket(unquote(ticket_id), req.model_dump(), default_actor=actor)
+
+    @app.post("/api/tickets/{ticket_id}/distill-memory", tags=["Incident Tickets & Proactive Watcher"])
+    def api_distill_ticket_memory(ticket_id: str):
+        detail = workbench.get_ticket(unquote(ticket_id))
+        distill = memory_runner("distill_ticket_memory_candidate")
+        existing = memory_runner("list_memories")(include_expired=True, db_path=memory_db_path)
+        cand = distill(detail, existing_memories=existing)
+        return {"ticket_id": detail["ticket_id"], "candidate": cand, "requires_human_confirmation": True}
 
     @app.get("/api/proactive/status", tags=["Incident Tickets & Proactive Watcher"])
     def api_proactive_status():
@@ -1212,6 +1236,9 @@ def create_app(
                     plan = payload.get("steps", payload.get("plan", payload.get("items", payload.get("todos", plan))))
                 elif kind == "memory_suggestion":
                     record_advanced(memory_suggestions=len(payload.get("suggestions") or [payload]))
+                elif kind == "verification_repair":
+                    if payload.get("status") == "succeeded":
+                        content.clear()
                 elif kind == "verification_badge":
                     badge = payload.get("verification", payload.get("badge", payload))
                 elif kind in ("content_delta", "reasoning_delta"):
@@ -1269,11 +1296,23 @@ def create_app(
                             workbench._diag_sessions.pop(session_id, None)
                     final_badge = result.get("verification_badge") or {}
                     trusted = final_badge.get("business_trusted", final_badge.get("trusted"))
+                    is_clarify = result.get("status") == "clarify"
+                    with suppress(Exception):
+                        from laowadi.llmops import GLOBAL_LLMOPS
+
+                        GLOBAL_LLMOPS.record_step_trace(
+                            mode="autonomous",
+                            stage="autonomous_turn",
+                            latency_ms=float(result.get("elapsed_seconds") or 0.0) * 1000.0,
+                            status=str(result.get("status") or "ok"),
+                            tool_count=len(trace or tools),
+                            error=str(result.get("incomplete_reason") or ""),
+                        )
                     record_advanced(
                         autonomous_turns=1, sandbox_runs=len(runs),
                         sandbox_successes=sum(run.get("status") in ("ok", "completed", "success") for run in runs),
-                        verification_samples=int(bool(final_badge)),
-                        verified_turns=int(trusted is True or (trusted is None and final_badge.get("status") in ("verified", "passed"))),
+                        verification_samples=int(bool(final_badge) and not is_clarify),
+                        verified_turns=int((not is_clarify) and (trusted is True or (trusted is None and final_badge.get("status") in ("verified", "passed")))),
                     )
                     finished = True
                     event = {**event, "session_id": session_id, "result": result}
@@ -1452,8 +1491,15 @@ def create_app(
         def percent(successes, samples):
             return round(100 * counts[successes] / counts[samples], 2) if counts[samples] else None
 
+        fb_summary: dict[str, Any] = {}
+        with suppress(Exception):
+            from laowadi.feedback_store import feedback_summary as _get_fb_summary
+
+            fb_summary = _get_fb_summary(db_path=feedback_db_path)
+
         return {
             **operational, "llmops": summary,
+            "feedback": fb_summary,
             "scope": "api_worker", "worker_pid": os.getpid(),
             "ttft_ms_avg": summary["ttft_ms_avg"] if summary["ttft_ms_avg"] > 0 else None,
             "ttft_ms_p95": summary["ttft_ms_p95"] if summary["ttft_ms_p95"] > 0 else None,
@@ -1467,33 +1513,164 @@ def create_app(
         return _load_optional_runner("memory_store", name, "长期记忆模块暂未就绪。")
 
     @app.get("/api/memory", tags=["Operational Memory"])
-    def api_list_memory(category: MemoryCategory | None = None, enabled_only: bool = False):
-        items = memory_runner("list_memories")(category=category, enabled_only=enabled_only, db_path=memory_db_path)
+    def api_list_memory(
+        category: MemoryCategory | None = None,
+        enabled_only: bool = False,
+        include_expired: bool | None = None,
+    ):
+        items = memory_runner("list_memories")(
+            category=category,
+            enabled_only=enabled_only,
+            include_expired=include_expired,
+            db_path=memory_db_path,
+        )
         return {"memories": items}
 
     @app.post("/api/memory", tags=["Operational Memory"], status_code=201)
     def api_create_memory(req: MemoryCreateRequest, request: Request):
-        create_memory = memory_runner("create_memory")
-        memory = create_memory(**req.model_dump(), source=request.state.actor, db_path=memory_db_path)
+        create_with_report = memory_runner("create_memory_with_report")
+        try:
+            out = create_with_report(**req.model_dump(), source=request.state.actor, db_path=memory_db_path)
+        except ValueError as exc:
+            raise RequestError(400, str(exc)) from None
         record_advanced(memory_writes=1)
-        return {"memory": memory}
+        return {
+            "memory": out["memory"],
+            "conflicts": out["conflicts"],
+            "superseded_memory_ids": out["superseded_memory_ids"],
+        }
+
+    @app.post("/api/memory/prune-expired", tags=["Operational Memory"])
+    def api_prune_expired_memory(req: MemoryPruneRequest | None = None):
+        prune = memory_runner("prune_expired_memories")
+        return prune(disable_only=(req.disable_only if req else True), db_path=memory_db_path)
 
     @app.patch("/api/memory/{memory_id}", tags=["Operational Memory"])
     def api_update_memory(memory_id: str, req: MemoryPatchRequest):
-        update_memory = memory_runner("update_memory")
+        update_with_report = memory_runner("update_memory_with_report")
         changes = req.model_dump(exclude_none=True)
         if not changes:
-            raise RequestError(400, "请提供启用状态或记忆内容。")
-        memory = update_memory(memory_id, **changes, db_path=memory_db_path)
-        if memory is None:
+            raise RequestError(400, "请提供启用状态、有效期或记忆内容。")
+        try:
+            out = update_with_report(memory_id, **changes, db_path=memory_db_path)
+        except ValueError as exc:
+            raise RequestError(400, str(exc)) from None
+        if out is None:
             raise RequestError(404, "未找到这条长期记忆。")
-        return {"memory": memory}
+        return {
+            "memory": out["memory"],
+            "conflicts": out["conflicts"],
+            "superseded_memory_ids": out["superseded_memory_ids"],
+        }
 
     @app.delete("/api/memory/{memory_id}", tags=["Operational Memory"])
     def api_delete_memory(memory_id: str):
         if not memory_runner("delete_memory")(memory_id, db_path=memory_db_path):
             raise RequestError(404, "未找到这条长期记忆。")
         return {"deleted": True, "id": memory_id}
+
+    def feedback_runner(name: str):
+        return _load_optional_runner("feedback_store", name, "操作员反馈库暂未就绪。")
+
+    @app.post("/api/feedback", tags=["AgentOps Feedback"], status_code=201)
+    def api_record_feedback(req: FeedbackCreateRequest, request: Request):
+        rec = feedback_runner("record_feedback")
+        row = rec(
+            **req.model_dump(),
+            actor=getattr(request.state, "actor", "operator"),
+            db_path=feedback_db_path,
+        )
+        return {"feedback": row}
+
+    @app.get("/api/feedback", tags=["AgentOps Feedback"])
+    def api_list_feedback(
+        verdict: str | None = None,
+        target_type: str | None = None,
+        negative_only: bool = False,
+        limit: int = Query(default=50, ge=1, le=200),
+    ):
+        try:
+            items = feedback_runner("list_feedback")(
+                verdict=verdict,
+                target_type=target_type,
+                negative_only=negative_only,
+                limit=limit,
+                db_path=feedback_db_path,
+            )
+        except ValueError as exc:
+            raise RequestError(400, str(exc)) from None
+        summary = feedback_runner("feedback_summary")(db_path=feedback_db_path)
+        return {"items": items, "summary": summary}
+
+    @app.post("/api/feedback/export-negative", tags=["AgentOps Feedback"])
+    def api_export_negative_feedback(req: FeedbackExportRequest | None = None):
+        opts = req or FeedbackExportRequest()
+        return feedback_runner("export_negative_eval_cases")(
+            mark_exported=opts.mark_exported,
+            include_exported=opts.include_exported,
+            limit=opts.limit,
+            db_path=feedback_db_path,
+        )
+
+    @app.post("/api/intake/image", tags=["Multimodal Field Intake"])
+    async def api_intake_image(request: Request):
+        extract = _load_optional_runner("multimodal_intake", "extract_field_candidates", "多模态现场取证模块暂未就绪。")
+        content_type = request.headers.get("content-type", "")
+        media_type = content_type.partition(";")[0].strip().lower()
+        if media_type not in {"application/json", "multipart/form-data"}:
+            raise RequestError(415, "请使用 multipart/form-data 上传图片文件，或提交 JSON base64 载荷。")
+
+        max_image_bytes = 8 * 1024 * 1024
+        raw = bytearray()
+        async for chunk in request.stream():
+            if len(raw) + len(chunk) > max_image_bytes + 4_194_304:
+                raise RequestError(413, "上传载荷超过限制，单张现场照片最大 8 MiB。")
+            raw.extend(chunk)
+
+        hint = ""
+        mode = "auto"
+        if media_type == "application/json":
+            try:
+                req_obj = MultimodalIntakeJsonRequest.model_validate_json(bytes(raw))
+                mime_type = req_obj.mime_type
+                hint = req_obj.hint
+                mode = req_obj.mode
+                image_bytes = base64.b64decode(req_obj.image_base64, validate=True)
+            except (ValidationError, ValueError) as exc:
+                raise RequestError(400, "图片 JSON 载荷或 base64 编码无效。") from exc
+        else:
+            header = ("Content-Type: " + content_type + "\r\n\r\n").encode("ascii")
+            form = BytesParser(policy=policy.default).parsebytes(header + bytes(raw))
+            if form.defects:
+                raise RequestError(400, "multipart 图片表单解析失败。")
+            file_part = None
+            for part in form.iter_parts():
+                if part.get_content_disposition() != "form-data":
+                    continue
+                pname = part.get_param("name", header="content-disposition")
+                if pname == "file" and not part.is_multipart():
+                    file_part = part
+                elif pname == "hint":
+                    hint = (part.get_payload(decode=True) or b"").decode("utf-8", errors="ignore").strip()[:1000]
+                elif pname == "mode":
+                    cand_mode = (part.get_payload(decode=True) or b"").decode("utf-8", errors="ignore").strip()
+                    if cand_mode in {"auto", "local", "deepseek"}:
+                        mode = cand_mode
+            if file_part is None:
+                raise RequestError(400, "请在 file 字段上传 PNG/JPEG/WebP 现场照片。")
+            image_bytes = file_part.get_payload(decode=True) or b""
+            mime_type = (file_part.get_content_type() or "image/png").strip().lower()
+
+        if len(image_bytes) > max_image_bytes:
+            raise RequestError(413, "图片文件最多 8 MiB。")
+
+        client = _stream_model_client(mode, workbench.model)
+        result = await anyio.to_thread.run_sync(
+            lambda: extract(image_bytes, mime_type, client=client, hint=hint)
+        )
+        if result.get("status") == "invalid_image":
+            raise RequestError(400, "上传内容不是受支持的 PNG/JPEG/WebP 现场图片。")
+        return result
 
     def research_runner(name: str):
         return _load_optional_runner("deep_research", name, "深度排查模块暂未就绪。")

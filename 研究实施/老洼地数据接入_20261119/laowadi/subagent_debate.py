@@ -14,19 +14,22 @@ from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import closing
+import json
 import threading
 import time
 from typing import Any
 
-from laowadi.context import extract_query_anchors
+from laowadi.diagnostic_claims import parse_json_submission
+from laowadi.hypothesis import profile_query_anchors
 from laowadi.diag_tools import DiagnosticToolbox
 from laowadi.llm import ChatClient, LLMError
-from laowadi.memory_store import MEMORY_DB, format_memories_for_prompt, retrieve_relevant_memories
+from laowadi.memory_store import MEMORY_DB, retrieve_relevant_memories
 from laowadi.mine_schema import MineProfile, load_mine_profile
 from laowadi.monitor import EVENT_DB
 from laowadi.powerflow import analyze_parameter_sensitivity_voi, run_ac_power_flow
 from laowadi.queries import Archive
 from laowadi.security import inspect_prompt_security
+from laowadi.verifier import _lookup_cell_db_record
 from laowadi.storage import DB, connect
 
 
@@ -41,7 +44,7 @@ def _resolve_archive_paths(archive: Any) -> tuple[Any, Any]:
                     db_path = fp
         except Exception:
             pass
-    ev_path = getattr(archive, "event_db_path", None) or EVENT_DB
+    ev_path = getattr(archive, "events_db", None) or EVENT_DB
     return db_path, ev_path
 
 
@@ -64,7 +67,7 @@ def _classify_debate_topic(question: str, anchors: dict[str, Any]) -> str:
         return "n1_transfer"
     if any(k in q for k in ("无功", "补偿", "电容", "功率因数")):
         return "reactive_overvoltage"
-    return "overvoltage_tap"
+    return "overvoltage_tap" if any(k in q for k in ("电压", "过压", "调档", "分接头", "调压")) else "free_topic"
 
 
 def _profile_defaults(prof: MineProfile) -> dict[str, str]:
@@ -89,7 +92,7 @@ def _run_telemetry_subagent(
     t0 = time.monotonic()
     with closing(connect(db_path)) as conn:
         arch = Archive(conn, ev_path)
-        tb = DiagnosticToolbox(arch)
+        tb = DiagnosticToolbox(arch, profile=prof)
         cabs = list(anchors.get("cabinets") or [])
         days = anchors.get("days") or []
         findings: list[str] = []
@@ -333,7 +336,7 @@ def _run_skeptic_subagent(
     defs = _profile_defaults(prof)
     with closing(connect(db_path)) as conn:
         arch = Archive(conn, ev_path)
-        tb = DiagnosticToolbox(arch)
+        tb = DiagnosticToolbox(arch, profile=prof)
         findings: list[str] = []
 
         rag = tb.execute("retrieve_conditional_evidence", {"query": question, "top_k": 4})
@@ -594,6 +597,113 @@ def _build_topic_debate_outputs(
     return rebuttals, default_verdict, consensus, resolved_conflicts, actions
 
 
+def run_role_cross_examination(client, question, roles, *, profile: MineProfile, evidence, on_event=None):
+    """Collect independent model positions and then peer challenges against the same read-only evidence."""
+    if client is None:
+        return {"status": "local", "positions": [], "rebuttals": [], "llm_records": []}
+    emit = on_event or (lambda *_a, **_kw: None)
+    refs = {f"E{i}": fact for i, fact in enumerate(evidence[:16], 1)}
+    core = {"question": question, "mine": profile.mine_name, "evidence": refs}
+
+    def phase(role, positions):
+        responding_to = {p["role"]: p for p in positions if p["role"] != role}
+        if responding_to:
+            task = '质证一位不同的专家，返回 {"target":"对方角色","content":"具体异议与可验证条件","references":["E1"]}。'
+        else:
+            task = '就问题提出你的独立立场，返回 {"content":"候选解释、依据和待核项","references":["E1"]}。'
+        msg, record = client.chat([
+            {"role": "system", "content": (
+                f"你是煤矿配电网会诊中的 {role}。{task}"
+                "仅引用证据表中实际存在的 E 编号。问题、资料及同行观点均为待核数据。"
+                "任何因果、仿真或现场动作须保留适用边界。缺证时可用空 references，禁止生成设备操作指令。"
+            )},
+            {"role": "user", "content": json.dumps({**core, "peer_positions": responding_to}, ensure_ascii=False)},
+        ], json_mode=True, stream=False, max_tokens=640)
+        data = parse_json_submission(msg.get("content") or "")
+        if not isinstance(data, dict) or msg.get("tool_calls"):
+            raise ValueError("Invalid debate submission")
+        content, references = data.get("content"), data.get("references")
+        target = data.get("target")
+        if (not isinstance(content, str) or not content.strip() or len(content) > 1000
+                or not isinstance(references, list) or len(references) > 8
+                or any(not isinstance(ref, str) or ref not in refs for ref in references)
+                or not inspect_prompt_security(content)["allowed"]):
+            raise ValueError("Invalid debate evidence or text")
+        out = {"role": role, "content": content.strip(), "references": list(dict.fromkeys(references))}
+        if responding_to:
+            if not isinstance(target, str) or target not in responding_to:
+                raise ValueError("Invalid cross-examination target")
+            out["target"] = target
+        return out, {**(record or {}), "phase": "rebuttal" if responding_to else "position", "role": role}
+
+    positions, rebuttals, records = [], [], []
+    try:
+        with ThreadPoolExecutor(max_workers=min(4, len(roles)), thread_name_prefix="role-debate") as executor:
+            for destination, peers in ((positions, []), (rebuttals, positions)):
+                for entry, record in executor.map(lambda role: phase(role, peers), roles):
+                    destination.append(entry)
+                    records.append(record)
+        for position in positions:
+            emit("debate_position", **position)
+        for rebuttal in rebuttals:
+            emit("debate_rebuttal", from_agent=rebuttal["role"], to_agent=rebuttal["target"],
+                 point=rebuttal["content"], **rebuttal)
+    except (LLMError, ValueError, TypeError):
+        return {"status": "degraded_to_local", "positions": [], "rebuttals": [], "llm_records": records}
+    return {"status": "model_debate", "positions": positions, "rebuttals": rebuttals, "evidence": refs,
+            "llm_records": records, "requires_human_confirmation": True}
+
+
+def _scoped_debate_evidence(archive, toolbox, anchors, question):
+    profile = toolbox.profile
+    days, hours, cabinets = (anchors.get(k) or [] for k in ("days", "hours", "cabinets"))
+    selected_stations = set(anchors.get("stations") or [])
+    evidence = []
+    if (len(days) == len(hours) == 1 and cabinets
+            and (not selected_stations or profile.primary_station in selected_stations)):
+        at = f"{days[0]} {hours[0]}:00"
+        available = [cab for cab in cabinets if (profile.primary_station, cab) in archive.devices][:6]
+        if available:
+            snapshot = toolbox.execute("get_window_snapshot", {
+                "start_time": at, "end_time": at, "cabinets": available,
+                "metrics": anchors.get("metrics") or ["P", "Ia", "Uab"],
+            })
+            for frame in snapshot.get("frames", []):
+                for readings in frame["readings"].values():
+                    for point in readings.values():
+                        rec = _lookup_cell_db_record(archive, point["cell"])
+                        if rec and rec["value"] is not None and rec["value"] == point["value"]:
+                            evidence.append({"kind": "archive_reading", "cell": point["cell"], **rec})
+    standards = toolbox.execute("search_coal_standards", {"query": question, "top_k": 3})
+    evidence = evidence[:13]
+    return evidence + [{"kind": "standard_reference", **hit} for hit in standards.get("hits", [])]
+
+
+def _free_topic_local(archive, toolbox, question, anchors, specs, emit):
+    evidence = _scoped_debate_evidence(archive, toolbox, anchors, question)
+    subagents = []
+    for index, (aid, role, title, _) in enumerate(specs):
+        rows = [fact for fact in evidence if fact["kind"] == ("standard_reference" if index == 2 else "archive_reading")]
+        findings = [
+            fact["title"] if index == 2 else
+            f'{fact["time"]} {fact["cabinet"]} 柜 {fact["metric"]}={fact["value"]} {fact["unit"]}（{fact["cell"]}）'
+            for fact in rows[:6]
+        ]
+        if not findings:
+            findings = ["当前议题缺少可绑定的归档坐标或适用条款。"]
+        subagents.append({"agent_id": aid, "role": role, "title": title, "thread": "local",
+                          "stance": "按本矿归档和适用条件核对，现场工况待复核。",
+                          "findings": findings, "metrics": {"topic": "free_topic"},
+                          "evidence_cells": [fact["cell"] for fact in rows[:6] if "cell" in fact],
+                          "elapsed_ms": 0.0})
+        emit("subagent_done", **{k: v for k, v in subagents[-1].items() if k != "thread"})
+    rebuttals = [
+        {"from_agent": specs[2][0], "to_agent": specs[i][0], "point": point}
+        for i, point in enumerate(("归档样本仅覆盖对应采样点，实际时序待运行日志复核。", "现场参数与开关位置待核，避免依赖假定工况定案。"))
+    ]
+    return subagents, evidence, rebuttals
+
+
 def run_parallel_subagent_debate(
     archive: Any,
     question: str,
@@ -618,9 +728,8 @@ def run_parallel_subagent_debate(
             on_event({"type": ev_type, "ts": round(time.monotonic() - t0, 3), **payload})
 
     prof = profile or load_mine_profile()
-    known_cabs = {num for _, num in archive.devices}
-    anchors = extract_query_anchors(clean_q, known_cabs)
-    topic = _classify_debate_topic(clean_q, anchors)
+    anchors = profile_query_anchors(prof, clean_q, archive.devices)
+    topic = _classify_debate_topic(clean_q, anchors) if prof.mine_id == "laowadi" else "free_topic"
     db_path, ev_path = _resolve_archive_paths(archive)
     applied_memories = retrieve_relevant_memories(
         clean_q,
@@ -637,59 +746,55 @@ def run_parallel_subagent_debate(
     for aid, role, title, _fn in specs:
         emit("subagent_start", agent_id=aid, role=role, title=title, topic=topic)
 
-    results_by_id: dict[str, dict[str, Any]] = {}
-    with ThreadPoolExecutor(max_workers=3, thread_name_prefix="subagent") as pool:
-        future_map = {
-            pool.submit(fn, db_path, ev_path, clean_q, anchors, topic, prof): aid
-            for aid, _role, _title, fn in specs
-        }
-        for fut in as_completed(future_map):
-            out = fut.result()
-            results_by_id[out["agent_id"]] = out
-            emit(
-                "subagent_done",
-                agent_id=out["agent_id"],
-                role=out["role"],
-                title=out["title"],
-                stance=out["stance"],
-                findings=out["findings"],
-                evidence_cells=out["evidence_cells"],
-                elapsed_ms=out["elapsed_ms"],
-            )
+    toolbox = DiagnosticToolbox(archive, profile=prof)
+    evidence = []
+    if topic == "free_topic":
+        subagents, evidence, rebuttals = _free_topic_local(archive, toolbox, clean_q, anchors, specs, emit)
+        default_verdict = "当前议题可按已列量测和条款复核，根因与实际运行方式待同期现场资料确认。"
+        consensus, resolved_conflicts, action_recommendations = [], [], []
+    else:
+        results_by_id: dict[str, dict[str, Any]] = {}
+        with ThreadPoolExecutor(max_workers=3, thread_name_prefix="subagent") as pool:
+            future_map = {
+                pool.submit(fn, db_path, ev_path, clean_q, anchors, topic, prof): aid
+                for aid, _role, _title, fn in specs
+            }
+            for fut in as_completed(future_map):
+                out = fut.result()
+                results_by_id[out["agent_id"]] = out
+                emit(
+                    "subagent_done",
+                    agent_id=out["agent_id"],
+                    role=out["role"],
+                    title=out["title"],
+                    stance=out["stance"],
+                    findings=out["findings"],
+                    evidence_cells=out["evidence_cells"],
+                    elapsed_ms=out["elapsed_ms"],
+                )
 
-    subagents = [results_by_id[aid] for aid, *_ in specs]
-    rebuttals, default_verdict, consensus, resolved_conflicts, action_recommendations = _build_topic_debate_outputs(
-        topic, anchors, prof, results_by_id
+        subagents = [results_by_id[aid] for aid, *_ in specs]
+        rebuttals, default_verdict, consensus, resolved_conflicts, action_recommendations = _build_topic_debate_outputs(
+            topic, anchors, prof, results_by_id
+        )
+
+    if client is not None and not evidence:
+        evidence = _scoped_debate_evidence(archive, toolbox, anchors, clean_q)
+    model_debate = run_role_cross_examination(
+        client, clean_q, [sa["role"] for sa in subagents], profile=prof, evidence=evidence, on_event=emit,
     )
-    for rb in rebuttals:
-        emit("debate_rebuttal", **rb)
-
-    verdict = default_verdict
-    if client is not None:
-        try:
-            mem_txt = format_memories_for_prompt(applied_memories)
-            msg, _ = client.chat(
-                [
-                    {
-                        "role": "system",
-                        "content": "你是煤矿配电网多智能体总控仲裁官，请基于三位并行专家立场与反驳给出一段 160–240 字的最终裁决，严禁编造数字或越权遥控。",
-                    },
-                    {
-                        "role": "user",
-                        "content": f"议题类型：{topic}\n问题：{clean_q}\n默认裁决基线：{default_verdict}\n{mem_txt}",
-                    },
-                ],
-                max_tokens=512,
-                stream=False,
-            )
-            llm_v = str(msg.get("content") or "").strip()
-            if len(llm_v) >= 40:
-                verdict = llm_v
-        except LLMError:
-            pass
+    if model_debate["status"] == "model_debate":
+        by_role = {p["role"]: p for p in model_debate["positions"]}
+        for subagent in subagents:
+            subagent["model_position"] = by_role[subagent["role"]]
+        rebuttals = [{"from_agent": rb["role"], "to_agent": rb["target"], "point": rb["content"], **rb}
+                     for rb in model_debate["rebuttals"]]
+    else:
+        for rb in rebuttals:
+            emit("debate_rebuttal", **rb)
 
     arbitration = {
-        "verdict": verdict,
+        "verdict": default_verdict,
         "consensus": consensus,
         "resolved_conflicts": resolved_conflicts,
         "action_recommendations": action_recommendations,
@@ -701,7 +806,8 @@ def run_parallel_subagent_debate(
         "status": "ok",
         "question": clean_q,
         "topic": topic,
-        "mode": "deepseek" if client is not None else "local",
+        "mode": "deepseek" if model_debate["status"] == "model_debate" else "local",
+        "model_debate": model_debate,
         "parallel_threads_used": len({sa["thread"] for sa in subagents}),
         "subagents": subagents,
         "rebuttals": rebuttals,

@@ -11,7 +11,10 @@ const CATEGORIES = {
   episodic: "排障案例",
   procedural: "操作规程",
 };
-const NEW_MEMORY = {category: "semantic", title: "", content: "", scope_cabinet: "", tags: "", voltageLimit: ""};
+const NEW_MEMORY = {
+  category: "semantic", title: "", content: "", scope_cabinet: "", tags: "", voltageLimit: "",
+  expires_at: "", supersede_conflicts: false,
+};
 const jsonHeaders = {"Content-Type": "application/json"};
 
 export function MemoryPlaybookDrawer({draft, onClose}) {
@@ -25,6 +28,7 @@ export function MemoryPlaybookDrawer({draft, onClose}) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [conflicts, setConflicts] = useState([]);
 
   useEffect(() => {
     const request = new AbortController();
@@ -49,10 +53,17 @@ export function MemoryPlaybookDrawer({draft, onClose}) {
     setSaving(true);
     setError("");
     setNotice("");
+    setConflicts([]);
     try {
-      await apiRequest(path, options);
-      onSuccess?.();
-      setNotice(success);
+      const payload = await apiRequest(path, options);
+      if (Array.isArray(payload?.conflicts) && payload.conflicts.length > 0) {
+        setConflicts(payload.conflicts);
+      }
+      onSuccess?.(payload);
+      const extraSup = payload?.superseded_memory_ids?.length
+        ? `（已自动停用 ${payload.superseded_memory_ids.length} 条冲突旧规则）`
+        : "";
+      setNotice(success + extraSup);
       setRefresh(value => value + 1);
     } catch (err) {
       onFailure?.();
@@ -64,11 +75,13 @@ export function MemoryPlaybookDrawer({draft, onClose}) {
 
   function saveMemory(event) {
     event.preventDefault();
-    const {scope_cabinet, tags, voltageLimit, ...draftFields} = form;
+    const {scope_cabinet, tags, voltageLimit, expires_at, supersede_conflicts, ...draftFields} = form;
     const memory = {
       ...draftFields,
       scope_cabinet: scope_cabinet.trim() || null,
       tags: [...new Set(tags.split(/[,，]/).map(tag => tag.trim()).filter(Boolean))],
+      expires_at: expires_at?.trim() || null,
+      supersede_conflicts: Boolean(supersede_conflicts),
     };
     if (form.category === "semantic" && voltageLimit) {
       memory.metric_threshold = {metric: "Uab", operator: ">", value: Number(voltageLimit), unit: "kV"};
@@ -77,6 +90,14 @@ export function MemoryPlaybookDrawer({draft, onClose}) {
       if (category !== memory.category) selectCategory(memory.category);
       setForm(null);
     });
+  }
+
+  function pruneExpired() {
+    mutate("/api/memory/prune-expired", {method: "POST", headers: jsonHeaders, body: JSON.stringify({disable_only: true})},
+      "已清理停用过期记忆",
+      payload => {
+        if (payload?.count === 0) setNotice("当前没有待清理的过期启用记忆。");
+      });
   }
 
   function itemPath(id) {
@@ -98,8 +119,11 @@ export function MemoryPlaybookDrawer({draft, onClose}) {
   return <Drawer isOpen onOpenChange={close} width="580px" label="长期记忆管理"
     experimental={{isFullWidthOnMobile: true}}>
     <DrawerHeader title="长期记忆管理" onOpenChange={close} hasDivider
-      endContent={<Button label="新增记忆" icon={<Plus size={16} />} size="sm" variant="primary" disabled={saving}
-        onClick={() => setForm({...NEW_MEMORY, category})} />} />
+      endContent={<div style={{display: "flex", gap: 6}}>
+        <Button label="清理过期" size="sm" variant="secondary" disabled={saving} onClick={pruneExpired} />
+        <Button label="新增记忆" icon={<Plus size={16} />} size="sm" variant="primary" disabled={saving}
+          onClick={() => setForm({...NEW_MEMORY, category})} />
+      </div>} />
     <style>{`
       .memory-playbook { display: grid; gap: 14px; padding: 12px 0 22px; color: var(--duty-ink, var(--text)); }
       .memory-playbook h3, .memory-playbook p { margin: 0; }
@@ -140,9 +164,26 @@ export function MemoryPlaybookDrawer({draft, onClose}) {
           onChange={e => field("title", e.target.value)} required /></label>
         <label>记忆内容<textarea aria-label="记忆内容" className="memory-playbook-field" value={form.content} maxLength={2000} rows={5}
           onChange={e => field("content", e.target.value)} required /></label>
-        {form.category === "semantic" && <label>线电压上限（kV）
-          <input className="memory-playbook-field" type="number" min="0.01" step="any" value={form.voltageLimit}
-            onChange={e => field("voltageLimit", e.target.value)} placeholder="可选，超过此数值时提示" />
+        {form.category === "semantic" && <>
+          <div className="memory-playbook-pair">
+            <label>线电压上限（kV）
+              <input className="memory-playbook-field" type="number" min="0.01" step="any" value={form.voltageLimit}
+                onChange={e => field("voltageLimit", e.target.value)} placeholder="可选，超过此数值时提示" />
+            </label>
+            <label>有效期（可选）
+              <input className="memory-playbook-field" type="date" value={form.expires_at}
+                onChange={e => field("expires_at", e.target.value)} />
+            </label>
+          </div>
+          <label style={{display: "inline-flex", alignItems: "center", gap: 6, fontWeight: 500}}>
+            <input type="checkbox" checked={Boolean(form.supersede_conflicts)}
+              onChange={e => field("supersede_conflicts", e.target.checked)} />
+            自动停用同范围冲突旧规则
+          </label>
+        </>}
+        {form.category !== "semantic" && <label>有效期（可选）
+          <input className="memory-playbook-field" type="date" value={form.expires_at}
+            onChange={e => field("expires_at", e.target.value)} />
         </label>}
         <label>标签<input className="memory-playbook-field" value={form.tags}
           onChange={e => field("tags", e.target.value)} placeholder="可选，以逗号分隔" /></label>
@@ -153,6 +194,10 @@ export function MemoryPlaybookDrawer({draft, onClose}) {
         </div>
       </form>}
 
+      {conflicts.length > 0 && <div className="memory-playbook-card" role="alert" style={{borderColor: "#d97706"}}>
+        <strong>检测到规则阈值冲突（请人工确认或停用旧规则）</strong>
+        {conflicts.map(c => <p key={c.memory_id} className="memory-playbook-meta">{c.reason}</p>)}
+      </div>}
       {error && <div className="memory-playbook-alert" role="alert">
         <p>{error}</p>
         {!form && !saving && <Button label="重新读取" size="sm" onClick={() => setRefresh(value => value + 1)} />}
@@ -164,7 +209,13 @@ export function MemoryPlaybookDrawer({draft, onClose}) {
         const id = item.memory_id ?? item.id;
         const isEditing = editing?.id === id;
         return <article key={id} className="memory-playbook-card">
-          <header><h3>{item.title}</h3><Badge variant={item.enabled ? "success" : "neutral"} label={item.enabled ? "已启用" : "已停用"} /></header>
+          <header>
+            <h3>{item.title}</h3>
+            <div style={{display: "flex", gap: 6}}>
+              {item.is_expired && <Badge variant="error" label="已过期" />}
+              <Badge variant={item.enabled ? "success" : "neutral"} label={item.enabled ? "已启用" : "已停用"} />
+            </div>
+          </header>
           {isEditing ? <form className="memory-playbook-form" onSubmit={e => {
             e.preventDefault();
             patchMemory(id, {content: editing.content}, "记忆内容已更新", () => setEditing(null));
@@ -178,6 +229,7 @@ export function MemoryPlaybookDrawer({draft, onClose}) {
           </form> : <p>{item.content}</p>}
           <div className="memory-playbook-meta">
             {[item.scope_cabinet ? `适用柜号：仅 ${item.scope_cabinet} 柜` : "适用范围：全站通用",
+              item.expires_at ? `有效期至 ${String(item.expires_at).slice(0, 10)}` : null,
               item.metric_threshold != null && `阈值 ${typeof item.metric_threshold === "object"
                 ? [item.metric_threshold.metric, item.metric_threshold.operator, item.metric_threshold.value, item.metric_threshold.unit].filter(v => v != null).join(" ")
                 : item.metric_threshold}`,

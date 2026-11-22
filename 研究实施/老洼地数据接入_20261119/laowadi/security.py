@@ -97,6 +97,10 @@ ROUTE_MIN_ROLE: list[tuple[str, str, RoleName]] = [
     ("POST", "/api/proactive/scan", "dispatcher"),
     ("POST", "/api/proactive/dispatch", "dispatcher"),
     ("POST", "/api/proactive/reconcile", "engineer"),
+    ("POST", "/api/feedback/export-negative", "engineer"),
+    ("POST", "/api/memory/prune-expired", "dispatcher"),
+    ("POST", "/api/intake/image", "dispatcher"),
+    ("POST", "/api/feedback", "dispatcher"),
     # Read-only endpoints
     ("GET", "/api/", "viewer"),
     ("GET", "/metrics", "viewer"),
