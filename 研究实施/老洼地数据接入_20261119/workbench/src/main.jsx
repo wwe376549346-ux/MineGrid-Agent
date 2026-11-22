@@ -75,6 +75,8 @@ function App() {
   const [canvasTab, setCanvasTab] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(() => !window.matchMedia("(max-width: 760px)").matches);
   const [unreadBadge, setUnreadBadge] = useState(0);
+  const [proactiveSummary, setProactiveSummary] = useState(null);
+  const [ticketFilter, setTicketFilter] = useState("active");
   const [cabinetSubTab, setCabinetSubTab] = useState("profile");
   const [evalSubTab, setEvalSubTab] = useState("results");
   const [catalog, setCatalog] = useState(null);
@@ -132,11 +134,18 @@ function App() {
     return () => ctrl.abort();
   }, [dayFilter, retry]);
 
+  function refreshProactiveStatus(signal) {
+    return apiRequest("/api/proactive/status", signal ? {signal} : {})
+      .then(res => {
+        setProactiveSummary(res);
+        setUnreadBadge(res.unread_badge_count || 0);
+      })
+      .catch(() => {});
+  }
+
   useEffect(() => {
     const ctrl = new AbortController();
-    apiRequest("/api/proactive/status", {signal: ctrl.signal})
-      .then(res => setUnreadBadge(res.unread_badge_count || 0))
-      .catch(() => {});
+    refreshProactiveStatus(ctrl.signal);
     return () => ctrl.abort();
   }, [retry]);
 
@@ -157,6 +166,13 @@ function App() {
   function showChat() {
     setCanvasTab(null);
     finishNavigation();
+    refreshProactiveStatus();
+  }
+
+  function openTickets(filter = "active") {
+    setTicketFilter(filter || "active");
+    setCanvasTab("tickets");
+    finishNavigation();
   }
 
   function openCabinetDrawer(cab) {
@@ -164,9 +180,18 @@ function App() {
     setDrawerCabinet(cab);
   }
 
-  function askAgent(question) {
+  function askAgent(question, ticketContext = null) {
+    const context = ticketContext ? {
+      ticket_id: ticketContext.ticket_id,
+      finding_id: ticketContext.source_finding_id,
+      ticket_title: ticketContext.title,
+      cabinet: ticketContext.cabinet,
+      at_time: ticketContext.at_time,
+      status: ticketContext.status,
+      evidence_cells: ticketContext.evidence_cells || [],
+    } : null;
     showChat();
-    setPendingQuestion(question);
+    setPendingQuestion({question, context, seq: Date.now()});
   }
 
   function syncCanvasFromAgent(hint) {
@@ -275,6 +300,8 @@ function App() {
         model={catalog?.model}
         pendingQuestion={pendingQuestion}
         clearPendingQuestion={() => setPendingQuestion("")}
+        proactiveSummary={proactiveSummary}
+        onOpenTickets={openTickets}
         onSyncCanvas={syncCanvasFromAgent}
         onOpenCabinet={openCabinetDrawer}
         onReviewsUpdate={handleReviewsUpdate}
@@ -370,7 +397,12 @@ function App() {
 
           {canvasTab === "tickets" && (
             <IncidentTicketPanel
+              initialStatusFilter={ticketFilter}
               onBadgeUpdate={setUnreadBadge}
+              onTicketsChanged={summary => {
+                if (summary) setProactiveSummary(prev => ({...(prev || {}), ...summary}));
+                else refreshProactiveStatus();
+              }}
               onAskDiagnose={askAgent}
               onContinueInChat={askAgent}
               onDraftAction={openActionDraft}

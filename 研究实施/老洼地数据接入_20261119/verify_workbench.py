@@ -220,7 +220,9 @@ def verify_autonomous_endpoints(workbench: Workbench) -> dict:
         def run_agent(archive, task, *, client, session, max_steps, memory_db_path, on_event):
             assert ("S35", "1006") in archive.devices and task == question
             assert client is model_client and session is not None and max_steps == 8
-            assert not session.active_anchors["cabinets"], "Audit anchors leaked into autonomous context"
+            assert session.active_anchors["cabinets"] == ["303"] and session.turns == [], (
+                f"Expected shared structured anchors with isolated strict turns: {session.active_anchors}, {session.turns}"
+            )
             session.resolve_question("2026年11月13日15:00，1006柜的有功功率是多少？")
             assert memory_db_path.parent == workbench.sessions_db.parent
             on_event(expected[0])
@@ -289,7 +291,7 @@ def verify_autonomous_endpoints(workbench: Workbench) -> dict:
         assert any(item["session_id"] == sid and item["turn_count"] == 2 for item in listing)
         saved = client.get(f"/api/sessions/{sid}", headers=dispatcher).json()
         assert saved["turns"][0]["result"] == audit_result
-        assert saved["active_anchors"] == audit_anchors and saved["turns_digest"] == audit_digest
+        assert saved["active_anchors"]["cabinets"] == ["1006"] and saved["turns_digest"] == audit_digest
         assert saved["turns"][1]["mode"] == "auto"
 
         model_client = object()

@@ -358,7 +358,7 @@ function VerificationBadge({verification}) {
     verification.checked_numbers > 0 && `数值 ${verification.verified_numbers}/${verification.checked_numbers}`,
   ].filter(Boolean);
   return <div className="agent-stream-verification">
-    <Badge variant={passed ? "success" : "warning"} label={verification.label || label}
+    <Badge variant={passed ? "success" : verification.status === "failed" ? "error" : "warning"} label={verification.label || label}
       icon={<ShieldCheck size={13} aria-hidden="true" />} />
     {counts.length > 0 && <span>{counts.join(" · ")}</span>}
     {Array.isArray(verification.notes) && verification.notes.length > 0 && <details>
@@ -501,7 +501,7 @@ export function AgentStreamArtifacts({stream, onTextProgress, restored = false})
       <PlanItems items={stream.plan} />
     </section>}
     {stream.reasoning && <details className="agent-stream-card"><summary>思考过程</summary><pre>{stream.reasoning}</pre></details>}
-    {stream.tools.length > 0 && <details className="agent-stream-card">
+    {stream.tools.length > 0 && <details className="agent-stream-card" open={stream.status === "running" || undefined}>
       <summary>工具调用 · {stream.tools.length}</summary>
       <ul className="agent-stream-plan">{stream.tools.map(tool => <li key={tool.id}>
         <div className="agent-stream-step"><code>{tool.name}</code><Status status={tool.status} /></div>

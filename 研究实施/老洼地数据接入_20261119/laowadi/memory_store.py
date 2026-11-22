@@ -358,11 +358,19 @@ def retrieve_relevant_memories(
     return selected
 
 
-def extract_custom_voltage_thresholds(memories: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def extract_custom_voltage_thresholds(
+    memories: list[dict[str, Any]],
+    *,
+    cabinet: str | None = None,
+) -> list[dict[str, Any]]:
     """Extract active operator-defined 10 kV / 35 kV voltage thresholds from semantic memories only."""
+    target_cab = str(cabinet).strip() if cabinet is not None else ""
     found: list[dict[str, Any]] = []
     for mem in memories:
         if not mem.get("enabled", True) or mem.get("category") != "semantic":
+            continue
+        scab = str(mem.get("scope_cabinet") or "").strip()
+        if target_cab and scab and scab != target_cab:
             continue
         thr = mem.get("metric_threshold")
         if isinstance(thr, dict) and str(thr.get("metric", "")).lower() in {"uab", "voltage", "电压"}:

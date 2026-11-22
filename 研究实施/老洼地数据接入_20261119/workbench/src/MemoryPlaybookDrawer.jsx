@@ -134,7 +134,7 @@ export function MemoryPlaybookDrawer({draft, onClose}) {
             {Object.entries(CATEGORIES).map(([id, label]) => <option key={id} value={id}>{label}</option>)}
           </select></label>
           <label>适用柜号<input className="memory-playbook-field" value={form.scope_cabinet} maxLength={24}
-            onChange={e => field("scope_cabinet", e.target.value)} placeholder="可选" /></label>
+            onChange={e => field("scope_cabinet", e.target.value)} placeholder="留空为全站通用，填柜号如 1006 仅对该柜生效" /></label>
         </div>
         <label>标题<input className="memory-playbook-field" value={form.title} maxLength={140}
           onChange={e => field("title", e.target.value)} required /></label>
@@ -176,13 +176,13 @@ export function MemoryPlaybookDrawer({draft, onClose}) {
               <Button type="button" size="sm" label="取消修改" disabled={saving} onClick={() => setEditing(null)} />
             </div>
           </form> : <p>{item.content}</p>}
-          {(item.scope_cabinet || item.tags?.length > 0 || item.metric_threshold != null) && <div className="memory-playbook-meta">
-            {[item.scope_cabinet && `${item.scope_cabinet} 柜`,
+          <div className="memory-playbook-meta">
+            {[item.scope_cabinet ? `适用柜号：仅 ${item.scope_cabinet} 柜` : "适用范围：全站通用",
               item.metric_threshold != null && `阈值 ${typeof item.metric_threshold === "object"
                 ? [item.metric_threshold.metric, item.metric_threshold.operator, item.metric_threshold.value, item.metric_threshold.unit].filter(v => v != null).join(" ")
                 : item.metric_threshold}`,
               ...(item.tags ?? [])].filter(Boolean).join(" · ")}
-          </div>}
+          </div>
           <div className="memory-playbook-actions">
             <label><input type="checkbox" role="switch" aria-label={`启用 ${item.title}`} checked={Boolean(item.enabled)}
               disabled={saving} onChange={e => toggleMemory(id, e.target.checked)} />启用</label>

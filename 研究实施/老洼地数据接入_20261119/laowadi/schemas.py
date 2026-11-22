@@ -54,6 +54,7 @@ class DiagnoseRequest(BaseModel):
     question: str = Field(..., min_length=1, max_length=500)
     mode: Literal["local", "deepseek"] = "local"
     sessionId: str = Field(default="default", max_length=64)
+    context: dict[str, Any] | None = None
 
 
 class AgentStreamRequest(BaseModel):
@@ -61,6 +62,7 @@ class AgentStreamRequest(BaseModel):
     mode: Literal["auto", "local", "deepseek"] = "auto"
     sessionId: str | None = Field(default=None, max_length=64)
     maxSteps: int = Field(default=8, ge=1, le=12)
+    context: dict[str, Any] | None = None
 
 
 AgentExecutionMode = Literal["auto", "local", "deepseek"]
@@ -209,6 +211,7 @@ class DeepResearchRequest(BaseModel):
 
     goal: str = Field(min_length=1, max_length=1200, pattern=r"\S")
     mode: Literal["auto", "local", "deepseek"] = "auto"
+    scope: Literal["auto", "station_weekly", "targeted"] = "auto"
 
 
 LIVE_CSV_MAX_BYTES = 2 * 1024 * 1024

@@ -402,6 +402,9 @@ class Workbench:
                     "stations": list(saved["active_anchors"].get("stations") or []),
                     "metrics": list(saved["active_anchors"].get("metrics") or []),
                     "statistics": list(saved["active_anchors"].get("statistics") or []),
+                    "ticket_id": str(saved["active_anchors"].get("ticket_id") or ""),
+                    "finding_id": str(saved["active_anchors"].get("finding_id") or ""),
+                    "ticket_title": str(saved["active_anchors"].get("ticket_title") or ""),
                 }
             if isinstance(saved.get("turns_digest"), list):
                 session.turns = [
@@ -438,6 +441,8 @@ class Workbench:
         client = ChatClient.from_env(stream=True, max_retries=2) if mode == "deepseek" else None
         with self.archive() as archive:
             session = self._get_or_restore_session(archive, session_id)
+            if isinstance(request, dict) and request.get("context"):
+                session.apply_external_context(request["context"])
             result = diagnose_question(
                 archive,
                 question,

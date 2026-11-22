@@ -1102,6 +1102,8 @@ export function AgentCopilotPane({
   model,
   pendingQuestion,
   clearPendingQuestion,
+  proactiveSummary,
+  onOpenTickets,
   onSyncCanvas,
   onOpenCabinet,
   onReviewsUpdate,
@@ -1137,6 +1139,7 @@ export function AgentCopilotPane({
   const [liveTrace, setLiveTrace] = useState(null);
   const [elapsed, setElapsed] = useState(0);
   const [activeAnchors, setActiveAnchors] = useState(null);
+  const [boundContext, setBoundContext] = useState(null);
 
   // Persistent Session History & Episodic Memory Manager panels
   const [sessionsList, setSessionsList] = useState([]);
@@ -1211,6 +1214,11 @@ export function AgentCopilotPane({
         turn: detail.turns_digest?.length ?? history.length,
         active_anchors: detail.active_anchors,
       });
+      setBoundContext(detail.active_anchors?.ticket_id ? {
+        ticket_id: detail.active_anchors.ticket_id,
+        finding_id: detail.active_anchors.finding_id || "",
+        ticket_title: detail.active_anchors.ticket_title || "",
+      } : null);
     } catch {}
   }
 
@@ -1227,6 +1235,7 @@ export function AgentCopilotPane({
         setSessionId("sess-" + Date.now().toString(36));
         setTurns([]);
         setActiveAnchors(null);
+        setBoundContext(null);
       }
     } catch {}
   }
@@ -1431,19 +1440,23 @@ export function AgentCopilotPane({
     return {finalPayload, streamError};
   }
 
-  async function sendAutonomousQuestion(clean, turnId, ctrl, targetMode) {
+  async function sendAutonomousQuestion(clean, turnId, ctrl, targetMode, ctx = boundContext) {
     setTurns(prev => [...prev, {id: turnId, question: clean, stream: emptyAgentStream}]);
     const updateTurn = update => setTurns(prev => prev.map(turn => turn.id === turnId ? update(turn) : turn));
     try {
       const response = await fetch("/api/agent/stream", {
         method: "POST",
         headers: authHeaders({"Content-Type": "application/json", Accept: "text/event-stream"}),
-        body: JSON.stringify({question: clean, mode: targetMode, sessionId}),
+        body: JSON.stringify({question: clean, mode: targetMode, sessionId, ...(ctx ? {context: ctx} : {})}),
         signal: ctrl.signal,
       });
       await consumeAgentStream(response, event => {
         if (!ctrl.signal.aborted) {
           updateTurn(turn => ({...turn, stream: applyAgentEvent(turn.stream, event)}));
+          if (event.type === "done") {
+            const nextAnchors = event.result?.active_anchors || event.result?.autonomous_context?.active_anchors;
+            if (nextAnchors) setActiveAnchors({active_anchors: nextAnchors});
+          }
         }
       });
       if (!ctrl.signal.aborted) refreshSessions();
@@ -1501,9 +1514,10 @@ export function AgentCopilotPane({
     }
   }
 
-  async function sendQuestion(text, targetMode = mode) {
+  async function sendQuestion(text, targetMode = mode, overrideContext = undefined) {
     const clean = (text || "").trim();
     if (!clean || loading) return;
+    const effectiveCtx = overrideContext !== undefined ? overrideContext : boundContext;
     const command = clean.match(/^\/([^\s]*)(?:\s+([\s\S]*))?$/);
     if (command) {
       if (command[1]) await runSkill(clean, command[1], command[2] ?? "");
@@ -1521,7 +1535,7 @@ export function AgentCopilotPane({
     setShowMemory(false);
     const turnId = Date.now();
     if (agentKind === "autonomous") {
-      await sendAutonomousQuestion(clean, turnId, ctrl, targetMode);
+      await sendAutonomousQuestion(clean, turnId, ctrl, targetMode, effectiveCtx);
       return;
     }
     setPendingPrompt(clean);
@@ -1539,7 +1553,7 @@ export function AgentCopilotPane({
       const response = await fetch("/api/diagnose/stream", {
         method: "POST",
         headers: authHeaders({"Content-Type": "application/json"}),
-        body: JSON.stringify({question: clean, mode: targetMode, sessionId}),
+        body: JSON.stringify({question: clean, mode: targetMode, sessionId, ...(effectiveCtx ? {context: effectiveCtx} : {})}),
         signal: ctrl.signal,
       });
 
@@ -1627,10 +1641,16 @@ export function AgentCopilotPane({
   }, []);
 
   useEffect(() => {
-    if (pendingQuestion) {
-      const q = pendingQuestion;
-      clearPendingQuestion();
-      sendQuestion(q, mode);
+    if (!pendingQuestion) return;
+    const isObj = typeof pendingQuestion === "object";
+    const q = isObj ? pendingQuestion.question : pendingQuestion;
+    const ctx = isObj ? (pendingQuestion.context || null) : null;
+    clearPendingQuestion();
+    if (ctx) {
+      setBoundContext(ctx);
+    }
+    if (q) {
+      sendQuestion(q, mode, ctx);
     }
   }, [pendingQuestion]);
 
@@ -1661,6 +1681,7 @@ export function AgentCopilotPane({
     setInput("");
     setTurns([]);
     setActiveAnchors(null);
+    setBoundContext(null);
     onShowChat();
     requestAnimationFrame(() => inputRef.current?.focus());
   }
@@ -1670,10 +1691,21 @@ export function AgentCopilotPane({
     [health],
   );
 
+  const METRIC_LABELS = {P: "有功 P", Uab: "电压 Uab", Ia: "电流 Ia", cos: "功率因数"};
+  const aa = activeAnchors?.active_anchors || {};
+  const ticketChipId = boundContext?.ticket_id || aa.ticket_id;
   const anchorChips = [
-    ...(activeAnchors?.active_anchors?.days || []),
-    ...(activeAnchors?.active_anchors?.cabinets || []).map(c => `${c}柜`),
-  ];
+    ticketChipId && `工单 ${ticketChipId}`,
+    ...(aa.days || []),
+    ...(aa.hours || []),
+    ...(aa.cabinets?.length ? aa.cabinets.map(c => `${c}柜`) : (boundContext?.cabinet ? [`${boundContext.cabinet}柜`] : [])),
+    ...((aa.metrics || []).map(m => METRIC_LABELS[m] || m)),
+  ].filter(Boolean);
+
+  const pendingOpen = (proactiveSummary?.tickets_open || 0) + (proactiveSummary?.tickets_escalated || 0);
+  const pendingSup = (proactiveSummary?.tickets_claimed || 0) + (proactiveSummary?.tickets_disputed || 0);
+  const pendingHandover = proactiveSummary?.tickets_handed_over || 0;
+  const hasPendingDuty = pendingOpen + pendingSup + pendingHandover > 0;
 
   const empty = turns.length === 0 && !loading;
 
@@ -1685,7 +1717,16 @@ export function AgentCopilotPane({
   }
 
   const composer = <div className="duty-composer-wrap">
-    {agentKind === "audit" && anchorChips.length > 0 && <p className="duty-context">当前上下文 <span>{anchorChips.join(" · ")}</span></p>}
+    {anchorChips.length > 0 && <div className="duty-context duty-context-bar" role="status" aria-label="当前锁定排查上下文">
+      <span>当前锁定</span>
+      <div className="duty-context-pills">
+        {anchorChips.map(chip => <span key={chip} className="duty-context-pill">{chip}</span>)}
+      </div>
+      <button type="button" className="duty-context-clear" aria-label="清除锁定上下文" onClick={() => {
+        setBoundContext(null);
+        setActiveAnchors(null);
+      }}>清除</button>
+    </div>}
     <form className="copilot-composer duty-composer" onSubmit={e => {
       e.preventDefault();
       sendQuestion(input);
@@ -1843,6 +1884,18 @@ export function AgentCopilotPane({
             <h1>今天想核查什么？</h1>
             <p>{autonomous ? "查原表、比较运行趋势，或用潮流复算检验工况。"
               : "查运行日报、回看监测事件，或核对不同柜的同期读数。"}</p>
+            {hasPendingDuty && onOpenTickets && <div className="duty-pending-strip" aria-label="值班待办速览">
+              <span className="duty-pending-label">值班待办</span>
+              {pendingOpen > 0 && <button type="button" className="duty-pending-pill is-alert" onClick={() => onOpenTickets("open")}>
+                待认领 {pendingOpen}
+              </button>}
+              {pendingSup > 0 && <button type="button" className="duty-pending-pill is-warn" onClick={() => onOpenTickets("claimed")}>
+                待补证/处理 {pendingSup}
+              </button>}
+              {pendingHandover > 0 && <button type="button" className="duty-pending-pill is-info" onClick={() => onOpenTickets("handed_over")}>
+                待交班 {pendingHandover}
+              </button>}
+            </div>}
             {composer}
             <div className="duty-prompts" aria-label="示例问题">
               {(autonomous ? AUTONOMOUS_PROMPTS : AUDIT_PROMPTS).map(({label, detail, Icon, text, runOnClick}) => (

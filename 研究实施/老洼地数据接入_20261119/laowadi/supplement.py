@@ -510,7 +510,7 @@ def build_baseline_verification(archive, profile: MineProfile | None = None) -> 
     return result
 
 
-def _build_voi_hints(archive: Archive, prof: MineProfile) -> dict | None:
+def _build_voi_hints(archive: Any, prof: MineProfile) -> dict | None:
     """Attach pandapower parameter sensitivity Value-of-Information (VoI) hints for supplement prioritization."""
     if prof.mine_id != "laowadi":
         return None

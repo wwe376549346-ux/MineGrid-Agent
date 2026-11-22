@@ -44,6 +44,9 @@ export function ActionApprovalCard({ticket, onChange, webhookConfigured = false}
   const required = checklist.filter(item => item.required !== false);
   const missing = required.filter(item => !item.checked);
   const allChecked = required.length > 0 && missing.length === 0;
+  const solverBlocked = ticket.technical_basis?.solver_status === "failed"
+    || ticket.technical_basis?.needs_verification === true
+    || ticket.checklist_progress?.verification_blocked === true;
   const templateKv = ticket.kind === "switching_order"
     ? checklist.find(item => item.id === "chk_3")?.text?.match(/(\d+(?:\.\d+)?)\s*kV/i)?.[1]
     : null;
@@ -121,6 +124,9 @@ export function ActionApprovalCard({ticket, onChange, webhookConfigured = false}
     {voltageMismatch && <p className="liveops-error" role="status">
       核对项写有 {templateKv} kV，票据复算回执为 {calculatedKv} kV，待人工核实。
     </p>}
+    {draft && solverBlocked && <p className="liveops-error" role="status">
+      交流潮流复算未完成或缺少有效推荐挡位，当前草案锁定在待核状态，暂不可签发。
+    </p>}
     {draft && !allChecked && <p className="liveops-meta" role="status">
       {missing.length > 0 ? `尚有 ${missing.length} 项必选项待人工核对，暂不可签发。` : "票据缺少必选核对项，暂不可签发。"}
     </p>}
@@ -129,7 +135,7 @@ export function ActionApprovalCard({ticket, onChange, webhookConfigured = false}
 
     {draft && <div className="liveops-actions">
       <Button label="签发" size="sm" variant="primary" icon={<ShieldCheck size={15} />}
-        disabled={!allChecked || Boolean(pending)} onClick={() => submit("approve", {})} />
+        disabled={!allChecked || solverBlocked || Boolean(pending)} onClick={() => submit("approve", {})} />
       <Button label="驳回" size="sm" disabled={Boolean(pending)} onClick={() => setRejecting(true)} />
     </div>}
     {draft && rejecting && <form className="liveops-ticket-form" onSubmit={e => {

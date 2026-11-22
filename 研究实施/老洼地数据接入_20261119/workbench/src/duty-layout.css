@@ -434,6 +434,64 @@
 .duty-chat-bottom { flex: none; padding: 7px 25px max(14px, env(safe-area-inset-bottom)); }
 .duty-context { margin: 0 5px 5px; color: var(--duty-muted); font-size: 11px; text-align: left; }
 .duty-context span { margin-left: 4px; color: var(--duty-ink); }
+.duty-context-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 4px 8px;
+}
+.duty-context-pills { display: flex; flex-wrap: wrap; gap: 5px; }
+.duty-context-pill {
+  margin-left: 0;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--duty-line);
+  background: var(--duty-rail);
+  color: var(--duty-ink);
+  font-size: 11px;
+}
+.duty-context-clear {
+  margin-left: auto;
+  padding: 2px 7px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--duty-muted);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.duty-context-clear:hover { background: var(--duty-hover); color: var(--duty-ink); }
+
+.duty-pending-strip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin: 0 auto 14px;
+  padding: 6px 11px;
+  border: 1px solid var(--duty-line);
+  border-radius: 999px;
+  background: var(--duty-rail);
+  font-size: 12px;
+}
+.duty-pending-label { color: var(--duty-muted); font-weight: 550; }
+.duty-pending-pill {
+  padding: 2px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--duty-line);
+  background: var(--duty-paper);
+  color: var(--duty-ink);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.duty-pending-pill.is-alert { border-color: color-mix(in srgb, var(--duty-alert, #c23934) 45%, var(--duty-line)); color: var(--duty-alert, #c23934); }
+.duty-pending-pill.is-warn { border-color: color-mix(in srgb, #b86b00 45%, var(--duty-line)); color: #b86b00; }
+.duty-pending-pill.is-info { border-color: color-mix(in srgb, var(--duty-accent) 45%, var(--duty-line)); color: var(--duty-accent); }
 
 .duty-chat .chat-turn { padding: 0; max-width: none; }
 .duty-chat .chat-user-bubble { background: var(--duty-accent-soft); color: var(--duty-ink); font-size: 14px; }

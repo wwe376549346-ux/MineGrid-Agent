@@ -65,9 +65,26 @@ def _extract_ground_truth(archive: Archive) -> dict[str, Any]:
     max_1006 = archive.db.execute(
         "SELECT MAX(value) AS mv FROM reading WHERE station='S35' AND cabinet='1006' AND metric='Uab' AND value > 10.65"
     ).fetchone()["mv"]
+    pair_rows = archive.db.execute(
+        """
+        SELECT r_u.value AS uab, r_p.value AS p_kw
+        FROM reading r_u
+        JOIN reading r_p ON r_u.station=r_p.station AND r_u.cabinet=r_p.cabinet AND r_u.time=r_p.time
+        WHERE r_u.station='S35' AND r_u.cabinet='1006' AND r_u.metric='Uab' AND r_p.metric='P'
+          AND r_u.value IS NOT NULL AND r_p.value IS NOT NULL
+        ORDER BY r_u.time
+        """
+    ).fetchall()
+    xs = [float(r["uab"]) for r in pair_rows]
+    ys = [float(r["p_kw"]) for r in pair_rows]
+    mx, my = statistics.mean(xs), statistics.mean(ys)
+    num = sum((x - mx) * (y - my) for x, y in zip(xs, ys))
+    den = (sum((x - mx) ** 2 for x in xs) * sum((y - my) ** 2 for y in ys)) ** 0.5
+    q4_pearson_r = round(num / den, 4) if den > 1e-12 else 0.0
     return {
         "q1_303": q1_gt,
         "q4_1006_over_1070_hours": int(ov_cnt),
+        "q4_pearson_r": q4_pearson_r,
         "q6_1006_max_kv": round(float(max_1006), 3) if max_1006 is not None else None,
     }
 
@@ -115,6 +132,7 @@ def _evaluate_cases(archive: Archive, client: ChatClient, gt: dict[str, Any], tm
     results: list[dict[str, Any]] = []
     for c in cases:
         t0 = time.monotonic()
+        ttfe: float | None = None
         err = None
         ans_full = ""
         ans_excerpt = ""
@@ -125,6 +143,11 @@ def _evaluate_cases(archive: Archive, client: ChatClient, gt: dict[str, Any], tm
         raw_status = "ok"
         ver_status = "n/a"
 
+        def _track_event(ev: dict[str, Any]) -> None:
+            nonlocal ttfe
+            if ttfe is None and ev.get("type") in {"tool_end", "code_run", "verify", "verification_badge"}:
+                ttfe = round(time.monotonic() - t0, 2)
+
         try:
             if c["mode"] == "strict":
                 res = diagnose_question(
@@ -134,6 +157,7 @@ def _evaluate_cases(archive: Archive, client: ChatClient, gt: dict[str, Any], tm
                     max_rounds=3,
                     max_tool_calls=4,
                     fallback_to_local=False,
+                    on_event=_track_event,
                 )
                 report = res.get("report") or {}
                 ans_full = json.dumps(report, ensure_ascii=False)
@@ -155,6 +179,7 @@ def _evaluate_cases(archive: Archive, client: ChatClient, gt: dict[str, Any], tm
                     client=client,
                     max_steps=5,
                     memory_db_path=tmp_mem_db,
+                    on_event=_track_event,
                 )
                 ans_full = str(res.get("answer_markdown") or "")
                 ans_excerpt = ans_full.replace("\n", " ")[:220]
@@ -174,6 +199,8 @@ def _evaluate_cases(archive: Archive, client: ChatClient, gt: dict[str, Any], tm
             raw_status = "error"
 
         elapsed = round(time.monotonic() - t0, 2)
+        if ttfe is None:
+            ttfe = elapsed
 
         checks: dict[str, bool] = {}
         notes: list[str] = []
@@ -207,13 +234,17 @@ def _evaluate_cases(archive: Archive, client: ChatClient, gt: dict[str, Any], tm
             if verdict != "pass":
                 notes.append(f"Missed checks: {[k for k, v in checks.items() if not v]}; status={raw_status}")
         elif c["id"] == "Q4":
+            norm_ans = re.sub(r"[−－]", "-", ans_full)
+            r_candidates = re.findall(r"(?<!\d)-?0\.\d{2,4}(?!\d)", norm_ans)
+            target_r = float(gt.get("q4_pearson_r") or -0.80)
             checks["used_python_sandbox"] = "run_python_analysis" in tools_used
-            checks["has_pearson_num"] = bool(re.search(r"-?0\.\d{2,4}", ans_full))
+            checks["has_accurate_pearson_r"] = any(abs(float(x) - target_r) <= 0.03 for x in r_candidates)
             checks["has_over_1070_count"] = str(gt["q4_1006_over_1070_hours"]) in ans_full
+            checks["verification_not_failed"] = ver_status != "failed"
             passed = sum(checks.values())
             verdict = "pass" if passed == len(checks) else ("partial" if passed >= 2 else "fail")
             if verdict != "pass":
-                notes.append(f"Missed checks: {[k for k, v in checks.items() if not v]}; tools={tools_used}")
+                notes.append(f"Missed checks: {[k for k, v in checks.items() if not v]}; target_r={target_r}; tools={tools_used}")
         elif c["id"] == "Q5":
             checks["used_powerflow_tool"] = any(t in tools_used for t in ("run_ac_power_flow", "run_python_analysis"))
             checks["has_plus2_tap"] = any(k in ans_full for k in ("+2", "＋2", "2档", "2 档"))
@@ -246,6 +277,7 @@ def _evaluate_cases(archive: Archive, client: ChatClient, gt: dict[str, Any], tm
             "raw_status": raw_status,
             "verification_status": ver_status,
             "elapsed_seconds": elapsed,
+            "ttfe_seconds": ttfe,
             "tools_used": tools_used,
             "evidence_cells_count": len(set(cells)),
             "reflection_rounds": reflections,
@@ -283,7 +315,7 @@ def _write_markdown_report(model_name: str, results: list[dict[str, Any]], gt: d
         f"- **Model:** `{model_name}` (real external API, `fallback_to_local=False`)",
         "- **Dataset Scope:** Read-only 7-day SCADA archive (`laowadi.sqlite3`, 168 hourly snapshots, 2026-11-10 to 2026-11-16)",
         f"- **Sample Size:** `{len(results)}` representative engineering tasks (3 Strict Verifier Pipeline + 3 Autonomous Sandbox Agent)",
-        f"- **Ground-Truth Anchors:** 303 @ `2026-11-13 15:00` (`Uab={gt['q1_303'].get('Uab', {}).get('value')} kV`, `Ia={gt['q1_303'].get('Ia', {}).get('value')} A`, `P={gt['q1_303'].get('P', {}).get('value')} kW`); 1006 `>10.70 kV` hours = `{gt['q4_1006_over_1070_hours']}`; 1006 7-day peak = `{gt['q6_1006_max_kv']} kV`",
+        f"- **Ground-Truth Anchors:** 303 @ `2026-11-13 15:00` (`Uab={gt['q1_303'].get('Uab', {}).get('value')} kV`, `Ia={gt['q1_303'].get('Ia', {}).get('value')} A`, `P={gt['q1_303'].get('P', {}).get('value')} kW`); 1006 `Uab~P r={gt.get('q4_pearson_r')}`; 1006 `>10.70 kV` hours = `{gt['q4_1006_over_1070_hours']}`; 1006 7-day peak = `{gt['q6_1006_max_kv']} kV`",
         "",
         "## 2. Headline Results",
         "",
@@ -299,14 +331,14 @@ def _write_markdown_report(model_name: str, results: list[dict[str, Any]], gt: d
         "",
         "## 3. Per-Question Breakdown",
         "",
-        "| ID | Mode | Task Category | Verdict | Latency | Verifier | Reflections | Verified Cells | Tools Invoked | Notes |",
-        "| :---: | :---: | :--- | :---: | :---: | :---: | :---: | :---: | :--- | :--- |",
+        "| ID | Mode | Task Category | Verdict | Latency | TTFE | Verifier | Reflections | Verified Cells | Tools Invoked | Notes |",
+        "| :---: | :---: | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :--- | :--- |",
     ]
     for r in results:
         t_str = ", ".join(f"`{t}`" for t in r["tools_used"]) if r["tools_used"] else "*(none)*"
         n_str = "; ".join(r["notes"]) if r["notes"] else "All programmatic checks passed"
         lines.append(
-            f"| **{r['id']}** | `{r['mode']}` | {r['category']} | **{r['verdict'].upper()}** | `{r['elapsed_seconds']} s` "
+            f"| **{r['id']}** | `{r['mode']}` | {r['category']} | **{r['verdict'].upper()}** | `{r['elapsed_seconds']} s` | `{r.get('ttfe_seconds', r['elapsed_seconds'])} s` "
             f"| `{r['verification_status']}` | `{r['reflection_rounds']}` | `{r['evidence_cells_count']}` | {t_str} | {n_str} |"
         )
 

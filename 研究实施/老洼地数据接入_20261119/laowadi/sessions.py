@@ -75,8 +75,18 @@ def save_chat_turn(
     digest_json = json.dumps(turns_digest or [], ensure_ascii=False)
     res_json = json.dumps(result, ensure_ascii=False, allow_nan=False) if result is not None else None
 
-    # Autonomous results share the transcript without changing strict-audit working memory.
-    memory_updates = "" if preserve_memory else """,
+    # Autonomous results share the transcript and structured anchors without changing strict turns_digest.
+    if preserve_memory and active_anchors is not None:
+        memory_updates = """,
+                    mine_id = CASE WHEN excluded.mine_id <> '' THEN excluded.mine_id ELSE chat_session.mine_id END,
+                    station = CASE WHEN excluded.station <> '' THEN excluded.station ELSE chat_session.station END,
+                    archive_snapshot_sha256 = CASE WHEN excluded.archive_snapshot_sha256 <> '' THEN excluded.archive_snapshot_sha256 ELSE chat_session.archive_snapshot_sha256 END,
+                    active_anchors_json = excluded.active_anchors_json
+        """
+    elif preserve_memory:
+        memory_updates = ""
+    else:
+        memory_updates = """,
                     mine_id = excluded.mine_id,
                     station = excluded.station,
                     archive_snapshot_sha256 = excluded.archive_snapshot_sha256,

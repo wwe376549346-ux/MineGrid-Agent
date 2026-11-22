@@ -212,8 +212,15 @@ function IncidentActionDraft({ticket, onDraftAction}) {
   </form>;
 }
 
-export function IncidentTicketPanel({onBadgeUpdate, onAskDiagnose, onContinueInChat, onDraftAction}) {
-  const [statusFilter, setStatusFilter] = useState("active");
+export function IncidentTicketPanel({
+  initialStatusFilter = "active",
+  onBadgeUpdate,
+  onTicketsChanged,
+  onAskDiagnose,
+  onContinueInChat,
+  onDraftAction,
+}) {
+  const [statusFilter, setStatusFilter] = useState(initialStatusFilter || "active");
   const [tickets, setTickets] = useState([]);
   const [sla, setSla] = useState(null);
   const [llmops, setLlmops] = useState(null);
@@ -240,6 +247,7 @@ export function IncidentTicketPanel({onBadgeUpdate, onAskDiagnose, onContinueInC
       setSla(tRes.sla || null);
       setLlmops(mRes.llmops || null);
       onBadgeUpdate?.(tRes.sla?.unread_badge_count || 0);
+      onTicketsChanged?.(tRes.sla || null);
       const rows = tRes.tickets || [];
       setSelectedId(current => rows.some(ticket => ticket.ticket_id === current) ? current : rows[0]?.ticket_id || null);
     } catch (e) {
@@ -248,6 +256,10 @@ export function IncidentTicketPanel({onBadgeUpdate, onAskDiagnose, onContinueInC
       setLoading(false);
     }
   }
+
+  useEffect(() => {
+    if (initialStatusFilter) setStatusFilter(initialStatusFilter);
+  }, [initialStatusFilter]);
 
   useEffect(() => {
     refreshAll(statusFilter);
@@ -547,7 +559,7 @@ export function IncidentTicketPanel({onBadgeUpdate, onAskDiagnose, onContinueInC
                     size="sm"
                     variant="primary"
                     label="深度追问"
-                    onClick={() => onAskDiagnose(`针对工单 ${detail.ticket_id}（${detail.title}），请复核关键证据并给出下一步班次排查要点。`)}
+                    onClick={() => onAskDiagnose(`针对工单 ${detail.ticket_id}（${detail.title}），请复核关键证据并给出下一步班次排查要点。`, detail)}
                   />
                 )}
               </div>

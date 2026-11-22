@@ -7,7 +7,7 @@ import json
 import re
 from unicodedata import normalize
 
-from laowadi.questions import clock_mentions, normalized, time_on
+from laowadi.questions import METRICS, clock_mentions, match_term, normalized, time_on
 from laowadi.storage import REPORT_STATION
 from laowadi.verifier import EVIDENCE_POLICY
 
@@ -93,6 +93,12 @@ def extract_query_anchors(question: str, known_cabinets: set[str], *, default_ye
     if any(k in question for k in ("基线", "避峰", "突增", "波动", "常规", "反常")):
         dimensions.append("diurnal_baseline")
 
+    norm_q = normalized(question)
+    metrics = [
+        metric for metric, terms in METRICS.items()
+        if any(match_term(term, norm_q) for term in terms)
+    ]
+
     return {
         "days": days,
         "hours": hours,
@@ -100,6 +106,7 @@ def extract_query_anchors(question: str, known_cabinets: set[str], *, default_ye
         "events": events,
         "stations": stations,
         "dimensions": dimensions,
+        "metrics": metrics,
     }
 
 
@@ -360,7 +367,56 @@ class DiagnosisSession:
             "events": [],
             "stations": [],
             "dimensions": [],
+            "metrics": [],
+            "statistics": [],
+            "ticket_id": "",
+            "finding_id": "",
+            "ticket_title": "",
         }
+
+    def apply_external_context(self, context: dict | None) -> None:
+        """Bind structured ticket/UI anchors without writing unverified text into strict turns_digest."""
+        if not isinstance(context, dict) or not context:
+            return
+        prev_ticket = str(self.active_anchors.get("ticket_id") or "")
+        ticket_id = str(context.get("ticket_id") or "").strip()[:64]
+        finding_id = str(context.get("finding_id") or context.get("source_finding_id") or "").strip()[:64]
+        ticket_title = str(context.get("ticket_title") or context.get("title") or "").strip()[:160]
+        switched_ticket = bool(ticket_id and ticket_id != prev_ticket)
+        if ticket_id:
+            self.active_anchors["ticket_id"] = ticket_id
+        if finding_id:
+            self.active_anchors["finding_id"] = finding_id
+        if ticket_title:
+            self.active_anchors["ticket_title"] = ticket_title
+
+        at_time = str(context.get("at_time") or "").strip()
+        if at_time and len(at_time) >= 10:
+            day = at_time[:10].replace("/", "-")
+            if re.fullmatch(r"\d{4}-\d{2}-\d{2}", day) and (switched_ticket or not self.active_anchors.get("days")):
+                self.active_anchors["days"] = [day]
+            if len(at_time) >= 16 and at_time[11:16].endswith(":00") and (switched_ticket or not self.active_anchors.get("hours")):
+                self.active_anchors["hours"] = [at_time[11:16]]
+
+        raw_cabs: list[str] = []
+        if isinstance(context.get("cabinets"), list):
+            raw_cabs.extend(str(c).strip() for c in context["cabinets"])
+        elif context.get("cabinet"):
+            raw_cabs.extend(re.findall(r"\d+", str(context["cabinet"])))
+        valid_cabs = [c for c in dict.fromkeys(raw_cabs) if c in self.known_cabinets]
+        if valid_cabs and (switched_ticket or not self.active_anchors.get("cabinets")):
+            self.active_anchors["cabinets"] = valid_cabs
+
+        raw_days = context.get("days")
+        if isinstance(raw_days, list) and raw_days and (switched_ticket or not self.active_anchors.get("days")):
+            self.active_anchors["days"] = [str(d).strip() for d in raw_days if str(d).strip()]
+        raw_hours = context.get("hours")
+        if isinstance(raw_hours, list) and raw_hours and (switched_ticket or not self.active_anchors.get("hours")):
+            self.active_anchors["hours"] = [str(h).strip() for h in raw_hours if str(h).strip()]
+
+        raw_metrics = context.get("metrics") or ([context["metric"]] if context.get("metric") else [])
+        if isinstance(raw_metrics, list) and raw_metrics and (switched_ticket or not self.active_anchors.get("metrics")):
+            self.active_anchors["metrics"] = [m for m in raw_metrics if m in METRICS]
 
     def resolve_question(self, question: str, *, archive_snapshot: dict | None = None) -> tuple[str, dict, dict]:
         """Resolve follow-up references using working memory while isolating mine/station/event switches and archive revisions."""
@@ -369,7 +425,7 @@ class DiagnosisSession:
         cur_snap_sha = str(snap.get("snapshot_sha256") or "")
 
         current = extract_query_anchors(question, self.known_cabinets)
-        inherited = {"days": [], "hours": [], "cabinets": [], "events": [], "stations": []}
+        inherited = {"days": [], "hours": [], "cabinets": [], "events": [], "stations": [], "metrics": []}
         cabinet_followup = current["cabinets"] and question.strip().startswith(("那", "换", "改比"))
         date_followup = question.strip().startswith(("改到", "换到", "那改到", "那换到"))
 
@@ -421,7 +477,7 @@ class DiagnosisSession:
                 inherited["days"] = merged["days"]
             same_time = any(w in question for w in ("同期", "同一时刻", "当时", "该时刻", "此时", "这个整点", "刚才", "那时候", "那会儿"))
             if (not merged["hours"] and self.active_anchors.get("hours")
-                    and (same_time or cabinet_followup and self.active_anchors.get("metrics"))):
+                    and (same_time or (cabinet_followup and (self.active_anchors.get("metrics") or len(self.active_anchors.get("hours") or []) == 1)))):
                 merged["hours"] = list(self.active_anchors["hours"])
                 inherited["hours"] = merged["hours"]
             if not merged["cabinets"] and self.active_anchors.get("cabinets") and not merged["events"]:
@@ -447,10 +503,20 @@ class DiagnosisSession:
 
         reset_scope = hard_isolated or station_switched or new_event or new_day
         for field in ("metrics", "statistics"):
-            preserve_metric = field == "metrics" and date_followup and bool(inherited["cabinets"])
-            values = [] if reset_scope and not preserve_metric else list(self.active_anchors.get(field) or [])
-            merged[field] = values
+            if field == "metrics":
+                if current.get("metrics"):
+                    merged["metrics"] = list(current["metrics"])
+                else:
+                    preserve_metric = date_followup and bool(inherited["cabinets"])
+                    values = [] if (reset_scope and not preserve_metric) else list(self.active_anchors.get("metrics") or [])
+                    merged["metrics"] = values
+                    if values:
+                        inherited["metrics"] = values
+            else:
+                values = [] if reset_scope else list(self.active_anchors.get(field) or [])
+                merged[field] = values
 
+        keep_ticket = not (hard_isolated or station_switched or new_event)
         self.active_anchors = {
             "days": merged["days"] if (merged["days"] or reset_scope) else list(self.active_anchors.get("days") or []),
             "hours": merged["hours"] if (merged["hours"] or reset_scope) else list(self.active_anchors.get("hours") or []),
@@ -460,6 +526,9 @@ class DiagnosisSession:
             "dimensions": merged["dimensions"] if (merged["dimensions"] or hard_isolated) else list(self.active_anchors.get("dimensions") or []),
             "metrics": merged["metrics"],
             "statistics": merged["statistics"],
+            "ticket_id": str(self.active_anchors.get("ticket_id") or "") if keep_ticket else "",
+            "finding_id": str(self.active_anchors.get("finding_id") or "") if keep_ticket else "",
+            "ticket_title": str(self.active_anchors.get("ticket_title") or "") if keep_ticket else "",
         }
         if cur_snap_sha and not self.archive_snapshot_sha256:
             self.archive_snapshot_sha256 = cur_snap_sha

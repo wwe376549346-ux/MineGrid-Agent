@@ -113,6 +113,7 @@ async function reportResponse(id, format, signal) {
 export function DeepInvestigationView({hasModel, goalPrefill}) {
   const [goal, setGoal] = useState(() => goalPrefill?.goal.slice(0, 1200) ?? "");
   const [mode, setMode] = useState("auto");
+  const [scope, setScope] = useState("auto");
   const [taskGoal, setTaskGoal] = useState("");
   const [runStatus, setRunStatus] = useState("idle");
   const [runError, setRunError] = useState("");
@@ -179,7 +180,7 @@ export function DeepInvestigationView({hasModel, goalPrefill}) {
       const response = await fetch("/api/deep-research/stream", {
         method: "POST",
         headers: authHeaders({"Content-Type": "application/json", Accept: "text/event-stream"}),
-        body: JSON.stringify({goal: clean, mode}),
+        body: JSON.stringify({goal: clean, mode, scope}),
         signal: request.signal,
       });
       await consumeAgentStream(response, frame => {
@@ -285,6 +286,11 @@ export function DeepInvestigationView({hasModel, goalPrefill}) {
         <label>分析方式<select value={mode} onChange={e => setMode(e.target.value)} disabled={running}>
           <option value="auto">自动</option><option value="local">本地</option><option value="deepseek" disabled={!hasModel}>DeepSeek</option>
         </select></label>
+        <label>排查范围<select aria-label="排查范围" value={scope} onChange={e => setScope(e.target.value)} disabled={running}>
+          <option value="auto">自动识别</option>
+          <option value="station_weekly">全站周检报告</option>
+          <option value="targeted">定向专项核查</option>
+        </select></label>
         {running ? <Button label="停止接收" icon={<Square size={14} />} type="button" onClick={stop} />
           : <Button label="开始排查" icon={<Search size={16} />} variant="primary" type="submit" disabled={!goal.trim()} />}
       </div>
@@ -318,7 +324,9 @@ export function DeepInvestigationView({hasModel, goalPrefill}) {
           <div className="investigation-history">{reports.map(report => <button key={reportId(report)} type="button"
             disabled={running || Boolean(downloading)} aria-pressed={selectedId === reportId(report)} onClick={() => selectReport(report)}>
             <strong>{report.title ?? report.goal ?? reportId(report)}</strong>
-            <small className="investigation-meta">{report.created_at ?? report.report_date}</small>
+            <small className="investigation-meta">
+              {report.scope === "targeted" ? "定向专项" : "全站周检"} · {report.created_at ?? report.report_date}
+            </small>
           </button>)}</div>
         </section>
       </div>

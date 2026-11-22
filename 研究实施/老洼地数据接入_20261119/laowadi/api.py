@@ -1240,6 +1240,7 @@ def create_app(
                         "verification_badge": badge,
                         "reasoning": "".join(reasoning),
                         **result,
+                        "active_anchors": session.active_anchors,
                         "artifacts": final_artifacts,
                         "tool_trace": trace or tools,
                         "code_runs": runs,
@@ -1258,10 +1259,14 @@ def create_app(
                     })
                     save_chat_turn(
                         session_id, req.question, req.mode, result,
+                        active_anchors=session.active_anchors,
                         mine_id=session.mine_id, station=session.station,
                         archive_snapshot_sha256=session.archive_snapshot_sha256,
                         path=workbench.sessions_db, preserve_memory=True,
                     )
+                    if hasattr(workbench, "_lock") and hasattr(workbench, "_diag_sessions"):
+                        with workbench._lock:
+                            workbench._diag_sessions.pop(session_id, None)
                     final_badge = result.get("verification_badge") or {}
                     trusted = final_badge.get("business_trusted", final_badge.get("trusted"))
                     record_advanced(
@@ -1277,20 +1282,46 @@ def create_app(
                 emit(event)
 
             with workbench.archive() as archive:
-                # The two modes keep separate working memory even when they share a transcript.
+                # Share verified structured anchors across modes while keeping strict turns_digest isolated.
                 session = DiagnosisSession(archive)
                 saved = load_session(session_id, path=workbench.sessions_db) if requested_session else None
-                for turn in reversed(saved["turns"] if saved else []):
-                    prior = (turn["result"] or {}).get("autonomous_context")
-                    if not prior:
-                        continue
-                    if (prior.get("mine_id"), prior.get("station"), prior.get("archive_snapshot_sha256")) == (
+                if saved:
+                    same_scope = (
+                        (not saved.get("mine_id") or saved["mine_id"] == session.mine_id)
+                        and (not saved.get("station") or saved["station"] == session.station)
+                        and (not saved.get("archive_snapshot_sha256") or saved["archive_snapshot_sha256"] == session.archive_snapshot_sha256)
+                    )
+                    last_auto_idx = -1
+                    prior = None
+                    for idx in range(len(saved["turns"]) - 1, -1, -1):
+                        cand = (saved["turns"][idx]["result"] or {}).get("autonomous_context")
+                        if cand:
+                            last_auto_idx = idx
+                            prior = cand
+                            break
+                    if prior and (prior.get("mine_id"), prior.get("station"), prior.get("archive_snapshot_sha256")) == (
                         session.mine_id, session.station, session.archive_snapshot_sha256,
                     ):
-                        session.active_anchors = prior["active_anchors"]
+                        session.active_anchors = {**session.active_anchors, **(prior.get("active_anchors") or {})}
                         session.turns = prior["turns"]
                         session.history = prior["history"]
-                    break
+                    if same_scope and saved["turns"] and last_auto_idx < len(saved["turns"]) - 1:
+                        latest_turn_res = saved["turns"][-1].get("result") or {}
+                        strict_anchors = (
+                            (latest_turn_res.get("context_snapshot") or {}).get("active_anchors")
+                            or saved.get("active_anchors")
+                            or {}
+                        )
+                        if strict_anchors:
+                            merged_anchors = {**session.active_anchors}
+                            for k, v in strict_anchors.items():
+                                if isinstance(v, list):
+                                    merged_anchors[k] = list(v)
+                                elif v is not None:
+                                    merged_anchors[k] = v
+                            session.active_anchors = merged_anchors
+                if req.context:
+                    session.apply_external_context(req.context)
                 run_agent(
                     archive, req.question, client=client, session=session, max_steps=req.maxSteps,
                     memory_db_path=memory_db_path, on_event=persist_then_emit,
@@ -1484,7 +1515,7 @@ def create_app(
         def run(emit):
             with workbench.archive() as archive:
                 investigate(
-                    archive, req.goal, client=client, memory_db_path=memory_db_path,
+                    archive, req.goal, scope=req.scope, client=client, memory_db_path=memory_db_path,
                     reports_dir=reports_dir, on_event=emit,
                 )
 

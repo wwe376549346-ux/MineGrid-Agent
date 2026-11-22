@@ -78,6 +78,8 @@ def _row_to_ticket(row: sqlite3.Row) -> dict[str, Any]:
     checklist = json.loads(row["checklist_json"] or "[]")
     req_total = sum(1 for c in checklist if c.get("required"))
     req_checked = sum(1 for c in checklist if c.get("required") and c.get("checked"))
+    basis = json.loads(row["technical_basis_json"] or "{}")
+    verification_blocked = bool(basis.get("needs_verification") or basis.get("solver_status") == "failed")
     return {
         "ticket_id": row["ticket_id"],
         "kind": row["kind"],
@@ -87,13 +89,14 @@ def _row_to_ticket(row: sqlite3.Row) -> dict[str, Any]:
         "target_cabinet": row["target_cabinet"],
         "at_time": row["at_time"],
         "rationale": row["rationale"],
-        "technical_basis": json.loads(row["technical_basis_json"] or "{}"),
+        "technical_basis": basis,
         "operation_steps": json.loads(row["steps_json"] or "[]"),
         "checklist": checklist,
         "checklist_progress": {
             "required_total": req_total,
             "required_checked": req_checked,
-            "ready_to_approve": req_total > 0 and req_checked == req_total,
+            "ready_to_approve": req_total > 0 and req_checked == req_total and not verification_blocked,
+            "verification_blocked": verification_blocked,
         },
         "rollback_plan": row["rollback_plan"],
         "evidence_cells": json.loads(row["evidence_cells_json"] or "[]"),
@@ -153,33 +156,63 @@ def draft_action_ticket(
     if kind == "switching_order":
         risk = "high"
         pf_summary: dict[str, Any] = {"solver": "pandapower", "scenario": "tap_sensitivity"}
+        pf: Any = None
+        err_msg = ""
         try:
             pf = run_ac_power_flow(archive, scenario="tap_sensitivity", at_time=ref_time)
-            rec = (pf.get("tap_sensitivity") or {}).get("recommended_tap") or {}
+        except Exception as exc:
+            err_msg = str(exc)
+
+        solver_ok = isinstance(pf, dict) and pf.get("status") == "ok" and bool((pf.get("solver") or {}).get("converged", True))
+        rec = (pf.get("tap_sensitivity") or {}).get("recommended_tap") if solver_ok else None
+        has_valid_rec = isinstance(rec, dict) and bool(rec.get("tap_label")) and rec.get("bus_10kv_ii_kv") is not None
+
+        if solver_ok and has_valid_rec:
             pf_summary.update({
-                "recommended_tap": rec.get("tap_label", "+2 档 (+5.0% 高压绕组)"),
-                "expected_bus_10kv_ii_kv": rec.get("bus_10kv_ii_kv", 10.662),
-                "gb12325_compliant": rec.get("gb12325_compliant", True),
+                "solver_status": "ok",
+                "needs_verification": False,
+                "recommended_tap": rec["tap_label"],
+                "expected_bus_10kv_ii_kv": rec["bus_10kv_ii_kv"],
+                "gb12325_compliant": bool(rec.get("gb12325_compliant")),
             })
-        except Exception:
-            pf_summary["recommended_tap"] = "+2 档 (+5.0% 高压绕组)"
+            default_reason = (
+                f"针对 {ref_time} 10 kV II 段（{cab} 柜）电压偏高工况，依据 pandapower 交流潮流复算结果起草调压操作票草案，"
+                f"预期调整至 {pf_summary['recommended_tap']} 后母线电压回落至 {pf_summary['expected_bus_10kv_ii_kv']} kV。"
+            )
+            chk3_text = f"已复核 pandapower 同刻调压后电压（{pf_summary['expected_bus_10kv_ii_kv']} kV）与继电保护/过压定值相匹配"
+        else:
+            fail_reason = str(
+                err_msg
+                or (pf.get("error") if isinstance(pf, dict) else "")
+                or "交流潮流求解未收敛或无有效推荐挡位"
+            )[:240]
+            pf_summary.update({
+                "solver_status": "failed",
+                "needs_verification": True,
+                "solver_error": fail_reason,
+                "recommended_tap": None,
+                "expected_bus_10kv_ii_kv": None,
+                "gb12325_compliant": None,
+            })
+            default_reason = (
+                f"针对 {ref_time} {cab} 柜调压申请，交流潮流复算失败或未生成有效推荐挡位（{fail_reason}），"
+                f"当前草案锁定在待核状态，待人工重新复算并补齐依据后方可签发。"
+            )
+            chk3_text = "交流潮流复算未完成（当前草案处于待核锁定状态，严禁按默认挡位签发）"
 
         title = f"《电气倒闸操作票草案》· {cab} 柜关联 2# 主变调压 / 无功协同操作"
-        reason = rationale or (
-            f"针对 {ref_time} 10 kV II 段（{cab} 柜）电压偏高工况，依据 pandapower 交流潮流复算结果起草调压操作票草案，"
-            f"预期调整至 {pf_summary.get('recommended_tap')} 后母线电压回落至 {pf_summary.get('expected_bus_10kv_ii_kv', '合格')} kV。"
-        )
+        reason = rationale or default_reason
         steps = [
             "1. 值班员与监护人共同核对 35 kV 变电所一次系统模拟图及 2# 主变现场当前实际分接头挡位指示。",
             "2. 向矿调度室汇报调压申请，确认井下 1535 中央变电所主扇/排水等一级负荷运行平稳且无并联倒闸冲突。",
-            "3. 核查 2# 主变调压方式（有载调压或停电无励磁调压）；若为无励磁调压，严格按停电—验电—挂接地线规程切换至目标挡位。",
+            "3. 核查 2# 主变调压方式（有载调压或停电无励磁调压）；若为无载/无励磁调压，严格按停电—验电—挂接地线规程切换至目标挡位。",
             "4. 调挡完成后逐相复核 10 kV II 段母线电压（目标 9.30–10.70 kV）、312/1006 柜电流及继电保护信号无告警。",
             "5. 记录操作起止时间、挡位变更结果及实测电压至值班运行日志，并将新挡位写入工作台长期记忆库。",
         ]
         checklist = [
             {"id": "chk_1", "text": "已现场核对 2# 主变实际分接头挡位铭牌与机械指示，确认调压方式（有载/无励磁）", "required": True, "checked": False, "checked_by": None, "checked_at": None},
             {"id": "chk_2", "text": "已核实矿调度指令及井下主扇、排水泵等重要负荷供电安全无受影响风险", "required": True, "checked": False, "checked_by": None, "checked_at": None},
-            {"id": "chk_3", "text": f"已复核 pandapower 同刻调压后电压（{pf_summary.get('expected_bus_10kv_ii_kv', '待复算')} kV）与继电保护/过压定值相匹配", "required": True, "checked": False, "checked_by": None, "checked_at": None},
+            {"id": "chk_3", "text": chk3_text, "required": True, "checked": False, "checked_by": None, "checked_at": None},
             {"id": "chk_4", "text": "已落实双人操作监护制度、模拟预演及停送电安全工器具校验", "required": True, "checked": False, "checked_by": None, "checked_at": None},
             {"id": "chk_5", "text": "已确认异常回退预案及通讯畅通", "required": False, "checked": False, "checked_by": None, "checked_at": None},
         ]
@@ -366,6 +399,11 @@ def approve_action_ticket(
             return None
         if row["status"] != "draft":
             raise ChecklistIncompleteError(f"当前票据状态为 {row['status']}，仅 draft 状态允许签发审批。")
+        basis = json.loads(row["technical_basis_json"] or "{}")
+        if basis.get("needs_verification") or basis.get("solver_status") == "failed":
+            raise ChecklistIncompleteError(
+                "拒绝签发：交流潮流复算失败或缺少有效推荐挡位，该票据停留在待核状态，请重新复算或驳回后重拟。"
+            )
         checklist = json.loads(row["checklist_json"] or "[]")
         missing = [c["id"] for c in checklist if c.get("required") and not c.get("checked")]
         if missing:

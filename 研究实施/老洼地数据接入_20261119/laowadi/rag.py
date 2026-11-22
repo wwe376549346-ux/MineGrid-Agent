@@ -301,6 +301,10 @@ def build_mine_evidence_cards(archive: Archive, profile: MineProfile | None = No
     c_lpf = [_query_cell(archive, c, "cos", order="ASC", station=station) for c in low_pf_cabs]
     c5_files = [f for f in dict.fromkeys([first_file, primary_diag, down_st_spec.diagram_filename if down_st_spec else ""]) if f]
     link_id_part = "-".join(link_from[:2]) if link_from else "DOWNHOLE"
+    low_pf_text = ", ".join(
+        f"{r['cabinet']}(均值 {round(r['avg_cos'], 3)})"
+        for r in low_pf_rows
+    )
     cards.append({
         "card_id": f"EVC-{tag}-DOWNHOLE-{link_id_part}",
         "category": "topology_and_pf",
@@ -321,7 +325,7 @@ def build_mine_evidence_cards(archive: Archive, profile: MineProfile | None = No
             + "；".join(f"{ln.from_station}.{ln.from_cabinet} 接 {ln.to_station}.{ln.to_cabinet}" for ln in links)
             + "。"
             + (
-                f"低功率因数重点出线：{', '.join(f'{r['cabinet']}(均值 {round(r['avg_cos'], 3)})' for r in low_pf_rows)}。"
+                f"低功率因数重点出线：{low_pf_text}。"
                 if low_pf_rows
                 else ""
             )

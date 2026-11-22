@@ -102,7 +102,8 @@ def _extract_numbers_from_obj(obj: Any, pool: set[float], depth: int = 0) -> Non
         pool.add(float(obj))
         return
     if isinstance(obj, str):
-        for m in _NUM_RE.finditer(obj):
+        norm_s = re.sub(r"[−－]", "-", obj)
+        for m in _NUM_RE.finditer(norm_s):
             try:
                 pool.add(float(m.group(1)))
             except ValueError:
@@ -116,24 +117,70 @@ def _extract_numbers_from_obj(obj: Any, pool: set[float], depth: int = 0) -> Non
             _extract_numbers_from_obj(v, pool, depth + 1)
 
 
+_METRIC_EXPECTED_UNITS = {
+    "P": {"kw"},
+    "Uab": {"kv"},
+    "Ia": {"a"},
+}
+_NOMINAL_RATING_VALUES = {35.0, 10.0, 10.7, 9.3, 10.5, 6.0, 7.0, 100.0}
+
+
 def _compute_verification_badge(
     archive: Any,
     answer_markdown: str,
     tool_trace: list[dict],
     code_runs: list[dict],
 ) -> dict[str, Any]:
-    """Lightweight post-hoc grounding audit on cited Excel cells & key engineering metrics."""
+    """Post-hoc grounding audit on cited Excel cells, value signs, and cell-bound quantities."""
     text = str(answer_markdown or "")
+    norm_text = re.sub(r"[−－]", "-", text)
+    unit_num_re = re.compile(
+        r"([+-]?\d+(?:\.\d+)?)\s*(kV|kW|kVar|kVA|kWh|A|%)",
+        re.I,
+    )
     cited_cells = list(dict.fromkeys(_INLINE_CELL_RE.findall(text)))
     verified_cells = 0
+    cell_value_mismatches = 0
+    sign_mismatches = 0
     notes: list[str] = []
 
     for cell in cited_cells:
         rec = _lookup_cell_db_record(archive, cell)
-        if rec is not None:
-            verified_cells += 1
-        else:
+        if rec is None:
             notes.append(f"原表坐标未在只读归档中命中：{cell}")
+            continue
+        expected_units = _METRIC_EXPECTED_UNITS.get(str(rec.get("metric") or ""))
+        ev_raw = rec.get("value")
+        cell_bound_ok = True
+        if expected_units and ev_raw is not None:
+            ev = float(ev_raw)
+            ev_tol = max(0.05, abs(ev) * 0.015)
+            nearby_vals: list[float] = []
+            for cm in re.finditer(re.escape(cell), norm_text):
+                win_start = max(0, cm.start() - 70)
+                win_end = min(len(norm_text), cm.end() + 70)
+                snippet = norm_text[win_start:win_end]
+                for um in unit_num_re.finditer(snippet):
+                    u_low = um.group(2).lower()
+                    if u_low not in expected_units:
+                        continue
+                    v = float(um.group(1))
+                    if abs(v) in _NOMINAL_RATING_VALUES and u_low in {"kv", "%"} and abs(v - ev) > 0.05:
+                        continue
+                    nearby_vals.append(v)
+            if nearby_vals:
+                has_match = any(
+                    abs(v - ev) <= ev_tol and (abs(ev) <= 0.05 or (v > 0 and ev > 0) or (v < 0 and ev < 0))
+                    for v in nearby_vals
+                )
+                if not has_match:
+                    cell_bound_ok = False
+                    cell_value_mismatches += 1
+                    notes.append(
+                        f"单元格 {cell}（{rec['cabinet']} 柜 {rec['time']} {rec['metric']} 实测 {ev}）与附近正文数值不符"
+                    )
+        if cell_bound_ok:
+            verified_cells += 1
 
     # Build numeric evidence pool from all executed tools & sandbox outputs
     evidence_nums: set[float] = set()
@@ -144,15 +191,11 @@ def _compute_verification_badge(
         _extract_numbers_from_obj(cr.get("tables"), evidence_nums)
         _extract_numbers_from_obj(cr.get("charts"), evidence_nums)
 
-    # Check key engineering quantities with explicit electrical units in the final prose
-    unit_num_re = re.compile(
-        r"(-?\d+(?:\.\d+)?)\s*(kV|kW|kVar|kVA|kWh|A|%)",
-        re.I,
-    )
+    # Check key engineering quantities with explicit electrical units in the final prose (sign-preserving!)
     checked_numbers = 0
     verified_numbers = 0
     seen_unit_vals: set[tuple[str, str]] = set()
-    for m in unit_num_re.finditer(text):
+    for m in unit_num_re.finditer(norm_text):
         raw_val, unit = m.group(1), m.group(2)
         key = (raw_val, unit.lower())
         if key in seen_unit_vals:
@@ -160,18 +203,23 @@ def _compute_verification_badge(
         seen_unit_vals.add(key)
         val = float(raw_val)
         # Skip standard nominal ratings / GB limits commonly cited in prose (35 kV, 10 kV, 10.7 kV, 9.3 kV, 7%)
-        if abs(val) in {35.0, 10.0, 10.7, 9.3, 10.5, 6.0, 7.0, 100.0} and unit.lower() in {"kv", "%"}:
+        if abs(val) in _NOMINAL_RATING_VALUES and unit.lower() in {"kv", "%"}:
             continue
         checked_numbers += 1
+        tol = max(0.05, abs(val) * 0.015)
         matched = any(
-            abs(val - ev) <= max(0.05, abs(val) * 0.015)
-            or abs(abs(val) - abs(ev)) <= max(0.05, abs(val) * 0.015)
+            abs(val - ev) <= tol and (abs(val) <= 0.05 or (val > 0 and ev > 0) or (val < 0 and ev < 0))
             for ev in evidence_nums
         )
         if matched:
             verified_numbers += 1
+        elif abs(val) > 0.1 and any(abs(val + ev) <= tol and ((val > 0) != (ev > 0)) for ev in evidence_nums):
+            sign_mismatches += 1
+            notes.append(f"数值正负号与归档/工具证据相反：{raw_val} {unit}（存在符号翻转风险）")
 
-    if cited_cells and verified_cells == len(cited_cells) and (checked_numbers == 0 or verified_numbers / max(checked_numbers, 1) >= 0.75):
+    if sign_mismatches > 0 or cell_value_mismatches > 0 or (cited_cells and verified_cells < len(cited_cells)):
+        status = "failed"
+    elif cited_cells and verified_cells == len(cited_cells) and (checked_numbers == 0 or verified_numbers / max(checked_numbers, 1) >= 0.75):
         status = "verified"
     elif (verified_cells > 0 or verified_numbers > 0) and (len(cited_cells) == 0 or verified_cells == len(cited_cells)):
         status = "verified" if (checked_numbers == 0 or verified_numbers / max(checked_numbers, 1) >= 0.75) else "partial"
@@ -182,18 +230,23 @@ def _compute_verification_badge(
 
     if not notes:
         if status == "verified":
-            notes.append("关键电气指标与原表单元格均已在本次只读工具/沙盒回执中核实。")
+            notes.append("关键电气指标（含正负号）与原表单元格均已在本次只读工具/沙盒回执中核实。")
         elif status == "partial":
             notes.append("部分推演或对比参考值未直接对应单一原表单元格，请结合展开的沙盒/工具回执复核。")
+        elif status == "failed":
+            notes.append("检测到正文数值或原表绑定与只读归档回执存在冲突，未通过证据核验。")
         else:
             notes.append("本次回答未调用只读工具或未产生可比对数值。")
 
     return {
         "status": status,
+        "business_trusted": status == "verified",
         "checked_cells": len(cited_cells),
         "verified_cells": verified_cells,
         "checked_numbers": checked_numbers,
         "verified_numbers": verified_numbers,
+        "sign_mismatches": sign_mismatches,
+        "cell_value_mismatches": cell_value_mismatches,
         "notes": notes[:4],
     }
 
@@ -530,7 +583,16 @@ emit_chart(
 
         from laowadi.diagnose import diagnose_question
 
-        diag = diagnose_question(archive, question, client=None)
+        metric_words = {"P": "有功功率", "Uab": "线电压Uab", "Ia": "电流Ia", "cos": "功率因数cos"}
+        scoped_parts = [question]
+        if anchors.get("days") and anchors["days"][0] not in question:
+            scoped_parts.append(anchors["days"][0])
+        if anchors.get("hours") and anchors["hours"][0] not in question:
+            scoped_parts.append(anchors["hours"][0])
+        if anchors.get("metrics") and not any(k in question for k in ("有功", "电压", "电流", "功率因数", "Uab", "Ia", "cos")):
+            scoped_parts.append(metric_words.get(anchors["metrics"][0], anchors["metrics"][0]))
+        scoped_q = " ".join(scoped_parts)
+        diag = diagnose_question(archive, scoped_q, client=None)
         for step in (diag.get("tool_trace") or [])[:6]:
             cid = next_call_id()
             tname = step.get("tool") or "get_window_snapshot"
@@ -656,37 +718,139 @@ emit_chart(
     return {"answer_markdown": answer, "plan": plan, "artifacts": artifacts, "tool_trace": tool_trace, "code_runs": code_runs}
 
 
-def _infer_recommended_action(question: str, anchors: dict[str, Any], answer_markdown: str) -> dict[str, Any] | None:
-    """Suggest a matching human-approved action ticket draft when diagnostics surface actionable risks."""
-    blob = f"{question} {answer_markdown}"
+def _extract_action_signals(
+    tool_trace: list[dict] | None,
+    code_runs: list[dict] | None,
+) -> dict[str, Any]:
+    signals: dict[str, Any] = {
+        "tap_or_ov": False,
+        "neg_power": False,
+        "zero_or_gap": False,
+        "ov_cabinet": None,
+        "neg_cabinet": None,
+        "gap_cabinet": None,
+    }
+
+    def _scan_obj(obj: Any, cab_ctx: str = "", metric_ctx: str = "", depth: int = 0) -> None:
+        if depth > 6:
+            return
+        if isinstance(obj, dict):
+            cur_cab = str(obj.get("cabinet") or cab_ctx or "")
+            cur_metric = str(obj.get("metric") or metric_ctx or "")
+            cat = str(obj.get("category") or obj.get("status") or obj.get("scenario") or "")
+            if cat in {"voltage_over_limit", "voltage_high_35kv"}:
+                signals["tap_or_ov"] = True
+                if cur_cab and not signals["ov_cabinet"]:
+                    signals["ov_cabinet"] = cur_cab
+            if cat in {"persistent_negative_power", "main_chain_reverse_power", "reverse_power"}:
+                signals["neg_power"] = True
+                if cur_cab and not signals["neg_cabinet"]:
+                    signals["neg_cabinet"] = cur_cab
+            if cat in {"single_incomer_dual_transformer", "single_incomer", "zero_incomer", "needs_supplement"}:
+                signals["zero_or_gap"] = True
+                if cur_cab and not signals["gap_cabinet"]:
+                    signals["gap_cabinet"] = cur_cab
+
+            for key in ("over_7pct_hours", "exceed_hours"):
+                if isinstance(obj.get(key), (int, float)) and obj[key] > 0:
+                    signals["tap_or_ov"] = True
+                    if cur_cab and not signals["ov_cabinet"]:
+                        signals["ov_cabinet"] = cur_cab
+            if isinstance(obj.get("negative_hours"), (int, float)) and obj["negative_hours"] > 0:
+                signals["neg_power"] = True
+                if cur_cab and not signals["neg_cabinet"]:
+                    signals["neg_cabinet"] = cur_cab
+
+            if "value" in obj and isinstance(obj["value"], (int, float)) and not isinstance(obj["value"], bool):
+                val = float(obj["value"])
+                if cur_metric == "Uab":
+                    limit = 37.45 if cur_cab.isdigit() and int(cur_cab) < 1000 else 10.70
+                    if val > limit:
+                        signals["tap_or_ov"] = True
+                        if cur_cab and not signals["ov_cabinet"]:
+                            signals["ov_cabinet"] = cur_cab
+                elif cur_metric == "P":
+                    if val < -1.0:
+                        signals["neg_power"] = True
+                        if cur_cab and not signals["neg_cabinet"]:
+                            signals["neg_cabinet"] = cur_cab
+                    elif cur_cab == "306" and abs(val) < 1e-6:
+                        signals["zero_or_gap"] = True
+                        if not signals["gap_cabinet"]:
+                            signals["gap_cabinet"] = "306"
+
+            for k, v in obj.items():
+                next_cab = str(k) if (isinstance(k, str) and k.isdigit() and 2 <= len(k) <= 5) else cur_cab
+                next_metric = str(k) if k in {"Uab", "Ia", "P", "cos"} else cur_metric
+                _scan_obj(v, next_cab, next_metric, depth + 1)
+        elif isinstance(obj, list):
+            for item in obj[:120]:
+                _scan_obj(item, cab_ctx, metric_ctx, depth + 1)
+
+    for step in tool_trace or []:
+        tname = step.get("tool")
+        targs = step.get("arguments") or {}
+        tres = step.get("result") or {}
+        if isinstance(tres, dict) and tres.get("status") == "error":
+            continue
+        if tname == "run_ac_power_flow" and isinstance(tres, dict) and tres.get("status") == "ok":
+            scen = str(targs.get("scenario") or tres.get("scenario") or "")
+            if scen in {"tap_sensitivity", "reactive_opt"} or tres.get("tap_sensitivity") or tres.get("reactive_opt"):
+                signals["tap_or_ov"] = True
+            elif scen == "n1_contingency" or tres.get("n1_contingency"):
+                signals["zero_or_gap"] = True
+        _scan_obj(tres, str(targs.get("cabinet") or ""))
+
+    for cr in code_runs or []:
+        if cr.get("status") == "ok":
+            _scan_obj(cr.get("tables"))
+    return signals
+
+
+def _infer_recommended_action(
+    question: str,
+    anchors: dict[str, Any],
+    answer_markdown: str,
+    *,
+    tool_trace: list[dict] | None = None,
+    code_runs: list[dict] | None = None,
+) -> dict[str, Any] | None:
+    """Suggest an action ticket only from explicit user action intent or actual tool-detected anomalies."""
+    del answer_markdown  # Do not trigger action tickets on incidental keywords in prose (e.g. "10.70" standard limit)
+    q = str(question or "")
     cabs = anchors.get("cabinets") or []
     days = anchors.get("days") or []
     hours = anchors.get("hours") or []
-    at_time = f"{days[0]} {hours[0]}:00" if days and hours else ("2026-11-13 17:00:00" if "1006" in blob or "过压" in blob else None)
+    sig = _extract_action_signals(tool_trace, code_runs)
+    at_time = f"{days[0]} {hours[0]}:00" if days and hours else None
 
-    if any(k in blob for k in ("过压", "分接头", "调压", "无功", "补偿", "+2 档", "10.70", "10.65")):
-        cab = cabs[0] if cabs else "1006"
+    explicit_switch = any(k in q for k in ("调压", "分接头", "操作票", "无功补偿", "投容", "过压治理", "降压", "两票"))
+    explicit_defect = any(k in q for k in ("消缺", "极性", "反送", "负有功", "反向有功"))
+    explicit_field = any(k in q for k in ("补证", "铭牌", "载流量", "VoI", "N-1", "n-1", "核校单", "台账", "归零", "单进线"))
+
+    if explicit_switch or sig["tap_or_ov"]:
+        cab = cabs[0] if cabs else (sig["ov_cabinet"] or "1006")
         return {
             "kind": "switching_order",
             "target_cabinet": cab,
             "at_time": at_time or "2026-11-13 17:00:00",
-            "rationale": f"基于自主排查对 {cab} 柜电压/调压分析，起草标准化电气倒闸操作票草案（须人工逐项核对签发）。",
+            "rationale": f"基于本次 {cab} 柜过压越限或调压复算依据，起草标准化电气倒闸操作票草案（须人工逐项核对签发）。",
         }
-    if any(k in blob for k in ("负有功", "反向", "极性", "1018", "反送")):
-        cab = "1018" if "1018" in blob else (cabs[0] if cabs else "1006")
+    if explicit_defect or sig["neg_power"]:
+        cab = "1018" if "1018" in q else (cabs[0] if cabs else (sig["neg_cabinet"] or "1018"))
         return {
             "kind": "defect_notice",
             "target_cabinet": cab,
             "at_time": at_time or ("2026-11-16 21:00:00" if cab == "1018" else "2026-11-12 12:00:00"),
-            "rationale": f"针对 {cab} 柜负有功/极性异常排查结论，起草二次回路与表计极性消缺通知单。",
+            "rationale": f"针对本次检出的 {cab} 柜负有功/极性异常证据，起草二次回路与表计极性消缺通知单。",
         }
-    if any(k in blob for k in ("归零", "单进线", "载流量", "铭牌", "补证", "VoI", "N-1", "n-1")):
-        cab = cabs[0] if cabs else "303"
+    if explicit_field or sig["zero_or_gap"]:
+        cab = cabs[0] if cabs else (sig["gap_cabinet"] or "303")
         return {
             "kind": "field_verification",
             "target_cabinet": cab,
             "at_time": at_time or "2026-11-13 15:00:00",
-            "rationale": f"针对 {cab} 柜裕度与缺失现场台账，起草现场铭牌与开关状态补录核校单。",
+            "rationale": f"针对 {cab} 柜运行裕度与缺失现场台账边界，起草现场铭牌与开关状态补录核校单。",
         }
     return None
 
@@ -772,7 +936,9 @@ def run_autonomous_agent(
         badge = _compute_verification_badge(archive, answer_md, local_out["tool_trace"], local_out["code_runs"])
         emit("verification_badge", **badge)
         hint = _infer_ui_artifact_hint(effective_question, anchors, local_out["tool_trace"])
-        rec_action = _infer_recommended_action(effective_question, anchors, answer_md)
+        rec_action = _infer_recommended_action(
+            effective_question, anchors, answer_md, tool_trace=local_out["tool_trace"], code_runs=local_out["code_runs"],
+        )
         dr_goal = _infer_deep_research_goal(effective_question, anchors)
         mem_suggestions = detect_memory_candidates(
             question,
@@ -799,6 +965,7 @@ def run_autonomous_agent(
             "memory_suggestions": mem_suggestions,
             "recommended_action": rec_action,
             "deep_research_goal": dr_goal,
+            "active_anchors": session.active_anchors if session is not None else anchors,
             "tool_trace": [
                 {"tool": t["tool"], "arguments": t["arguments"], "summary": _summarize_tool_result(t["tool"], t["result"]) if t["tool"] != "run_python_analysis" else f"沙盒 {t['result'].get('status')}"}
                 for t in local_out["tool_trace"]
@@ -819,7 +986,23 @@ def run_autonomous_agent(
     if session is not None:
         for m in session.format_history_messages(effective_question, max_turns=4):
             messages.append(m)
-    messages.append({"role": "user", "content": effective_question})
+    lock_bits = []
+    if anchors.get("ticket_id"):
+        lock_bits.append(f"工单={anchors['ticket_id']}")
+    if anchors.get("cabinets"):
+        lock_bits.append(f"柜号={','.join(anchors['cabinets'])}")
+    if anchors.get("days"):
+        lock_bits.append(f"日期={','.join(anchors['days'])}")
+    if anchors.get("hours"):
+        lock_bits.append(f"整点={','.join(anchors['hours'])}")
+    if anchors.get("metrics"):
+        lock_bits.append(f"指标={','.join(anchors['metrics'])}")
+    llm_question = (
+        f"{effective_question}\n[当前锁定上下文：{'；'.join(lock_bits)}]"
+        if lock_bits and (anchors.get("ticket_id") or effective_question != question)
+        else effective_question
+    )
+    messages.append({"role": "user", "content": llm_question})
 
     plan_steps: list[dict[str, str]] = []
     tool_trace: list[dict[str, Any]] = []
@@ -988,7 +1171,7 @@ def run_autonomous_agent(
         local_out = _run_local_autonomous(
             archive,
             toolbox,
-            question,
+            effective_question,
             anchors,
             emit,
             fallback_note=f"模型端点暂不可用（{exc}），已自动切换至本地自主沙盒引擎完成计算。",
@@ -1002,7 +1185,9 @@ def run_autonomous_agent(
     badge = _compute_verification_badge(archive, final_answer, tool_trace, code_runs)
     emit("verification_badge", **badge)
     hint = _infer_ui_artifact_hint(effective_question, anchors, tool_trace)
-    rec_action = _infer_recommended_action(effective_question, anchors, final_answer)
+    rec_action = _infer_recommended_action(
+        effective_question, anchors, final_answer, tool_trace=tool_trace, code_runs=code_runs,
+    )
     dr_goal = _infer_deep_research_goal(effective_question, anchors)
     mem_suggestions = detect_memory_candidates(
         question,
@@ -1029,6 +1214,7 @@ def run_autonomous_agent(
         "memory_suggestions": mem_suggestions,
         "recommended_action": rec_action,
         "deep_research_goal": dr_goal,
+        "active_anchors": session.active_anchors if session is not None else anchors,
         "tool_trace": [
             {
                 "tool": t["tool"],

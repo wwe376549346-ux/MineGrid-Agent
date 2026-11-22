@@ -8,7 +8,7 @@ help:
 	@echo "MineGrid-Agent Makefile targets:"
 	@echo "  make setup     - Bootstrap Python venv, verify archive SHA-256 & run core gates"
 	@echo "  make up        - Launch interactive workbench on http://127.0.0.1:8765/"
-	@echo "  make test      - Run full deterministic regression gates (20 suites)"
+	@echo "  make test      - Run full deterministic regression gates (21 suites)"
 	@echo "  make lint      - Run static syntax & undefined-name lint (ruff / py_compile)"
 	@echo "  make build-ui  - Build React 19 + Vite frontend bundle"
 	@echo "  make docker    - Build and launch containerized stack via docker compose"
@@ -22,6 +22,7 @@ up:
 
 test:
 	cd $(APP_DIR) && for s in \
+		verify_duty_closure.py \
 		verify_advanced_agent_v3.py \
 		verify_live_and_actions.py \
 		verify_memory_and_deep_research.py \
@@ -43,7 +44,7 @@ test:
 		verify_workbench.py; do \
 		echo ">>> $$s"; $(PY) -B "$$s" >/dev/null || exit 1; \
 	done && $(PY) -B -m thesis_eval.probe --output thesis_eval/results >/dev/null
-	@echo "All 20 deterministic suites passed."
+	@echo "All 21 deterministic suites passed."
 
 lint:
 	cd $(APP_DIR) && (command -v ruff >/dev/null 2>&1 && ruff check laowadi/ --select E9,F63,F7,F82 || $(PY) -m compileall -q laowadi/)

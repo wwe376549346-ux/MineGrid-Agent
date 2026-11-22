@@ -406,11 +406,12 @@ def stream_live_telemetry(
         if on_event is not None:
             on_event({"type": ev_type, "ts": round(time.monotonic() - t0, 3), **payload})
 
-    # Resolve effective voltage threshold: explicit param -> active semantic memory -> 10.70 kV
+    # Resolve effective voltage threshold: explicit param -> cabinet-compatible active semantic memory -> 10.70 kV
     eff_thr = float(custom_threshold_kv) if custom_threshold_kv is not None else 10.70
+    custom_thrs: list[dict[str, Any]] = []
     if custom_threshold_kv is None:
         mems = list_memories(category="semantic", enabled_only=True, db_path=memory_db_path or MEMORY_DB)
-        custom_thrs = extract_custom_voltage_thresholds(mems)
+        custom_thrs = extract_custom_voltage_thresholds(mems, cabinet="1006")
         if custom_thrs:
             eff_thr = min(float(x["value_kv"]) for x in custom_thrs)
 
@@ -538,6 +539,8 @@ def stream_live_telemetry(
         "source": source_kind,
         "ticks_emitted": total,
         "threshold_kv": round(eff_thr, 3),
+        "threshold_scope_cabinet": "1006",
+        "applied_threshold_memory_ids": [x["memory_id"] for x in custom_thrs],
         "alerts_count": len(alerts),
         "alerts": alerts,
         "elapsed_seconds": round(time.monotonic() - t0, 3),
